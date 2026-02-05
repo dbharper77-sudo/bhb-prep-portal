@@ -1047,7 +1047,9 @@ function FeesPage() {
   const rate = rates[type];
   const subtotal = units * rate;
   const discountAmt = subtotal * discount;
-  const total = subtotal - discountAmt;
+  const netTotal = subtotal - discountAmt;
+  const vat = netTotal * 0.20;
+  const totalWithVat = netTotal + vat;
 
   return (
     <>
@@ -1067,7 +1069,7 @@ function FeesPage() {
           ].map((f) => (
             <div className="fee-card" key={f.name}>
               <div className="fee-price">{f.price}</div>
-              <div className="fee-unit">per unit</div>
+              <div className="fee-unit">per unit <span style={{ color: "var(--text-muted)", fontSize: 11 }}>+VAT</span></div>
               <div className="fee-name">{f.name}</div>
               <div className="fee-desc">{f.desc}</div>
             </div>
@@ -1101,23 +1103,45 @@ function FeesPage() {
             <div className="input-group">
               <label className="input-label">Prep Type</label>
               <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="standard">Standard (£0.45/unit)</option>
-                <option value="bundle">Bundle (£0.65/unit)</option>
-                <option value="oversize">Oversize (£1.50/unit)</option>
-                <option value="liquidation">Liquidation (£0.55/unit)</option>
+                <option value="standard">Standard (£0.45/unit +VAT)</option>
+                <option value="bundle">Bundle (£0.65/unit +VAT)</option>
+                <option value="oversize">Oversize (£1.50/unit +VAT)</option>
+                <option value="liquidation">Liquidation (£0.55/unit +VAT)</option>
               </select>
             </div>
           </div>
           <div className="calc-result">
             <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>Estimated Total</div>
-            <div className="calc-total">£{total.toFixed(2)}</div>
+            <div className="calc-total">£{totalWithVat.toFixed(2)}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>inc. VAT</div>
             {discount > 0 && (
               <div style={{ marginTop: 8, fontSize: 13, color: "var(--green)" }}>
                 You save £{discountAmt.toFixed(2)} ({(discount * 100).toFixed(0)}% volume discount)
               </div>
             )}
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
-              {units.toLocaleString()} units × £{rate.toFixed(2)}{discount > 0 ? ` – ${(discount * 100).toFixed(0)}% discount` : ""}
+            <div style={{ marginTop: 12, padding: "12px 0", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, textAlign: "left", maxWidth: 280, margin: "12px auto 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-secondary)" }}>
+                <span>{units.toLocaleString()} units × £{rate.toFixed(2)}</span>
+                <span>£{subtotal.toFixed(2)}</span>
+              </div>
+              {discount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--green)" }}>
+                  <span>Discount ({(discount * 100).toFixed(0)}%)</span>
+                  <span>-£{discountAmt.toFixed(2)}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-secondary)" }}>
+                <span>Subtotal (ex. VAT)</span>
+                <span>£{netTotal.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-secondary)" }}>
+                <span>VAT (20%)</span>
+                <span>£{vat.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--cyan)", paddingTop: 6, borderTop: "1px solid var(--border)" }}>
+                <span>Total (inc. VAT)</span>
+                <span>£{totalWithVat.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </div>
