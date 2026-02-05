@@ -409,18 +409,94 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   );
 }
 
-// CLIENT - View Prep Inventory (read-only)
-function PrepInventoryPage({ parcels }) {
+// CLIENT - View Prep Inventory (with edit)
+function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+
   const filtered = parcels.filter(p => p.product_name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase()));
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditData({
+      product_name: item.product_name || "",
+      sku: item.sku || "",
+      asin: item.asin || "",
+      quantity: item.quantity || 1,
+      prep_type: item.prep_type || "standard",
+      supplier: item.supplier || "",
+      tracking_number: item.tracking_number || "",
+      notes: item.notes || ""
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditData({}); };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, {
+        method: "PATCH",
+        headers: { ...supabase.headers(token), Prefer: "return=representation" },
+        body: JSON.stringify(editData)
+      });
+      showToast("Saved!");
+      setEditingId(null);
+      onRefresh();
+    } catch (err) { console.error(err); }
+    setSaving(false);
+  };
+
+  const deleteItem = async (id) => {
+    if (!confirm("Delete this item?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${id}`, {
+      method: "DELETE",
+      headers: supabase.headers(token)
+    });
+    showToast("Deleted!");
+    onRefresh();
+  };
+
+  const updateField = (field, value) => setEditData(prev => ({ ...prev, [field]: value }));
+
   return (
     <><div className="page-header"><div><div className="page-title">My Inventory</div><div className="page-subtitle">{parcels.length} parcels</div></div></div>
     <div className="page-body">
       <div style={{ marginBottom: 20 }}><div className="search-bar"><Icons.Search /><input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} /></div></div>
       {filtered.length === 0 ? <div className="card empty-state"><Icons.Package /><p>No parcels found.</p></div> : 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table><thead><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Type</th><th>Status</th><th>Notes</th></tr></thead><tbody>
-        {filtered.map(p => <tr key={p.id}><td style={{ fontWeight: 600 }}>{p.product_name}</td><td className="mono">{p.sku || "—"}</td><td className="mono">{p.quantity}</td><td style={{ textTransform: "capitalize", fontSize: 13 }}>{p.prep_type}</td><td><StatusBadge status={p.status} /></td><td style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 200 }}>{p.admin_notes || "—"}</td></tr>)}
-      </tbody></table></div></div>}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
+        <thead><tr><th>Product</th><th>SKU</th><th>ASIN</th><th>Qty</th><th>Type</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {filtered.map(p => {
+            const isEditing = editingId === p.id;
+            const data = isEditing ? editData : p;
+            return <tr key={p.id} className={isEditing ? "edit-row" : ""}>
+              <td style={{ fontWeight: 600 }}>{isEditing ? <input className="inline-input" value={data.product_name} onChange={(e) => updateField("product_name", e.target.value)} /> : p.product_name}</td>
+              <td className="mono">{isEditing ? <input className="inline-input" style={{ width: 80 }} value={data.sku} onChange={(e) => updateField("sku", e.target.value)} /> : (p.sku || "—")}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{isEditing ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={(e) => updateField("asin", e.target.value)} /> : (p.asin || "—")}</td>
+              <td className="mono">{isEditing ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={(e) => updateField("quantity", parseInt(e.target.value) || 1)} /> : p.quantity}</td>
+              <td>{isEditing ? <select className="inline-select" style={{ width: 90 }} value={data.prep_type} onChange={(e) => updateField("prep_type", e.target.value)}><option value="standard">Standard</option><option value="bundle">Bundle</option><option value="oversize">Oversize</option></select> : <span style={{ textTransform: "capitalize", fontSize: 13 }}>{p.prep_type}</span>}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{isEditing ? <input className="inline-input" style={{ width: 100 }} value={data.tracking_number} onChange={(e) => updateField("tracking_number", e.target.value)} /> : (p.tracking_number || "—")}</td>
+              <td><StatusBadge status={p.status} /></td>
+              <td>
+                {isEditing ? (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button>
+                    <button className="btn-icon btn-danger" onClick={cancelEdit}><Icons.X /></button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={() => startEdit(p)} title="Edit"><Icons.Edit /></button>
+                    <button className="btn-icon btn-danger" onClick={() => deleteItem(p.id)} title="Delete"><Icons.Trash /></button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          })}
+        </tbody>
+      </table></div></div>}
     </div></>
   );
 }
@@ -963,7 +1039,7 @@ function ClientPortal() {
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} shipments={shipments} />;
       if (page === "add-order") return <PrepAddOrderPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "inventory") return <PrepInventoryPage parcels={parcels} />;
+      if (page === "inventory") return <PrepInventoryPage parcels={parcels} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <PrepFeesPage />;
       return <PrepDashboard parcels={parcels} shipments={shipments} />;
     }
