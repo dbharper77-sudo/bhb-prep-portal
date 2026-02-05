@@ -425,9 +425,13 @@ function PrepInventoryPage({ parcels }) {
   );
 }
 
-// CLIENT - View Liquidation Stock (read-only)
-function LiquidationMyStockPage({ liquidationStock }) {
+// CLIENT - View Liquidation Stock (with edit)
+function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast }) {
   const [filter, setFilter] = useState("all");
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+
   const filtered = liquidationStock.filter(s => {
     if (filter === "all") return true;
     if (filter === "pending") return !s.sale_price;
@@ -435,6 +439,46 @@ function LiquidationMyStockPage({ liquidationStock }) {
     if (filter === "paid") return s.paid;
     return true;
   });
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditData({
+      removal_order_id: item.removal_order_id || "",
+      product_name: item.product_name || "",
+      asin: item.asin || "",
+      sku: item.sku || "",
+      fnsku: item.fnsku || ""
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditData({}); };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, {
+        method: "PATCH",
+        headers: { ...supabase.headers(token), Prefer: "return=representation" },
+        body: JSON.stringify(editData)
+      });
+      showToast("Saved!");
+      setEditingId(null);
+      onRefresh();
+    } catch (err) { console.error(err); }
+    setSaving(false);
+  };
+
+  const deleteItem = async (id) => {
+    if (!confirm("Delete this item?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, {
+      method: "DELETE",
+      headers: supabase.headers(token)
+    });
+    showToast("Deleted!");
+    onRefresh();
+  };
+
+  const updateField = (field, value) => setEditData(prev => ({ ...prev, [field]: value }));
   
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">{liquidationStock.length} items</div></div></div>
@@ -449,18 +493,34 @@ function LiquidationMyStockPage({ liquidationStock }) {
       </div>
       {filtered.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items found.</p></div> : 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
-        <thead><tr><th>Product</th><th>ASIN</th><th>Condition</th><th>Sale Price</th><th>Your Payout</th><th>Payout Date</th></tr></thead>
+        <thead><tr><th>Product</th><th>ASIN</th><th>SKU</th><th>Condition</th><th>Sale Price</th><th>Your Payout</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {filtered.map(s => {
             const calc = calculatePayout(s);
             const payoutDate = getPayoutDate(s.date_sold);
-            return <tr key={s.id}>
-              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
-              <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+            const isEditing = editingId === s.id;
+            const data = isEditing ? editData : s;
+            return <tr key={s.id} className={isEditing ? "edit-row" : ""}>
+              <td style={{ fontWeight: 600 }}>{isEditing ? <input className="inline-input" value={data.product_name} onChange={(e) => updateField("product_name", e.target.value)} /> : s.product_name}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{isEditing ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={(e) => updateField("asin", e.target.value)} /> : (s.asin || "—")}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{isEditing ? <input className="inline-input" style={{ width: 80 }} value={data.sku} onChange={(e) => updateField("sku", e.target.value)} /> : (s.sku || "—")}</td>
               <td>{s.condition ? <span className={`condition-badge ${getConditionClass(s.condition)}`}>{s.condition}</span> : "—"}</td>
               <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
               <td className="mono" style={{ fontWeight: 700, color: s.sale_price ? "var(--green)" : "var(--text-muted)" }}>{s.sale_price ? `£${calc.payout.toFixed(2)}` : "—"}</td>
-              <td style={{ fontSize: 13 }}>{s.paid ? <span style={{ color: "var(--green)" }}>Paid</span> : payoutDate ? formatDate(payoutDate) : "—"}</td>
+              <td style={{ fontSize: 13 }}>{s.paid ? <span style={{ color: "var(--green)" }}>Paid</span> : s.sale_price ? <span style={{ color: "var(--amber)" }}>Pending Payout</span> : <span style={{ color: "var(--text-muted)" }}>Awaiting Sale</span>}</td>
+              <td>
+                {isEditing ? (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button>
+                    <button className="btn-icon btn-danger" onClick={cancelEdit}><Icons.X /></button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={() => startEdit(s)} title="Edit"><Icons.Edit /></button>
+                    <button className="btn-icon btn-danger" onClick={() => deleteItem(s.id)} title="Delete"><Icons.Trash /></button>
+                  </div>
+                )}
+              </td>
             </tr>
           })}
         </tbody>
@@ -910,7 +970,7 @@ function ClientPortal() {
     if (service === "liquidation") {
       if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} />;
       if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} />;
+      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <LiquidationFeesPage />;
       return <LiquidationDashboard liquidationStock={liquidationStock} />;
     }
