@@ -350,8 +350,19 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
   const sorted = sortByStatus(parcels);
   const filtered = sorted.filter(p => p.product_name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase()));
   const startEdit = item => { setEditingId(item.id); setEditData({ product_name: item.product_name || "", sku: item.sku || "", asin: item.asin || "", quantity: item.quantity || 1, tracking_number: item.tracking_number || "" }); };
-  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(editData) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
-  const deleteItem = async id => { if (!confirm("Delete?")) return; await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); showToast("Deleted!"); onRefresh(); };
+  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
+  const deleteItem = async (id, status) => { 
+    if (["shipped", "prepped", "delivered"].includes(status)) {
+      alert("Cannot delete items that have been delivered, prepped or shipped.");
+      return;
+    }
+    if (!confirm("Delete?")) return; 
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); 
+    showToast("Deleted!"); 
+    onRefresh(); 
+  };
+  const canEdit = (status) => !["shipped", "prepped"].includes(status);
+  const canDelete = (status) => !["shipped", "prepped", "delivered"].includes(status);
   return (
     <><div className="page-header"><div><div className="page-title">My Inventory</div><div className="page-subtitle">Your prep orders</div></div></div>
     <div className="page-body">
@@ -369,7 +380,23 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
             <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : p.quantity}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.tracking_number} onChange={e => setEditData({ ...editData, tracking_number: e.target.value })} /> : (p.tracking_number || "—")}</td>
             <td>{p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
-            <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteItem(p.id)}><Icons.Trash /></button></div>}</td>
+            <td>
+              {isEdit ? (
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button>
+                  <button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 4 }}>
+                  {canEdit(p.status) && <button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button>}
+                  {canDelete(p.status) ? (
+                    <button className="btn-icon btn-danger" onClick={() => deleteItem(p.id, p.status)}><Icons.Trash /></button>
+                  ) : (
+                    <button className="btn-icon" disabled style={{ opacity: 0.3, cursor: "not-allowed" }}><Icons.Trash /></button>
+                  )}
+                </div>
+              )}
+            </td>
           </tr>;
         })}</tbody>
       </table></div></div>}
@@ -1316,12 +1343,19 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     showToast("Deleted!"); onRefresh();
   };
 
+  // Calculate total charges from shipments
+  const totalCharges = shipments.reduce((sum, s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+  }, 0);
+
   return (
     <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24 }}>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 24 }}>
         <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inbound}</div></div>
         <div className="card stat-card"><div className="card-title">Total Parcels</div><div className="stat-value">{parcels.length}</div></div>
         <div className="card stat-card"><div className="card-title">Shipments</div><div className="stat-value" style={{ color: "var(--green)" }}>{shipments.length}</div></div>
+        <div className="card stat-card"><div className="card-title">Total Charges</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
       <div className="card" style={{ marginBottom: 24 }}>
