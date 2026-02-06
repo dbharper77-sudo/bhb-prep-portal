@@ -414,9 +414,10 @@ function PrepFeesPage() {
   );
 }
 
-function PrepBillingPage({ billingPeriods, invoices, shipments = [] }) {
+function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token }) {
   const now = new Date(), thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1, lastYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
@@ -437,20 +438,75 @@ function PrepBillingPage({ billingPeriods, invoices, shipments = [] }) {
   const thisMonthTotal = thisMonthShipments.reduce((sum, s) => sum + calcTotal(s), 0);
   const thisMonthUnits = thisMonthShipments.reduce((sum, s) => sum + (s.units_prepped || 0), 0);
   const lastMonthTotal = lastMonthShipments.reduce((sum, s) => sum + calcTotal(s), 0);
-  const paidTotal = shipments.filter(s => s.status === "paid").reduce((sum, s) => sum + calcTotal(s), 0);
-  const unpaid = shipments.filter(s => s.status !== "paid");
-  const unpaidTotal = unpaid.reduce((sum, s) => sum + calcTotal(s), 0);
+  
+  const pendingInvoices = invoices.filter(i => i.status === "pending" || i.status === "overdue");
+  const amountDue = pendingInvoices.reduce((sum, i) => sum + parseFloat(i.amount), 0);
+  const paidInvoices = invoices.filter(i => i.status === "paid");
+  const totalPaid = paidInvoices.reduce((sum, i) => sum + parseFloat(i.amount), 0);
   
   return (
     <><div className="page-header"><div><div className="page-title">Billing</div><div className="page-subtitle">Your prep billing</div></div></div>
     <div className="page-body">
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--cyan)" }}>£{thisMonthTotal.toFixed(2)}</div><div className="stat-label">{thisMonthUnits} units</div></div>
-        <div className="card stat-card"><div className="card-title">Last Month</div><div className="stat-value" style={{ color: "var(--text-secondary)" }}>£{lastMonthTotal.toFixed(2)}</div></div>
-        <div className="card stat-card"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">{monthNames[thisMonth]} (Current)</div><div className="stat-value" style={{ color: "var(--cyan)" }}>£{thisMonthTotal.toFixed(2)}</div><div className="stat-label">{thisMonthUnits} units</div></div>
+        <div className="card stat-card"><div className="card-title">Amount Due</div><div className="stat-value" style={{ color: amountDue > 0 ? "var(--amber)" : "var(--green)" }}>£{amountDue.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{totalPaid.toFixed(2)}</div></div>
       </div>
-      {unpaid.length > 0 && <div className="card" style={{ marginBottom: 24 }}><div className="card-title" style={{ color: "var(--amber)" }}>Outstanding Balance</div><div style={{ fontSize: 24, fontWeight: 700, color: "var(--amber)", marginTop: 8 }}>£{unpaidTotal.toFixed(2)}</div><div className="table-wrap" style={{ marginTop: 16 }}><table><thead><tr><th>Date</th><th>Shipment</th><th>Units</th><th>Amount</th><th>Status</th></tr></thead><tbody>{unpaid.map(s => <tr key={s.id}><td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td><td className="mono">{s.shipment_id}</td><td className="mono">{s.units_prepped || 0}</td><td className="mono" style={{ color: "var(--amber)" }}>£{calcTotal(s).toFixed(2)}</td><td><span className={`badge badge-${s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td></tr>)}</tbody></table></div></div>}
-      <div className="card"><div className="card-title">All Shipments</div>{shipments.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No shipments yet.</div> : <div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Date</th><th>Shipment</th><th>Units</th><th>Amount</th><th>Status</th></tr></thead><tbody>{shipments.map(s => <tr key={s.id}><td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td><td className="mono">{s.shipment_id}</td><td className="mono">{s.units_prepped || 0}</td><td className="mono" style={{ color: s.status === "paid" ? "var(--green)" : "var(--text-secondary)" }}>£{calcTotal(s).toFixed(2)}</td><td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td></tr>)}</tbody></table></div>}</div>
+      
+      {pendingInvoices.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, borderColor: "var(--amber)" }}>
+          <div className="card-title" style={{ color: "var(--amber)" }}>📋 Invoices Due</div>
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table>
+              <thead><tr><th>Period</th><th>Amount</th><th>Status</th><th>Invoice</th></tr></thead>
+              <tbody>{pendingInvoices.map(inv => (
+                <tr key={inv.id}>
+                  <td style={{ fontWeight: 600 }}>{monthNames[inv.period_month - 1]} {inv.period_year} Fee</td>
+                  <td className="mono" style={{ fontWeight: 700, color: "var(--amber)" }}>£{parseFloat(inv.amount).toFixed(2)}</td>
+                  <td><span className={`badge badge-${inv.status === "overdue" ? "attention" : "pending"}`}>{inv.status}</span></td>
+                  <td>{inv.invoice_url ? <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>View Invoice</a> : "—"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-title">Payment History</div>
+        {paidInvoices.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No paid invoices yet.</div> :
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table>
+            <thead><tr><th>Period</th><th>Amount</th><th>Paid Date</th><th>Invoice</th></tr></thead>
+            <tbody>{paidInvoices.map(inv => (
+              <tr key={inv.id}>
+                <td style={{ fontWeight: 600 }}>{monthNames[inv.period_month - 1]} {inv.period_year} Fee</td>
+                <td className="mono" style={{ color: "var(--green)" }}>£{parseFloat(inv.amount).toFixed(2)}</td>
+                <td style={{ fontSize: 12 }}>{inv.paid_at ? formatShortDate(inv.paid_at) : "—"}</td>
+                <td>{inv.invoice_url ? <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>View Invoice</a> : "—"}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>}
+      </div>
+      
+      <div className="card">
+        <div className="card-title">This Month's Shipments</div>
+        {thisMonthShipments.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No shipments this month.</div> : 
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table>
+            <thead><tr><th>Date</th><th>Shipment</th><th>Units</th><th>Amount</th></tr></thead>
+            <tbody>{thisMonthShipments.map(s => (
+              <tr key={s.id}>
+                <td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td>
+                <td className="mono">{s.shipment_id}</td>
+                <td className="mono">{s.units_prepped || 0}</td>
+                <td className="mono" style={{ color: "var(--cyan)" }}>£{calcTotal(s).toFixed(2)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>}
+      </div>
     </div></>
   );
 }
@@ -1197,24 +1253,111 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
 function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation, token, showToast, onRefresh, onBack }) {
   const [webhook, setWebhook] = useState(client.discord_webhook || "");
   const [savingWebhook, setSavingWebhook] = useState(false);
+  const [invoices, setInvoices] = useState([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoiceUrl, setInvoiceUrl] = useState("");
+  const [editingInvoice, setEditingInvoice] = useState(null);
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Sync webhook state when client changes
   useEffect(() => {
     setWebhook(client.discord_webhook || "");
   }, [client.discord_webhook]);
 
+  // Load invoices
+  useEffect(() => {
+    if (tab === "settings") {
+      setLoadingInvoices(true);
+      fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) })
+        .then(r => r.json())
+        .then(d => { setInvoices(Array.isArray(d) ? d : []); setLoadingInvoices(false); })
+        .catch(() => setLoadingInvoices(false));
+    }
+  }, [tab, client.id]);
+
   const saveWebhook = async () => {
     setSavingWebhook(true);
-    console.log("Saving webhook for client:", client.id, webhook);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
       method: "PATCH", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
       body: JSON.stringify({ discord_webhook: webhook }) 
     });
-    console.log("Webhook save response:", res.status, await res.clone().text());
     showToast("Webhook saved!");
     onRefresh();
     setSavingWebhook(false);
+  };
+
+  // Calculate monthly totals from shipments
+  const getMonthlyTotals = () => {
+    const totals = {};
+    shipments.forEach(s => {
+      const d = new Date(s.date_shipped || s.created_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const cost = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0) + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+      totals[key] = (totals[key] || 0) + cost;
+    });
+    return totals;
+  };
+
+  const generateInvoice = async (month, year) => {
+    const totals = getMonthlyTotals();
+    const key = `${year}-${month}`;
+    const amount = totals[key] || 0;
+    
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/invoices`, { 
+      method: "POST", 
+      headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
+      body: JSON.stringify({ user_id: client.id, period_month: month + 1, period_year: year, amount, status: "pending" }) 
+    });
+    if (res.ok) {
+      showToast("Invoice created!");
+      // Reload invoices
+      const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+      setInvoices(Array.isArray(inv) ? inv : []);
+    } else {
+      showToast("Error creating invoice");
+    }
+  };
+
+  const updateInvoice = async (id, updates) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, { 
+      method: "PATCH", 
+      headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
+      body: JSON.stringify(updates) 
+    });
+    showToast("Invoice updated!");
+    const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+    setInvoices(Array.isArray(inv) ? inv : []);
+    setEditingInvoice(null);
+    setInvoiceUrl("");
+  };
+
+  const deleteInvoice = async (id) => {
+    if (!confirm("Delete invoice?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    showToast("Invoice deleted!");
+    const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+    setInvoices(Array.isArray(inv) ? inv : []);
+  };
+
+  // Get months that have shipments but no invoice yet
+  const getUninvoicedMonths = () => {
+    const totals = getMonthlyTotals();
+    const invoiced = new Set(invoices.map(i => `${i.period_year}-${i.period_month - 1}`));
+    const now = new Date();
+    return Object.entries(totals)
+      .filter(([key]) => !invoiced.has(key))
+      .filter(([key]) => {
+        const [year, month] = key.split("-").map(Number);
+        // Only show past months (not current month)
+        return year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth());
+      })
+      .map(([key, amount]) => {
+        const [year, month] = key.split("-").map(Number);
+        return { month, year, amount };
+      })
+      .sort((a, b) => b.year - a.year || b.month - a.month);
   };
 
   return (
@@ -1235,15 +1378,73 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         <AdminClientPrep client={client} parcels={parcels} shipments={shipments} token={token} showToast={showToast} onRefresh={onRefresh} /> :
        tab === "liquidation" ?
         <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} /> :
-        <div className="card" style={{ maxWidth: 600 }}>
-          <div className="card-title">Client Settings</div>
-          <div className="input-group">
-            <label className="input-label">Discord Webhook URL</label>
-            <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
+        <>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Discord Webhook</div>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
+            </div>
+            <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
           </div>
-          <button className="btn btn-primary admin" onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
-        </div>
+
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Generate Invoice</div>
+            {getUninvoicedMonths().length === 0 ? (
+              <div style={{ color: "var(--text-muted)" }}>No uninvoiced months</div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {getUninvoicedMonths().map(({ month, year, amount }) => (
+                  <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin" onClick={() => generateInvoice(month, year)}>
+                    {monthNames[month]} {year} — £{amount.toFixed(2)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-title">Invoices</div>
+            {loadingInvoices ? <div style={{ color: "var(--text-muted)" }}>Loading...</div> :
+             invoices.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No invoices yet</div> :
+             <div className="table-wrap"><table>
+              <thead><tr><th>Period</th><th>Amount</th><th>Status</th><th>Invoice URL</th><th></th></tr></thead>
+              <tbody>{invoices.map(inv => (
+                <tr key={inv.id}>
+                  <td style={{ fontWeight: 600 }}>{monthNames[inv.period_month - 1]} {inv.period_year}</td>
+                  <td style={{ fontWeight: 700, color: "var(--amber)" }}>£{parseFloat(inv.amount).toFixed(2)}</td>
+                  <td>
+                    <select 
+                      className="inline-select" 
+                      value={inv.status} 
+                      onChange={e => updateInvoice(inv.id, { status: e.target.value, paid_at: e.target.value === "paid" ? new Date().toISOString() : null })}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="overdue">Overdue</option>
+                    </select>
+                  </td>
+                  <td>
+                    {editingInvoice === inv.id ? (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <input className="inline-input" placeholder="https://..." value={invoiceUrl} onChange={e => setInvoiceUrl(e.target.value)} style={{ width: 200 }} />
+                        <button className="btn-icon" onClick={() => updateInvoice(inv.id, { invoice_url: invoiceUrl })}><Icons.Save /></button>
+                        <button className="btn-icon btn-danger" onClick={() => { setEditingInvoice(null); setInvoiceUrl(""); }}><Icons.X /></button>
+                      </div>
+                    ) : inv.invoice_url ? (
+                      <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>View Invoice</a>
+                    ) : (
+                      <button className="btn btn-sm" onClick={() => { setEditingInvoice(inv.id); setInvoiceUrl(inv.invoice_url || ""); }}>Add URL</button>
+                    )}
+                  </td>
+                  <td>
+                    <button className="btn-icon btn-danger" onClick={() => deleteInvoice(inv.id)}><Icons.Trash /></button>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table></div>}
+          </div>
+        </>
       }
     </div></>
   );
@@ -1343,19 +1544,32 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     showToast("Deleted!"); onRefresh();
   };
 
-  // Calculate total charges from shipments
-  const totalCharges = shipments.reduce((sum, s) => {
+  // Calculate monthly charges from shipments
+  const now = new Date();
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  const calcShipmentCost = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
-  }, 0);
+    return units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+  };
+  
+  const thisMonthShipments = shipments.filter(s => {
+    const d = new Date(s.date_shipped || s.created_at);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  const thisMonthTotal = thisMonthShipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
+  
+  const totalCharges = shipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
 
   return (
     <>
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 24 }}>
         <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inbound}</div></div>
-        <div className="card stat-card"><div className="card-title">Total Parcels</div><div className="stat-value">{parcels.length}</div></div>
         <div className="card stat-card"><div className="card-title">Shipments</div><div className="stat-value" style={{ color: "var(--green)" }}>{shipments.length}</div></div>
-        <div className="card stat-card"><div className="card-title">Total Charges</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{totalCharges.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">{monthNames[currentMonth]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
       <div className="card" style={{ marginBottom: 24 }}>
