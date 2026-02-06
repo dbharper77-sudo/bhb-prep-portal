@@ -1300,10 +1300,10 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     return totals;
   };
 
-  const generateInvoice = async (month, year) => {
+  const generateInvoice = async (month, year, manualAmount = null) => {
     const totals = getMonthlyTotals();
     const key = `${year}-${month}`;
-    const amount = totals[key] || 0;
+    const amount = manualAmount !== null ? manualAmount : (totals[key] || 0);
     
     const res = await fetch(`${SUPABASE_URL}/rest/v1/invoices`, { 
       method: "POST", 
@@ -1389,11 +1389,13 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">Generate Invoice</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div className="card-title" style={{ margin: 0 }}>Generate Invoice</div>
+            </div>
             {getUninvoicedMonths().length === 0 ? (
-              <div style={{ color: "var(--text-muted)" }}>No uninvoiced months</div>
+              <div style={{ color: "var(--text-muted)", marginBottom: 12 }}>No past months to invoice</div>
             ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                 {getUninvoicedMonths().map(({ month, year, amount }) => (
                   <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin" onClick={() => generateInvoice(month, year)}>
                     {monthNames[month]} {year} — £{amount.toFixed(2)}
@@ -1401,6 +1403,31 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 ))}
               </div>
             )}
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Or create manual invoice:</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label className="input-label">Month</label>
+                  <select className="input" id="manualMonth" defaultValue={new Date().getMonth()}>
+                    {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label className="input-label">Year</label>
+                  <input className="input" type="number" id="manualYear" defaultValue={new Date().getFullYear()} style={{ width: 80 }} />
+                </div>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label className="input-label">Amount (£)</label>
+                  <input className="input" type="number" step="0.01" id="manualAmount" placeholder="0.00" style={{ width: 100 }} />
+                </div>
+                <button className="btn btn-sm admin" onClick={() => {
+                  const month = parseInt(document.getElementById("manualMonth").value);
+                  const year = parseInt(document.getElementById("manualYear").value);
+                  const amount = parseFloat(document.getElementById("manualAmount").value) || 0;
+                  if (amount > 0) generateInvoice(month, year, amount);
+                }}>Create</button>
+              </div>
+            </div>
           </div>
 
           <div className="card">
@@ -1603,9 +1630,11 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
         {showShipmentForm && (
           <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
                 <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label>
+                <input className="input" type="date" value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
                 <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
