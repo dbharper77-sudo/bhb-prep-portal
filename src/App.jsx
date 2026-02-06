@@ -29,9 +29,12 @@ const supabase = {
   }),
 };
 
-async function sendDiscordNotification(webhookUrl, message) {
+async function sendDiscordNotification(webhookUrl, message, embed = null) {
   if (!webhookUrl) return;
-  try { await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: message }) }); } catch (e) { console.error(e); }
+  try { 
+    const body = embed ? { embeds: [embed] } : { content: message };
+    await fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); 
+  } catch (e) { console.error(e); }
 }
 
 const AuthContext = createContext(null);
@@ -578,10 +581,28 @@ function AdminPrepPage({ token, showToast }) {
     const clientWebhook = client?.discord_webhook || webhookUrl;
     if (clientWebhook) {
       if (editData.status === "shipped" && oldItem?.status !== "shipped") {
-        await sendDiscordNotification(clientWebhook, `📦 **SHIPPED** - ${oldItem?.product_name} (${oldItem?.quantity} units) for ${client?.full_name || client?.email}`);
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "📦 SHIPPED",
+          color: 0x22c55e,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client?.full_name || client?.email }
+        });
       }
       if (editData.needs_attention && !oldItem?.needs_attention) {
-        await sendDiscordNotification(clientWebhook, `⚠️ **NEEDS ATTENTION** - ${oldItem?.product_name} for ${client?.full_name || client?.email}: ${editData.attention_reason}`);
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "⚠️ NEEDS ATTENTION",
+          color: 0xef4444,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Issue", value: editData.attention_reason || "Unknown", inline: true }
+          ],
+          description: editData.admin_notes || null,
+          footer: { text: client?.full_name || client?.email }
+        });
       }
     }
     showToast("Saved!"); setEditingId(null); loadData(); setSaving(false);
@@ -651,14 +672,27 @@ function AdminLiquidationPage({ token, showToast }) {
   const saveEdit = async () => {
     setSaving(true);
     const oldItem = items.find(i => i.id === editingId);
-    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null };
+    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null, date_sold: editData.date_sold || null };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
       const client = clients.find(c => c.id === oldItem?.user_id);
       const clientWebhook = client?.discord_webhook || webhookUrl;
       if (clientWebhook) {
-        await sendDiscordNotification(clientWebhook, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client?.full_name || client?.email})`);
+        const payout = calculatePayout({ ...oldItem, ...dataToSave });
+        const payoutDate = new Date(dataToSave.date_sold);
+        payoutDate.setDate(payoutDate.getDate() + 35);
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "💰 SOLD",
+          color: 0x22c55e,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Sale Price", value: `£${dataToSave.sale_price?.toFixed(2)}`, inline: true },
+            { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
+            { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
+          ],
+          footer: { text: client?.full_name || client?.email }
+        });
       }
     }
     showToast("Saved!"); setEditingId(null); loadData(); setSaving(false);
@@ -1367,7 +1401,20 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     if (dataToSave.date_sold && !oldItem?.date_sold) {
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
-        await sendDiscordNotification(clientWebhook, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client.full_name || client.email})`);
+        const payout = calculatePayout({ ...oldItem, ...dataToSave });
+        const payoutDate = new Date(dataToSave.date_sold);
+        payoutDate.setDate(payoutDate.getDate() + 35);
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "💰 SOLD",
+          color: 0x22c55e,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Sale Price", value: `£${dataToSave.sale_price?.toFixed(2)}`, inline: true },
+            { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
+            { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
+          ],
+          footer: { text: client.full_name || client.email }
+        });
       }
     }
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
