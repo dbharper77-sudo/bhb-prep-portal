@@ -802,6 +802,44 @@ function ProfilePage() {
   );
 }
 
+// Client Shipments Page
+function ClientShipmentsPage({ shipments }) {
+  const calcTotal = (s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    const boxes = parseFloat(s.box_cost) || 0;
+    const other = parseFloat(s.other_fees) || 0;
+    return units + boxes + other;
+  };
+  const totalAll = shipments.reduce((sum, s) => sum + calcTotal(s), 0);
+  const unpaid = shipments.filter(s => s.status !== "paid");
+  const unpaidTotal = unpaid.reduce((sum, s) => sum + calcTotal(s), 0);
+
+  return (
+    <><div className="page-header"><div><div className="page-title">Shipments</div><div className="page-subtitle">Your FBA shipments</div></div></div>
+    <div className="page-body">
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24 }}>
+        <div className="card stat-card"><div className="card-title">Total Shipments</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{shipments.length}</div></div>
+        <div className="card stat-card"><div className="card-title">Unpaid</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{unpaidTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--green)" }}>£{totalAll.toFixed(2)}</div></div>
+      </div>
+      {shipments.length === 0 ? <div className="card empty-state"><Icons.Truck /><p>No shipments yet.</p></div> :
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Shipment ID</th><th>Units</th><th>Boxes</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>{shipments.map(s => (
+          <tr key={s.id}>
+            <td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td>
+            <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
+            <td className="mono">{s.units_prepped || 0}</td>
+            <td className="mono">{s.box_count || 0}</td>
+            <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcTotal(s).toFixed(2)}</td>
+            <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "invoiced" ? "pending" : "transit"}`}>{s.status}</span></td>
+          </tr>
+        ))}</tbody>
+      </table></div></div>}
+    </div></>
+  );
+}
+
 // ============ PORTALS ============
 function ClientPortal() {
   const { user, token, profile, signOut } = useAuth();
@@ -812,22 +850,25 @@ function ClientPortal() {
   const [invoices, setInvoices] = useState([]);
   const [billingPeriods, setBillingPeriods] = useState([]);
   const [liquidationStock, setLiquidationStock] = useState([]);
+  const [shipments, setShipments] = useState([]);
   const [toast, setToast] = useState(null);
   const showToast = useCallback(msg => setToast(msg), []);
 
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, i, b, l] = await Promise.all([
+      const [p, i, b, l, s] = await Promise.all([
         supabase.from("parcels", token).select(),
         supabase.from("invoices", token).select(),
         supabase.from("billing_periods", token).select(),
-        supabase.from("liquidation_stock", token).select()
+        supabase.from("liquidation_stock", token).select(),
+        supabase.from("shipments", token).select()
       ]);
       if (Array.isArray(p)) setParcels(p);
       if (Array.isArray(i)) setInvoices(i);
       if (Array.isArray(b)) setBillingPeriods(b);
       if (Array.isArray(l)) setLiquidationStock(l);
+      if (Array.isArray(s)) setShipments(s);
     } catch (e) { console.error(e); }
   }, [token]);
 
@@ -838,6 +879,7 @@ function ClientPortal() {
     { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
     { id: "add-order", label: "Add Order", icon: Icons.Plus },
     { id: "inventory", label: "My Inventory", icon: Icons.Package },
+    { id: "shipments", label: "Shipments", icon: Icons.Truck },
     { id: "fees", label: "Prep Fees", icon: Icons.Calculator },
     { id: "billing", label: "Billing", icon: Icons.Receipt }
   ];
@@ -858,8 +900,9 @@ function ClientPortal() {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} />;
       if (page === "add-order") return <PrepAddOrderPage token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "inventory") return <PrepInventoryPage parcels={parcels} token={token} onRefresh={loadData} showToast={showToast} />;
+      if (page === "shipments") return <ClientShipmentsPage shipments={shipments} />;
       if (page === "fees") return <PrepFeesPage />;
-      if (page === "billing") return <PrepBillingPage billingPeriods={billingPeriods} invoices={invoices} />;
+      if (page === "billing") return <PrepBillingPage billingPeriods={billingPeriods} invoices={invoices} shipments={shipments} />;
       return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} />;
     }
     if (service === "liquidation") {
