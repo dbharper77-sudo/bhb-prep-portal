@@ -574,13 +574,14 @@ function AdminPrepPage({ token, showToast }) {
     setSaving(true);
     const oldItem = parcels.find(p => p.id === editingId);
     await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(editData) });
-    if (webhookUrl) {
-      const client = clients.find(c => c.id === oldItem?.user_id);
+    const client = clients.find(c => c.id === oldItem?.user_id);
+    const clientWebhook = client?.discord_webhook || webhookUrl;
+    if (clientWebhook) {
       if (editData.status === "shipped" && oldItem?.status !== "shipped") {
-        await sendDiscordNotification(webhookUrl, `📦 **SHIPPED** - ${oldItem?.product_name} (${oldItem?.quantity} units) for ${client?.full_name || client?.email}`);
+        await sendDiscordNotification(clientWebhook, `📦 **SHIPPED** - ${oldItem?.product_name} (${oldItem?.quantity} units) for ${client?.full_name || client?.email}`);
       }
       if (editData.needs_attention && !oldItem?.needs_attention) {
-        await sendDiscordNotification(webhookUrl, `⚠️ **NEEDS ATTENTION** - ${oldItem?.product_name} for ${client?.full_name || client?.email}: ${editData.attention_reason}`);
+        await sendDiscordNotification(clientWebhook, `⚠️ **NEEDS ATTENTION** - ${oldItem?.product_name} for ${client?.full_name || client?.email}: ${editData.attention_reason}`);
       }
     }
     showToast("Saved!"); setEditingId(null); loadData(); setSaving(false);
@@ -653,9 +654,12 @@ function AdminLiquidationPage({ token, showToast }) {
     const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
-    if (webhookUrl && dataToSave.date_sold && !oldItem?.date_sold) {
+    if (dataToSave.date_sold && !oldItem?.date_sold) {
       const client = clients.find(c => c.id === oldItem?.user_id);
-      await sendDiscordNotification(webhookUrl, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client?.full_name || client?.email})`);
+      const clientWebhook = client?.discord_webhook || webhookUrl;
+      if (clientWebhook) {
+        await sendDiscordNotification(clientWebhook, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client?.full_name || client?.email})`);
+      }
     }
     showToast("Saved!"); setEditingId(null); loadData(); setSaving(false);
   };
@@ -1129,8 +1133,23 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   );
 }
 
-// Admin - Single Client Page with Prep/Liquidation tabs
+// Admin - Single Client Page with Prep/Liquidation/Settings tabs
 function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation, token, showToast, onRefresh, onBack }) {
+  const [webhook, setWebhook] = useState(client.discord_webhook || "");
+  const [savingWebhook, setSavingWebhook] = useState(false);
+
+  const saveWebhook = async () => {
+    setSavingWebhook(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+      method: "PATCH", 
+      headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
+      body: JSON.stringify({ discord_webhook: webhook }) 
+    });
+    showToast("Webhook saved!");
+    onRefresh();
+    setSavingWebhook(false);
+  };
+
   return (
     <><div className="page-header">
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -1140,13 +1159,24 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       </div>
     </div>
     <div className="page-body">
-      <div className="service-tabs" style={{ maxWidth: 300, marginBottom: 24, padding: 6 }}>
+      <div className="service-tabs" style={{ maxWidth: 450, marginBottom: 24, padding: 6 }}>
         <div className={`service-tab ${tab === "prep" ? "active prep" : ""}`} onClick={() => setTab("prep")}>📦 Prep</div>
         <div className={`service-tab ${tab === "liquidation" ? "active liquidation" : ""}`} onClick={() => setTab("liquidation")}>💰 Liquidation</div>
+        <div className={`service-tab ${tab === "settings" ? "active admin" : ""}`} onClick={() => setTab("settings")}>⚙️ Settings</div>
       </div>
       {tab === "prep" ? 
         <AdminClientPrep client={client} parcels={parcels} shipments={shipments} token={token} showToast={showToast} onRefresh={onRefresh} /> :
-        <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} />
+       tab === "liquidation" ?
+        <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} /> :
+        <div className="card" style={{ maxWidth: 600 }}>
+          <div className="card-title">Client Settings</div>
+          <div className="input-group">
+            <label className="input-label">Discord Webhook URL</label>
+            <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
+          </div>
+          <button className="btn btn-primary admin" onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
+        </div>
       }
     </div></>
   );
@@ -1320,9 +1350,12 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     const oldItem = liquidation.find(i => i.id === editingId);
     const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
-    if (webhookUrl && dataToSave.date_sold && !oldItem?.date_sold) {
-      await sendDiscordNotification(webhookUrl, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client.full_name || client.email})`);
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    if (dataToSave.date_sold && !oldItem?.date_sold) {
+      const clientWebhook = client.discord_webhook || webhookUrl;
+      if (clientWebhook) {
+        await sendDiscordNotification(clientWebhook, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client.full_name || client.email})`);
+      }
     }
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
   };
