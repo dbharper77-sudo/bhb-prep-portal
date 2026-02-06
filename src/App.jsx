@@ -245,11 +245,18 @@ function SignupPage({ onBack }) {
 }
 
 // ============ CLIENT PREP PAGES ============
-function PrepDashboard({ parcels, billingPeriods }) {
+function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) {
   const daily = getDailyData(parcels, "date_added");
   const needsAttention = parcels.filter(p => p.needs_attention);
-  const thisMonth = new Date().getMonth() + 1, thisYear = new Date().getFullYear();
-  const currentBilling = billingPeriods?.find(b => b.period_month === thisMonth && b.period_year === thisYear);
+  const thisMonth = new Date().getMonth(), thisYear = new Date().getFullYear();
+  const thisMonthShipments = shipments.filter(s => {
+    const d = new Date(s.date_shipped || s.created_at);
+    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+  });
+  const thisMonthTotal = thisMonthShipments.reduce((sum, s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+  }, 0);
   const inTransit = parcels.filter(p => p.status === "in_transit").length;
   const delivered = parcels.filter(p => p.status === "delivered").length;
   const prepped = parcels.filter(p => p.status === "prepped").length;
@@ -260,9 +267,9 @@ function PrepDashboard({ parcels, billingPeriods }) {
         <div className="card stat-card"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--purple)" }}>{inTransit}</div><div className="stat-label">parcels</div></div>
         <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{delivered}</div><div className="stat-label">parcels</div></div>
         <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{prepped}</div><div className="stat-label">parcels</div></div>
-        <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{currentBilling?.total_amount?.toFixed(2) || "0.00"}</div><div className="stat-label">billing</div></div>
+        <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div><div className="stat-label">billing</div></div>
       </div>
-      {needsAttention.length > 0 && <div className="card attention-card" style={{ marginBottom: 24 }}><div className="card-title" style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: 8 }}><Icons.AlertTriangle /> Needs Attention ({needsAttention.length})</div><div style={{ marginTop: 12 }}>{needsAttention.map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div></div><span className="badge badge-attention">{p.attention_reason}</span></div>)}</div></div>}
+      {needsAttention.length > 0 && <div className="card attention-card" style={{ marginBottom: 24, cursor: "pointer" }} onClick={() => onNavigate && onNavigate("inventory")}><div className="card-title" style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: 8 }}><Icons.AlertTriangle /> Needs Attention ({needsAttention.length})</div><div style={{ marginTop: 12 }}>{needsAttention.map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div>{p.admin_notes && <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 4 }}>📝 {p.admin_notes}</div>}</div><span className="badge badge-attention">{p.attention_reason}</span></div>)}</div><div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>Click to view in inventory →</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Daily Units (7 Days)</div><MiniChart data={daily} /></div>
         <div className="card"><div className="card-title">Recent Parcels</div>{parcels.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No parcels yet.</div> : <div style={{ marginTop: 12 }}>{parcels.slice(0, 5).map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div></div><StatusBadge status={p.status} /></div>)}</div>}</div>
@@ -917,13 +924,13 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "prep") {
-      if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} />;
+      if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
       if (page === "add-order") return <PrepAddOrderPage token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "inventory") return <PrepInventoryPage parcels={parcels} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "shipments") return <ClientShipmentsPage shipments={shipments} />;
       if (page === "fees") return <PrepFeesPage />;
       if (page === "billing") return <PrepBillingPage billingPeriods={billingPeriods} invoices={invoices} shipments={shipments} />;
-      return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} />;
+      return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
     }
     if (service === "liquidation") {
       if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} />;
