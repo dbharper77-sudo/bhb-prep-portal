@@ -1128,13 +1128,13 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   const saveShipment = async () => {
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
-    const data = { user_id: client.id, shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || null, status: shipmentForm.status || "pending" };
+    const today = new Date().toISOString().split('T')[0];
+    const data = { user_id: client.id, shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "shipped" };
     try {
       if (editingShipment) {
         await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(data) });
       } else {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(data) });
-        if (!res.ok) { const err = await res.text(); console.error("Shipment save error:", err); }
+        await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(data) });
       }
       showToast(editingShipment ? "Updated!" : "Shipment created!"); resetShipmentForm(); setShowShipmentForm(false); onRefresh();
     } catch (e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
@@ -1218,7 +1218,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
               <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
-              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "invoiced" ? "pending" : "transit"}`}>{s.status}</span></td>
+              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td>
               <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
             </tr>
           ))}</tbody>
