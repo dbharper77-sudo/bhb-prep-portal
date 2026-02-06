@@ -97,6 +97,7 @@ const Icons = {
   X: () => <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   Shield: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   AlertTriangle: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+  Truck: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   Settings: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
 };
 
@@ -645,6 +646,146 @@ function AdminSettingsPage({ token, showToast }) {
   );
 }
 
+function AdminShipmentsPage({ token, showToast }) {
+  const [clients, setClients] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({ user_id: "", shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { loadData(); }, []);
+  const loadData = async () => {
+    setLoading(true);
+    const [s, c] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/shipments?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json())
+    ]);
+    if (Array.isArray(s)) setShipments(s);
+    if (Array.isArray(c)) setClients(c.filter(x => x.email !== ADMIN_EMAIL));
+    setLoading(false);
+  };
+
+  const calcTotal = (s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    const boxes = parseFloat(s.box_cost) || 0;
+    const other = parseFloat(s.other_fees) || 0;
+    return units + boxes + other;
+  };
+
+  const resetForm = () => { setForm({ user_id: "", shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" }); setEditingId(null); };
+
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setForm({ user_id: s.user_id, shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "pending" });
+    setShowForm(true);
+  };
+
+  const saveShipment = async () => {
+    if (!form.user_id || !form.shipment_id) return;
+    setSaving(true);
+    const data = { ...form, units_prepped: parseInt(form.units_prepped) || 0, unit_cost: parseFloat(form.unit_cost) || 0, box_count: parseInt(form.box_count) || 0, box_cost: parseFloat(form.box_cost) || 0, other_fees: parseFloat(form.other_fees) || 0 };
+    if (editingId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(data) });
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(data) });
+    }
+    showToast(editingId ? "Updated!" : "Shipment created!"); resetForm(); setShowForm(false); loadData(); setSaving(false);
+  };
+
+  const deleteShipment = async (id) => {
+    if (!confirm("Delete this shipment?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    showToast("Deleted!"); loadData();
+  };
+
+  const updateField = (f, v) => setForm(prev => ({ ...prev, [f]: v }));
+
+  if (loading) return <div className="loader"><div className="spinner" /></div>;
+
+  return (
+    <><div className="page-header"><div><div className="page-title">Shipments</div><div className="page-subtitle">Manage FBA shipments & billing</div></div>
+      <button className="btn btn-primary admin" onClick={() => { resetForm(); setShowForm(true); }}><Icons.Plus /> New Shipment</button>
+    </div>
+    <div className="page-body">
+      {showForm && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div className="card-title">{editingId ? "Edit Shipment" : "Create Shipment"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+            <div className="input-group"><label className="input-label">Client *</label>
+              <select className="input" value={form.user_id} onChange={e => updateField("user_id", e.target.value)}>
+                <option value="">Select client...</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}</option>)}
+              </select>
+            </div>
+            <div className="input-group"><label className="input-label">Shipment ID *</label>
+              <input className="input" placeholder="FBA17ABC123" value={form.shipment_id} onChange={e => updateField("shipment_id", e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+            <div className="input-group"><label className="input-label">Units Prepped</label>
+              <input className="input" type="number" value={form.units_prepped} onChange={e => updateField("units_prepped", e.target.value)} />
+            </div>
+            <div className="input-group"><label className="input-label">Cost per Unit (£)</label>
+              <input className="input" type="number" step="0.01" value={form.unit_cost} onChange={e => updateField("unit_cost", e.target.value)} />
+            </div>
+            <div className="input-group"><label className="input-label">Boxes</label>
+              <input className="input" type="number" value={form.box_count} onChange={e => updateField("box_count", e.target.value)} />
+            </div>
+            <div className="input-group"><label className="input-label">Box Cost (£)</label>
+              <input className="input" type="number" step="0.01" value={form.box_cost} onChange={e => updateField("box_cost", e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="input-group"><label className="input-label">Other Fees (£)</label>
+              <input className="input" type="number" step="0.01" value={form.other_fees} onChange={e => updateField("other_fees", e.target.value)} />
+            </div>
+            <div className="input-group"><label className="input-label">Date Shipped</label>
+              <input className="input" type="date" style={{ colorScheme: "dark" }} value={form.date_shipped} onChange={e => updateField("date_shipped", e.target.value)} />
+            </div>
+            {editingId && <div className="input-group"><label className="input-label">Status</label>
+              <select className="input" value={form.status} onChange={e => updateField("status", e.target.value)}>
+                <option value="pending">Pending</option>
+                <option value="invoiced">Invoiced</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>}
+          </div>
+          <div className="input-group"><label className="input-label">Notes</label>
+            <input className="input" placeholder="Optional notes..." value={form.notes} onChange={e => updateField("notes", e.target.value)} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcTotal(form).toFixed(2)}</span></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</button>
+              <button className="btn btn-primary admin" onClick={saveShipment} disabled={saving || !form.user_id || !form.shipment_id}>{saving ? "Saving..." : editingId ? "Update" : "Create"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shipments.length === 0 ? <div className="card empty-state"><Icons.Truck /><p>No shipments yet.</p></div> :
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
+        <thead><tr><th>Client</th><th>Shipment ID</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <tbody>{shipments.map(s => {
+          const client = clients.find(c => c.id === s.user_id);
+          return <tr key={s.id}>
+            <td style={{ fontWeight: 600 }}>{client?.full_name || client?.email || "—"}</td>
+            <td className="mono">{s.shipment_id}</td>
+            <td className="mono">{s.units_prepped || 0}</td>
+            <td className="mono">{s.box_count || 0}</td>
+            <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcTotal(s).toFixed(2)}</td>
+            <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
+            <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "invoiced" ? "pending" : "transit"}`}>{s.status}</span></td>
+            <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
+          </tr>;
+        })}</tbody>
+      </table></div></div>}
+    </div></>
+  );
+}
+
 function ProfilePage() {
   const { user, profile, signOut } = useAuth();
   return (
@@ -760,12 +901,14 @@ function AdminPortal() {
 
   const adminNav = [
     { id: "prep", label: "Prep Management", icon: Icons.Package },
+    { id: "shipments", label: "Shipments", icon: Icons.Truck },
     { id: "liquidation", label: "Liquidation", icon: Icons.Box },
     { id: "settings", label: "Settings", icon: Icons.Settings }
   ];
 
   const renderPage = () => {
     if (page === "prep") return <AdminPrepPage token={token} showToast={showToast} />;
+    if (page === "shipments") return <AdminShipmentsPage token={token} showToast={showToast} />;
     if (page === "liquidation") return <AdminLiquidationPage token={token} showToast={showToast} />;
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
     return <AdminPrepPage token={token} showToast={showToast} />;
