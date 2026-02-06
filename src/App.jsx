@@ -229,7 +229,15 @@ function SignupPage({ onBack }) {
     if (!form.full_name || !form.email || !form.password) return setError("Fill required fields");
     if (form.password.length < 6) return setError("Password min 6 chars");
     setLoading(true);
-    try { const d = await signUp(form.email, form.password, { full_name: form.full_name, company_name: form.company_name }); if (!d.access_token) setSuccess("Account created! Check email."); } catch (e) { setError(e.message); }
+    try { 
+      const d = await signUp(form.email, form.password, { full_name: form.full_name, company_name: form.company_name }); 
+      if (d.access_token) {
+        // Auto logged in, will redirect
+      } else {
+        setSuccess("Account created! You can now sign in.");
+        setTimeout(() => onBack(), 2000);
+      }
+    } catch (e) { setError(e.message); }
     setLoading(false);
   };
   return (
@@ -1176,7 +1184,7 @@ function AdminPortal() {
         onBack={backToClients}
       />;
     }
-    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} onSelectClient={selectClient} loading={loading} />;
+    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
   };
 
   return (
@@ -1205,14 +1213,38 @@ function AdminPortal() {
 }
 
 // Admin - All Clients List
-function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading }) {
+function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
+  const [search, setSearch] = useState("");
+  
+  const filteredClients = clients.filter(c => 
+    c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase()) ||
+    c.company_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const deleteClient = async (e, clientId) => {
+    e.stopPropagation();
+    if (!confirm("Delete this client? This will also delete all their parcels, shipments, and liquidation stock.")) return;
+    
+    // Delete from profiles (cascades to other tables due to foreign keys)
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${clientId}`, { 
+      method: "DELETE", 
+      headers: supabase.headers(token) 
+    });
+    showToast("Client deleted!");
+    onRefresh();
+  };
+
   if (loading) return <div className="loader"><div className="spinner" /></div>;
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
-      {clients.length === 0 ? <div className="card empty-state"><Icons.Users /><p>No clients yet.</p></div> :
+      <div style={{ marginBottom: 20 }}>
+        <div className="search-bar"><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+      </div>
+      {filteredClients.length === 0 ? <div className="card empty-state"><Icons.Users /><p>{search ? "No clients match your search." : "No clients yet."}</p></div> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-        {clients.map(c => {
+        {filteredClients.map(c => {
           const cp = parcels.filter(p => p.user_id === c.id);
           const cs = shipments.filter(s => s.user_id === c.id);
           const cl = liquidation.filter(l => l.user_id === c.id);
@@ -1226,6 +1258,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
+                <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
               </div>
               <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
                 <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
