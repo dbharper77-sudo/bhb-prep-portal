@@ -423,13 +423,14 @@ function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast 
       <div style={{ marginBottom: 20 }}><select className="input" style={{ width: "auto", minWidth: 160 }} value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All Items</option><option value="pending">Pending Sale</option><option value="sold">Sold - Awaiting Payout</option><option value="paid">Paid</option></select></div>
       {filtered.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items found.</p></div> :
       <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>Cost</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Cost</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
         <tbody>{filtered.map(s => {
           const c = calculatePayout(s), pd = getPayoutDate(s.date_sold), isEdit = editingId === s.id, data = isEdit ? editData : s;
           return <tr key={s.id} className={isEdit ? "edit-row" : ""}>
             <td style={{ fontSize: 12 }}>{formatShortDate(s.date_added)}</td>
             <td style={{ fontWeight: 600 }}>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : s.product_name}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : (s.asin || "—")}</td>
+            <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
             <td className="mono">{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.purchase_price} onChange={e => setEditData({ ...editData, purchase_price: e.target.value })} /> : (s.purchase_price ? `£${parseFloat(s.purchase_price).toFixed(2)}` : "—")}</td>
             <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
             <td className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{s.sale_price ? `£${c.totalFees.toFixed(2)}` : "—"}</td>
