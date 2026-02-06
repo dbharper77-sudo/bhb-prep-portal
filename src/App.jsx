@@ -1230,6 +1230,9 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   const [showShipmentForm, setShowShipmentForm] = useState(false);
   const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" });
   const [editingShipment, setEditingShipment] = useState(null);
+  const [webhookUrl, setWebhookUrl] = useState("");
+
+  useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
 
   const sorted = sortByStatus(parcels);
   const inbound = parcels.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
@@ -1241,9 +1244,36 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
   const saveEdit = async () => {
     setSaving(true);
-    console.log("Saving parcel edit:", editingId, editData);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
-    console.log("Response:", res.status, await res.clone().text());
+    const oldItem = parcels.find(p => p.id === editingId);
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
+    
+    const clientWebhook = client.discord_webhook || webhookUrl;
+    if (clientWebhook) {
+      if (editData.status === "shipped" && oldItem?.status !== "shipped") {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "📦 SHIPPED",
+          color: 0x22c55e,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client.full_name || client.email }
+        });
+      }
+      if (editData.needs_attention && !oldItem?.needs_attention) {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "⚠️ NEEDS ATTENTION",
+          color: 0xef4444,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Issue", value: editData.attention_reason || "Unknown", inline: true }
+          ],
+          description: editData.admin_notes || null,
+          footer: { text: client.full_name || client.email }
+        });
+      }
+    }
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
   };
 
