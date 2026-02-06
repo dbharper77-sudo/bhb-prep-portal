@@ -1348,7 +1348,13 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const saveEdit = async () => {
     setSaving(true);
     const oldItem = liquidation.find(i => i.id === editingId);
-    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null };
+    const dataToSave = { 
+      ...editData, 
+      sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, 
+      ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, 
+      shipping: editData.shipping ? parseFloat(editData.shipping) : null,
+      date_sold: editData.date_sold || null
+    };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
