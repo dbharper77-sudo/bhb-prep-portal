@@ -146,7 +146,7 @@ const css = `
 .inline-select{background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text-primary);font-size:13px;font-family:'Outfit',sans-serif;cursor:pointer}.inline-select:focus{border-color:var(--cyan)}
 .edit-row{background:var(--bg-card-hover)}
 .attention-card{background:linear-gradient(135deg,rgba(255,82,82,0.1),transparent);border-color:rgba(255,82,82,0.3)}
-.chart-container{height:120px;display:flex;align-items:flex-end;gap:4px;padding:10px 0}.chart-bar{flex:1;background:linear-gradient(to top,var(--cyan),rgba(0,229,255,0.3));border-radius:4px 4px 0 0;min-height:4px}.chart-bar.orange{background:linear-gradient(to top,var(--orange),rgba(255,145,0,0.3))}
+.chart-container{height:120px;display:flex;align-items:flex-end;gap:4px;padding:10px 0}.chart-bar{flex:1;background:linear-gradient(to top,var(--cyan),rgba(0,229,255,0.3));border-radius:4px 4px 0 0;min-height:4px;position:relative;display:flex;justify-content:center}.chart-bar.orange{background:linear-gradient(to top,var(--orange),rgba(255,145,0,0.3))}.chart-value{position:absolute;top:-18px;font-size:11px;font-weight:600;color:var(--cyan)}
 .chart-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted)}
 .back-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:14px;cursor:pointer;font-family:'Outfit',sans-serif}.back-btn:hover{border-color:var(--cyan);color:var(--cyan)}
 .client-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer}.client-card:hover{border-color:var(--orange)}
@@ -246,7 +246,6 @@ function SignupPage({ onBack }) {
 
 // ============ CLIENT PREP PAGES ============
 function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) {
-  const daily = getDailyData(parcels, "date_added");
   const needsAttention = parcels.filter(p => p.needs_attention);
   const thisMonth = new Date().getMonth(), thisYear = new Date().getFullYear();
   const thisMonthShipments = shipments.filter(s => {
@@ -257,6 +256,26 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
     return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
   }, 0);
+  const thisMonthUnits = thisMonthShipments.reduce((sum, s) => sum + (parseInt(s.units_prepped) || 0), 0);
+  
+  // Get daily units prepped from shipments for last 7 days
+  const getDailyUnitsPrepped = () => {
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split("T")[0];
+      const dayShipments = shipments.filter(s => {
+        const sd = (s.date_shipped || s.created_at || "").split("T")[0];
+        return sd === ds;
+      });
+      const units = dayShipments.reduce((sum, s) => sum + (parseInt(s.units_prepped) || 0), 0);
+      result.push({ date: ds, count: units, label: d.toLocaleDateString("en-GB", { weekday: "short" }) });
+    }
+    return result;
+  };
+  const dailyUnits = getDailyUnitsPrepped();
+  const weekTotal = dailyUnits.reduce((sum, d) => sum + d.count, 0);
+  
   const inTransit = parcels.filter(p => p.status === "in_transit").length;
   const delivered = parcels.filter(p => p.status === "delivered").length;
   const prepped = parcels.filter(p => p.status === "prepped").length;
@@ -271,7 +290,26 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
       </div>
       {needsAttention.length > 0 && <div className="card attention-card" style={{ marginBottom: 24, cursor: "pointer" }} onClick={() => onNavigate && onNavigate("inventory")}><div className="card-title" style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: 8 }}><Icons.AlertTriangle /> Needs Attention ({needsAttention.length})</div><div style={{ marginTop: 12 }}>{needsAttention.map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div>{p.admin_notes && <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 4 }}>📝 {p.admin_notes}</div>}</div><span className="badge badge-attention">{p.attention_reason}</span></div>)}</div><div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>Click to view in inventory →</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card"><div className="card-title">Daily Units (7 Days)</div><MiniChart data={daily} /></div>
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="card-title">Units Prepped (7 Days)</div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{weekTotal}</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>week total</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <div className="chart-container">{dailyUnits.map((d, i) => {
+              const max = Math.max(...dailyUnits.map(x => x.count), 1);
+              return <div key={i} className="chart-bar" style={{ height: `${(d.count / max) * 100}%` }}><span className="chart-value">{d.count > 0 ? d.count : ""}</span></div>;
+            })}</div>
+            <div className="chart-labels">{dailyUnits.map((d, i) => <span key={i}>{d.label}</span>)}</div>
+          </div>
+          <div style={{ marginTop: 12, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>This month</span>
+            <span style={{ fontWeight: 700, color: "var(--green)" }}>{thisMonthUnits} units</span>
+          </div>
+        </div>
         <div className="card"><div className="card-title">Recent Parcels</div>{parcels.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No parcels yet.</div> : <div style={{ marginTop: 12 }}>{parcels.slice(0, 5).map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div></div><StatusBadge status={p.status} /></div>)}</div>}</div>
       </div>
     </div></>
