@@ -339,23 +339,43 @@ function PrepFeesPage() {
   );
 }
 
-function PrepBillingPage({ billingPeriods, invoices }) {
-  const now = new Date(), thisMonth = now.getMonth() + 1, thisYear = now.getFullYear();
-  const lastMonth = thisMonth === 1 ? 12 : thisMonth - 1, lastYear = thisMonth === 1 ? thisYear - 1 : thisYear;
-  const current = billingPeriods?.find(b => b.period_month === thisMonth && b.period_year === thisYear);
-  const last = billingPeriods?.find(b => b.period_month === lastMonth && b.period_year === lastYear);
-  const pending = invoices?.filter(i => i.status === "pending") || [];
-  const paid = invoices?.filter(i => i.status === "paid") || [];
+function PrepBillingPage({ billingPeriods, invoices, shipments = [] }) {
+  const now = new Date(), thisMonth = now.getMonth(), thisYear = now.getFullYear();
+  const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1, lastYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+  
+  const calcTotal = (s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    const boxes = parseFloat(s.box_cost) || 0;
+    const other = parseFloat(s.other_fees) || 0;
+    return units + boxes + other;
+  };
+  
+  const thisMonthShipments = shipments.filter(s => {
+    const d = new Date(s.date_shipped || s.created_at);
+    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+  });
+  const lastMonthShipments = shipments.filter(s => {
+    const d = new Date(s.date_shipped || s.created_at);
+    return d.getMonth() === lastMonth && d.getFullYear() === lastYear;
+  });
+  
+  const thisMonthTotal = thisMonthShipments.reduce((sum, s) => sum + calcTotal(s), 0);
+  const thisMonthUnits = thisMonthShipments.reduce((sum, s) => sum + (s.units_prepped || 0), 0);
+  const lastMonthTotal = lastMonthShipments.reduce((sum, s) => sum + calcTotal(s), 0);
+  const paidTotal = shipments.filter(s => s.status === "paid").reduce((sum, s) => sum + calcTotal(s), 0);
+  const unpaid = shipments.filter(s => s.status !== "paid");
+  const unpaidTotal = unpaid.reduce((sum, s) => sum + calcTotal(s), 0);
+  
   return (
     <><div className="page-header"><div><div className="page-title">Billing</div><div className="page-subtitle">Your prep billing</div></div></div>
     <div className="page-body">
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--cyan)" }}>£{current?.total_amount?.toFixed(2) || "0.00"}</div><div className="stat-label">{current?.total_units || 0} units</div></div>
-        <div className="card stat-card"><div className="card-title">Last Month</div><div className="stat-value" style={{ color: "var(--text-secondary)" }}>£{last?.total_amount?.toFixed(2) || "0.00"}</div></div>
-        <div className="card stat-card"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paid.reduce((s, i) => s + parseFloat(i.amount || 0), 0).toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--cyan)" }}>£{thisMonthTotal.toFixed(2)}</div><div className="stat-label">{thisMonthUnits} units</div></div>
+        <div className="card stat-card"><div className="card-title">Last Month</div><div className="stat-value" style={{ color: "var(--text-secondary)" }}>£{lastMonthTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
       </div>
-      {pending.length > 0 && <div className="card" style={{ marginBottom: 24 }}><div className="card-title" style={{ color: "var(--amber)" }}>Invoices Due</div><div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Invoice</th><th>Amount</th><th>Due</th></tr></thead><tbody>{pending.map(inv => <tr key={inv.id}><td className="mono">{inv.invoice_number}</td><td className="mono" style={{ color: "var(--amber)" }}>£{parseFloat(inv.amount).toFixed(2)}</td><td style={{ fontSize: 13 }}>{formatDate(inv.due_date)}</td></tr>)}</tbody></table></div></div>}
-      <div className="card"><div className="card-title">Paid Invoices</div>{paid.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No paid invoices.</div> : <div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Invoice</th><th>Amount</th><th>Paid</th></tr></thead><tbody>{paid.map(inv => <tr key={inv.id}><td className="mono">{inv.invoice_number}</td><td className="mono" style={{ color: "var(--green)" }}>£{parseFloat(inv.amount).toFixed(2)}</td><td style={{ fontSize: 13 }}>{formatDate(inv.updated_at)}</td></tr>)}</tbody></table></div>}</div>
+      {unpaid.length > 0 && <div className="card" style={{ marginBottom: 24 }}><div className="card-title" style={{ color: "var(--amber)" }}>Outstanding Balance</div><div style={{ fontSize: 24, fontWeight: 700, color: "var(--amber)", marginTop: 8 }}>£{unpaidTotal.toFixed(2)}</div><div className="table-wrap" style={{ marginTop: 16 }}><table><thead><tr><th>Date</th><th>Shipment</th><th>Units</th><th>Amount</th><th>Status</th></tr></thead><tbody>{unpaid.map(s => <tr key={s.id}><td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td><td className="mono">{s.shipment_id}</td><td className="mono">{s.units_prepped || 0}</td><td className="mono" style={{ color: "var(--amber)" }}>£{calcTotal(s).toFixed(2)}</td><td><span className={`badge badge-${s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td></tr>)}</tbody></table></div></div>}
+      <div className="card"><div className="card-title">All Shipments</div>{shipments.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No shipments yet.</div> : <div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Date</th><th>Shipment</th><th>Units</th><th>Amount</th><th>Status</th></tr></thead><tbody>{shipments.map(s => <tr key={s.id}><td style={{ fontSize: 12 }}>{formatShortDate(s.date_shipped || s.created_at)}</td><td className="mono">{s.shipment_id}</td><td className="mono">{s.units_prepped || 0}</td><td className="mono" style={{ color: s.status === "paid" ? "var(--green)" : "var(--text-secondary)" }}>£{calcTotal(s).toFixed(2)}</td><td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td></tr>)}</tbody></table></div>}</div>
     </div></>
   );
 }
