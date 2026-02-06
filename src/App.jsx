@@ -895,24 +895,60 @@ function ClientPortal() {
 
 function AdminPortal() {
   const { user, token, signOut } = useAuth();
-  const [page, setPage] = useState("prep");
+  const [page, setPage] = useState("clients");
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientTab, setClientTab] = useState("prep");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [parcels, setParcels] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [liquidation, setLiquidation] = useState([]);
+  const [loading, setLoading] = useState(true);
   const showToast = useCallback(msg => setToast(msg), []);
 
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const [c, p, s, l] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/parcels?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/shipments?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json())
+    ]);
+    if (Array.isArray(c)) setClients(c.filter(x => x.email !== ADMIN_EMAIL));
+    if (Array.isArray(p)) setParcels(p);
+    if (Array.isArray(s)) setShipments(s);
+    if (Array.isArray(l)) setLiquidation(l);
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const selectClient = (client) => { setSelectedClient(client); setPage("client"); setClientTab("prep"); };
+  const backToClients = () => { setSelectedClient(null); setPage("clients"); };
+
   const adminNav = [
-    { id: "prep", label: "Prep Management", icon: Icons.Package },
-    { id: "shipments", label: "Shipments", icon: Icons.Truck },
-    { id: "liquidation", label: "Liquidation", icon: Icons.Box },
+    { id: "clients", label: "All Clients", icon: Icons.Users },
     { id: "settings", label: "Settings", icon: Icons.Settings }
   ];
 
   const renderPage = () => {
-    if (page === "prep") return <AdminPrepPage token={token} showToast={showToast} />;
-    if (page === "shipments") return <AdminShipmentsPage token={token} showToast={showToast} />;
-    if (page === "liquidation") return <AdminLiquidationPage token={token} showToast={showToast} />;
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
-    return <AdminPrepPage token={token} showToast={showToast} />;
+    if (page === "client" && selectedClient) {
+      return <AdminClientPage 
+        client={selectedClient} 
+        tab={clientTab} 
+        setTab={setClientTab}
+        parcels={parcels.filter(p => p.user_id === selectedClient.id)}
+        shipments={shipments.filter(s => s.user_id === selectedClient.id)}
+        liquidation={liquidation.filter(l => l.user_id === selectedClient.id)}
+        token={token}
+        showToast={showToast}
+        onRefresh={loadData}
+        onBack={backToClients}
+      />;
+    }
+    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} onSelectClient={selectClient} loading={loading} />;
   };
 
   return (
@@ -923,13 +959,287 @@ function AdminPortal() {
         <div className="sidebar-logo"><div className="sidebar-logo-icon admin">BHB</div><div><div className="sidebar-logo-text">BHB PREP</div><div className="sidebar-logo-sub">Admin Panel</div></div></div>
         <nav className="sidebar-nav" style={{ marginTop: 12 }}>
           <div className="sidebar-section-title">Admin</div>
-          {adminNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? "active admin" : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          {adminNav.map(item => <div key={item.id} className={`nav-item ${page === item.id || (page === "clients" && item.id === "clients") ? "active admin" : ""}`} onClick={() => { setPage(item.id); setSelectedClient(null); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          {selectedClient && <>
+            <div className="sidebar-section-title" style={{ marginTop: 16 }}>Current Client</div>
+            <div className="nav-item active admin" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+              <span style={{ fontWeight: 600 }}>{selectedClient.full_name || "No Name"}</span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>{selectedClient.email}</span>
+            </div>
+          </>}
         </nav>
         <div className="sidebar-footer"><div className="sidebar-user"><div className="sidebar-avatar admin">A</div><div><div className="sidebar-username">Admin</div><div className="sidebar-email">{user?.email}</div></div></div><button className="btn-signout" onClick={signOut}><Icons.LogOut /> Sign Out</button></div>
       </aside>
       <main className="main-content">{renderPage()}</main>
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
+  );
+}
+
+// Admin - All Clients List
+function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading }) {
+  if (loading) return <div className="loader"><div className="spinner" /></div>;
+  return (
+    <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
+    <div className="page-body">
+      {clients.length === 0 ? <div className="card empty-state"><Icons.Users /><p>No clients yet.</p></div> :
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+        {clients.map(c => {
+          const cp = parcels.filter(p => p.user_id === c.id);
+          const cs = shipments.filter(s => s.user_id === c.id);
+          const cl = liquidation.filter(l => l.user_id === c.id);
+          const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
+          const pendingLiq = cl.filter(l => !l.sale_price).length;
+          return (
+            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
+                  {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+                <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{inbound}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Inbound</div>
+                </div>
+                <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--green)" }}>{cs.length}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Shipments</div>
+                </div>
+                <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--orange)" }}>{pendingLiq}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Liq Pending</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>}
+    </div></>
+  );
+}
+
+// Admin - Single Client Page with Prep/Liquidation tabs
+function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation, token, showToast, onRefresh, onBack }) {
+  return (
+    <><div className="page-header">
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <button className="back-btn" onClick={onBack}><Icons.ArrowLeft /></button>
+        <div><div className="page-title">{client.full_name || client.email}</div>
+          <div className="page-subtitle">{client.email}</div></div>
+      </div>
+    </div>
+    <div className="page-body">
+      <div className="service-tabs" style={{ maxWidth: 300, marginBottom: 24, padding: 6 }}>
+        <div className={`service-tab ${tab === "prep" ? "active prep" : ""}`} onClick={() => setTab("prep")}>📦 Prep</div>
+        <div className={`service-tab ${tab === "liquidation" ? "active liquidation" : ""}`} onClick={() => setTab("liquidation")}>💰 Liquidation</div>
+      </div>
+      {tab === "prep" ? 
+        <AdminClientPrep client={client} parcels={parcels} shipments={shipments} token={token} showToast={showToast} onRefresh={onRefresh} /> :
+        <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} />
+      }
+    </div></>
+  );
+}
+
+// Admin - Client Prep Tab (Inbound + Shipments)
+function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefresh }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [showShipmentForm, setShowShipmentForm] = useState(false);
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" });
+  const [editingShipment, setEditingShipment] = useState(null);
+
+  const sorted = sortByStatus(parcels);
+  const inbound = parcels.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
+
+  const startEdit = item => {
+    setEditingId(item.id);
+    setEditData({ status: item.status || "in_transit", admin_notes: item.admin_notes || "", needs_attention: item.needs_attention || false, attention_reason: item.attention_reason || "" });
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(editData) });
+    showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
+  };
+
+  const calcShipmentTotal = (s) => {
+    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    const boxes = parseFloat(s.box_cost) || 0;
+    const other = parseFloat(s.other_fees) || 0;
+    return units + boxes + other;
+  };
+
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" }); setEditingShipment(null); };
+
+  const startEditShipment = (s) => {
+    setEditingShipment(s.id);
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "pending" });
+    setShowShipmentForm(true);
+  };
+
+  const saveShipment = async () => {
+    if (!shipmentForm.shipment_id) return;
+    setSaving(true);
+    const data = { ...shipmentForm, user_id: client.id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0 };
+    if (editingShipment) {
+      await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(data) });
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(data) });
+    }
+    showToast(editingShipment ? "Updated!" : "Shipment created!"); resetShipmentForm(); setShowShipmentForm(false); onRefresh(); setSaving(false);
+  };
+
+  const deleteShipment = async (id) => {
+    if (!confirm("Delete shipment?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    showToast("Deleted!"); onRefresh();
+  };
+
+  return (
+    <>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24 }}>
+        <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inbound}</div></div>
+        <div className="card stat-card"><div className="card-title">Total Parcels</div><div className="stat-value">{parcels.length}</div></div>
+        <div className="card stat-card"><div className="card-title">Shipments</div><div className="stat-value" style={{ color: "var(--green)" }}>{shipments.length}</div></div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
+        </div>
+        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No parcels.</div> :
+        <div className="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Product</th><th>SKU</th><th>Qty</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
+          <tbody>{sorted.map(p => {
+            const isEdit = editingId === p.id, data = isEdit ? editData : p;
+            return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
+              <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
+              <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
+              <td className="mono">{p.quantity}</td>
+              <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
+              <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
+              <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
+              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div className="card-title" style={{ margin: 0 }}>Shipments</div>
+          <button className="btn btn-primary btn-sm" onClick={() => { resetShipmentForm(); setShowShipmentForm(true); }}><Icons.Plus /> New Shipment</button>
+        </div>
+
+        {showShipmentForm && (
+          <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
+                <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
+                <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
+                <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost</label>
+                <input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentTotal(shipmentForm).toFixed(2)}</span></div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setShowShipmentForm(false); resetShipmentForm(); }}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={saveShipment} disabled={saving || !shipmentForm.shipment_id}>{saving ? "Saving..." : editingShipment ? "Update" : "Create"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {shipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
+        <div className="table-wrap"><table>
+          <thead><tr><th>Shipment ID</th><th>Units</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <tbody>{shipments.map(s => (
+            <tr key={s.id}>
+              <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
+              <td className="mono">{s.units_prepped || 0}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
+              <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
+              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "invoiced" ? "pending" : "transit"}`}>{s.status}</span></td>
+              <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
+            </tr>
+          ))}</tbody>
+        </table></div>}
+      </div>
+    </>
+  );
+}
+
+// Admin - Client Liquidation Tab
+function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
+
+  useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
+
+  const pending = liquidation.filter(l => !l.sale_price).length;
+  const sold = liquidation.filter(l => l.sale_price).length;
+  const totalPayout = liquidation.filter(l => l.sale_price).reduce((sum, l) => sum + calculatePayout(l).payout, 0);
+
+  const startEdit = item => {
+    setEditingId(item.id);
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false });
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    const oldItem = liquidation.find(i => i.id === editingId);
+    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null };
+    if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    if (webhookUrl && dataToSave.date_sold && !oldItem?.date_sold) {
+      await sendDiscordNotification(webhookUrl, `💰 **SOLD** - ${oldItem?.product_name} for £${dataToSave.sale_price} (${client.full_name || client.email})`);
+    }
+    showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
+  };
+
+  return (
+    <>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24 }}>
+        <div className="card stat-card liquidation"><div className="card-title">Pending</div><div className="stat-value" style={{ color: "var(--amber)" }}>{pending}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Sold</div><div className="stat-value" style={{ color: "var(--green)" }}>{sold}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Total Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalPayout.toFixed(2)}</div></div>
+      </div>
+
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
+        <div className="table-wrap"><table style={{ minWidth: 900 }}>
+          <thead><tr><th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+          <tbody>{liquidation.map(item => {
+            const isEdit = editingId === item.id, data = isEdit ? editData : item;
+            const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
+            const pd = getPayoutDate(data.date_sold);
+            return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
+              <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
+              <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
+              <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
+              <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
+              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
+              <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
+              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
+              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>
+    </>
   );
 }
 
