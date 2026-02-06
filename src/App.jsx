@@ -1139,14 +1139,16 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
         {showShipmentForm && (
           <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
                 <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
                 <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
                 <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost</label>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes Used</label>
+                <input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
                 <input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1161,11 +1163,12 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
         {shipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
         <div className="table-wrap"><table>
-          <thead><tr><th>Shipment ID</th><th>Units</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Shipment ID</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
           <tbody>{shipments.map(s => (
             <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
               <td className="mono">{s.units_prepped || 0}</td>
+              <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
               <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "invoiced" ? "pending" : "transit"}`}>{s.status}</span></td>
@@ -1218,8 +1221,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
-        <div className="table-wrap"><table style={{ minWidth: 900 }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+        <div className="table-wrap"><table style={{ minWidth: 1000 }}>
+          <thead><tr><th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Payout Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
           <tbody>{liquidation.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
@@ -1231,6 +1234,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
               <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
+              <td style={{ fontSize: 12 }}>{pd ? formatDate(pd) : "—"}</td>
               <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
               <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
