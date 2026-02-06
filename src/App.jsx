@@ -1126,7 +1126,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
   const saveEdit = async () => {
     setSaving(true);
-    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify(editData) });
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
   };
 
