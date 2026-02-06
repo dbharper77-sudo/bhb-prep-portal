@@ -687,7 +687,6 @@ function AdminLiquidationPage({ token, showToast }) {
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Sale Price", value: `£${dataToSave.sale_price?.toFixed(2)}`, inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
@@ -1409,7 +1408,6 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Sale Price", value: `£${dataToSave.sale_price?.toFixed(2)}`, inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
