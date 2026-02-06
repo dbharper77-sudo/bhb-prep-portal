@@ -1138,13 +1138,20 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [webhook, setWebhook] = useState(client.discord_webhook || "");
   const [savingWebhook, setSavingWebhook] = useState(false);
 
+  // Sync webhook state when client changes
+  useEffect(() => {
+    setWebhook(client.discord_webhook || "");
+  }, [client.discord_webhook]);
+
   const saveWebhook = async () => {
     setSavingWebhook(true);
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+    console.log("Saving webhook for client:", client.id, webhook);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
       method: "PATCH", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
       body: JSON.stringify({ discord_webhook: webhook }) 
     });
+    console.log("Webhook save response:", res.status, await res.clone().text());
     showToast("Webhook saved!");
     onRefresh();
     setSavingWebhook(false);
