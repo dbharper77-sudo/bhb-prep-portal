@@ -200,26 +200,7 @@ function StatusBadge({ status }) {
   return <span className={`badge badge-${cssClass}`}>{label}</span>; 
 }
 function ProductWithImage({ name, asin }) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [show, setShow] = useState(false);
-  const handleMouseMove = (e) => setPos({ x: e.clientX + 15, y: e.clientY + 15 });
-  if (!asin) return <span style={{ fontWeight: 600 }}>{name}</span>;
-  const imgUrl = `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SCLZZZZZZZ_.jpg`;
-  return (
-    <span 
-      className="asin-hover" 
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      <span style={{ fontWeight: 600 }}>{name}</span>
-      {show && (
-        <span className="asin-preview" style={{ left: pos.x, top: pos.y }}>
-          <img src={imgUrl} alt={name} onError={(e) => e.target.parentElement.style.display = 'none'} />
-        </span>
-      )}
-    </span>
-  );
+  return <span style={{ fontWeight: 600 }}>{name}</span>;
 }
 function MiniChart({ data, color }) {
   const max = Math.max(...data.map(d => d.count), 1);
