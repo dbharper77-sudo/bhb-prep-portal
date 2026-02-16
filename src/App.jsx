@@ -130,7 +130,7 @@ const css = `
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px;transition:all 0.2s}.card:hover{border-color:var(--border-bright)}.card-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}.stat-card{position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),transparent)}.stat-card.liquidation::before,.stat-card.admin::before{background:linear-gradient(90deg,var(--orange),transparent)}.stat-card.warning::before{background:linear-gradient(90deg,var(--red),transparent)}
 .stat-value{font-size:32px;font-weight:800;font-family:'JetBrains Mono',monospace}.stat-label{font-size:12px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px}
-.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-shipped,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
+.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-shipped,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)}td{padding:14px 16px;font-size:14px;border-bottom:1px solid var(--border)}tr:hover td{background:var(--bg-card-hover)}.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:'Outfit',sans-serif;transition:all 0.2s}.btn-primary{background:var(--cyan);color:var(--bg-primary)}.btn-primary:hover{background:var(--cyan-dim)}.btn-primary.liquidation,.btn-primary.admin{background:var(--orange)}.btn-primary.liquidation:hover,.btn-primary.admin:hover{background:#e68200}
 .btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}.btn-secondary:hover{border-color:var(--cyan)}
@@ -156,7 +156,7 @@ const css = `
 `;
 
 // Helpers
-const PREP_STATUSES = ["in_transit", "delivered", "prepped", "shipped"];
+const PREP_STATUSES = ["in_transit", "partial_delivery", "delivered", "prepped", "shipped"];
 const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product"];
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
@@ -193,7 +193,11 @@ function sortByStatus(items, completed = ["shipped", "prepped"]) {
 }
 
 function Toast({ message, onClose }) { useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]); return <div className="toast"><Icons.Check /> {message}</div>; }
-function StatusBadge({ status }) { const label = status?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); return <span className={`badge badge-${status?.replace(/_/g, "") || "transit"}`}>{label}</span>; }
+function StatusBadge({ status }) { 
+  const label = status?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); 
+  const cssClass = status === "partial_delivery" ? "partial_delivery" : status?.replace(/_/g, "") || "transit";
+  return <span className={`badge badge-${cssClass}`}>{label}</span>; 
+}
 function MiniChart({ data, color }) {
   const max = Math.max(...data.map(d => d.count), 1);
   return <div><div className="chart-container">{data.map((d, i) => <div key={i} className={`chart-bar ${color}`} style={{ height: `${(d.count / max) * 100}%` }} />)}</div><div className="chart-labels">{data.map((d, i) => <span key={i}>{d.label}</span>)}</div></div>;
@@ -287,16 +291,21 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
   const dailyUnits = getDailyUnitsPrepped();
   const weekTotal = dailyUnits.reduce((sum, d) => sum + d.count, 0);
   
-  const inTransit = parcels.filter(p => p.status === "in_transit").length;
-  const delivered = parcels.filter(p => p.status === "delivered").length;
-  const prepped = parcels.filter(p => p.status === "prepped").length;
+  // Count UNITS not parcels
+  const inTransitParcels = parcels.filter(p => p.status === "in_transit" || p.status === "partial_delivery");
+  const inTransitUnits = inTransitParcels.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
+  const inWarehouseParcels = parcels.filter(p => p.status === "delivered");
+  const inWarehouseUnits = inWarehouseParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+  const preppedParcels = parcels.filter(p => p.status === "prepped");
+  const preppedUnits = preppedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+  
   return (
     <><div className="page-header"><div><div className="page-title">Prep Dashboard</div><div className="page-subtitle">Overview of your FBA prep activity</div></div><div className="speed-badge"><Icons.Zap /> 24-48hr Turnaround</div></div>
     <div className="page-body">
       <div className="stats-grid">
-        <div className="card stat-card"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--purple)" }}>{inTransit}</div><div className="stat-label">parcels</div></div>
-        <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{delivered}</div><div className="stat-label">parcels</div></div>
-        <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{prepped}</div><div className="stat-label">parcels</div></div>
+        <div className="card stat-card"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--purple)" }}>{inTransitUnits}</div><div className="stat-label">units</div></div>
+        <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inWarehouseUnits}</div><div className="stat-label">units</div></div>
+        <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{preppedUnits}</div><div className="stat-label">units</div></div>
         <div className="card stat-card"><div className="card-title">This Month</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div><div className="stat-label">billing</div></div>
       </div>
       {needsAttention.length > 0 && <div className="card attention-card" style={{ marginBottom: 24, cursor: "pointer" }} onClick={() => onNavigate && onNavigate("inventory")}><div className="card-title" style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: 8 }}><Icons.AlertTriangle /> Needs Attention ({needsAttention.length})</div><div style={{ marginTop: 12 }}>{needsAttention.map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div>{p.admin_notes && <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 4 }}>📝 {p.admin_notes}</div>}</div><span className="badge badge-attention">{p.attention_reason}</span></div>)}</div><div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>Click to view in inventory →</div></div>}
@@ -1523,11 +1532,11 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
 
   const sorted = sortByStatus(parcels);
-  const inbound = parcels.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
+  const inbound = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status)).length;
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ status: item.status || "in_transit", admin_notes: item.admin_notes || "", needs_attention: item.needs_attention || false, attention_reason: item.attention_reason || "" });
+    setEditData({ status: item.status || "in_transit", admin_notes: item.admin_notes || "", needs_attention: item.needs_attention || false, attention_reason: item.attention_reason || "", qty_received: item.qty_received || "" });
   };
 
   const saveEdit = async () => {
@@ -1644,14 +1653,17 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         </div>
         {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No parcels.</div> :
         <div className="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Product</th><th>SKU</th><th>Qty</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Product</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
           <tbody>{sorted.map(p => {
             const isEdit = editingId === p.id, data = isEdit ? editData : p;
             return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
               <td style={{ fontWeight: 600 }}>{p.product_name}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{p.asin || "—"}</td>
               <td className="mono">{p.quantity}</td>
+              <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received || "—")}</td>
+              <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
               <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
               <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
               <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
