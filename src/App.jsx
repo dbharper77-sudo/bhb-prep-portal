@@ -1717,12 +1717,13 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         </div>
         {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No parcels.</div> :
         <div className="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Product</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
           <tbody>{sorted.map(p => {
             const isEdit = editingId === p.id, data = isEdit ? editData : p;
             return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
               <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+              <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.asin || "—"}</td>
               <td className="mono">{p.quantity}</td>
