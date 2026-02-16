@@ -1638,11 +1638,20 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   
   const totalCharges = shipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
 
+  // Calculate unit counts
+  const inboundParcels = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status));
+  const inboundUnits = inboundParcels.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
+  const inWarehouseParcels = parcels.filter(p => p.status === "delivered");
+  const inWarehouseUnits = inWarehouseParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+  const preppedParcels = parcels.filter(p => p.status === "prepped");
+  const preppedUnits = preppedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+
   return (
     <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 24 }}>
-        <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inbound}</div></div>
-        <div className="card stat-card"><div className="card-title">Shipments</div><div className="stat-value" style={{ color: "var(--green)" }}>{shipments.length}</div></div>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: 24 }}>
+        <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--purple)" }}>{inboundUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
+        <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inWarehouseUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
+        <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{preppedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">{monthNames[currentMonth]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
