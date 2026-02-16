@@ -1299,13 +1299,28 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState("");
   const [editingInvoice, setEditingInvoice] = useState(null);
+  
+  // Custom pricing
+  const [pricing, setPricing] = useState({
+    prep_standard: client.prep_standard || "0.45",
+    prep_bundle: client.prep_bundle || "0.65",
+    prep_oversize: client.prep_oversize || "1.50",
+    liq_commission: client.liq_commission || "30"
+  });
+  const [savingPricing, setSavingPricing] = useState(false);
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  // Sync webhook state when client changes
+  // Sync state when client changes
   useEffect(() => {
     setWebhook(client.discord_webhook || "");
-  }, [client.discord_webhook]);
+    setPricing({
+      prep_standard: client.prep_standard || "0.45",
+      prep_bundle: client.prep_bundle || "0.65",
+      prep_oversize: client.prep_oversize || "1.50",
+      liq_commission: client.liq_commission || "30"
+    });
+  }, [client]);
 
   // Load invoices
   useEffect(() => {
@@ -1328,6 +1343,23 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     showToast("Webhook saved!");
     onRefresh();
     setSavingWebhook(false);
+  };
+
+  const savePricing = async () => {
+    setSavingPricing(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+      method: "PATCH", 
+      headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
+      body: JSON.stringify({ 
+        prep_standard: parseFloat(pricing.prep_standard) || 0.45,
+        prep_bundle: parseFloat(pricing.prep_bundle) || 0.65,
+        prep_oversize: parseFloat(pricing.prep_oversize) || 1.50,
+        liq_commission: parseFloat(pricing.liq_commission) || 30
+      }) 
+    });
+    showToast("Pricing saved!");
+    onRefresh();
+    setSavingPricing(false);
   };
 
   // Calculate monthly totals from shipments
@@ -1421,6 +1453,29 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
        tab === "liquidation" ?
         <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} /> :
         <>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Custom Pricing</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Standard Prep (£)</label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_standard} onChange={e => setPricing({ ...pricing, prep_standard: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Bundle Prep (£)</label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_bundle} onChange={e => setPricing({ ...pricing, prep_bundle: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Oversize Prep (£)</label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_oversize} onChange={e => setPricing({ ...pricing, prep_oversize: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Liquidation (%)</label>
+                <input className="input" type="number" step="1" value={pricing.liq_commission} onChange={e => setPricing({ ...pricing, liq_commission: e.target.value })} />
+              </div>
+            </div>
+            <button className="btn btn-primary admin" onClick={savePricing} disabled={savingPricing}>{savingPricing ? "Saving..." : "Save Pricing"}</button>
+          </div>
+
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-title">Discord Webhook</div>
             <div className="input-group" style={{ marginBottom: 0 }}>
