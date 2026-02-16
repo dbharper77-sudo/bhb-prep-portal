@@ -199,7 +199,102 @@ function StatusBadge({ status }) {
   return <span className={`badge badge-${cssClass}`}>{label}</span>; 
 }
 function ProductWithImage({ name, asin }) {
-  return <span style={{ fontWeight: 600 }}>{name}</span>;
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [show, setShow] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  
+  const handleMouseMove = (e) => {
+    const x = Math.min(e.clientX + 15, window.innerWidth - 180);
+    const y = Math.min(e.clientY + 15, window.innerHeight - 180);
+    setPos({ x, y });
+  };
+  
+  if (!asin) return <span style={{ fontWeight: 600 }}>{name}</span>;
+  
+  const imgUrl = `https://m.media-amazon.com/images/P/${asin}.jpg`;
+  
+  return (
+    <span 
+      style={{ fontWeight: 600, cursor: 'pointer' }}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => { setShow(false); setImgLoaded(false); }}
+    >
+      {name}
+      {show && (
+        <div style={{
+          position: 'fixed',
+          left: pos.x,
+          top: pos.y,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          background: '#1a1a2e',
+          border: '1px solid #2a2a4e',
+          borderRadius: 10,
+          padding: 8,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+          display: imgLoaded ? 'block' : 'none'
+        }}>
+          <img 
+            src={imgUrl} 
+            alt={name}
+            onLoad={() => setImgLoaded(true)}
+            onError={(e) => e.target.style.display = 'none'}
+            style={{ width: 150, height: 150, objectFit: 'contain', background: '#fff', borderRadius: 6 }}
+          />
+        </div>
+      )}
+    </span>
+  );
+}
+function AsinWithImage({ asin }) {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [show, setShow] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  
+  const handleMouseMove = (e) => {
+    const x = Math.min(e.clientX + 15, window.innerWidth - 180);
+    const y = Math.min(e.clientY + 15, window.innerHeight - 180);
+    setPos({ x, y });
+  };
+  
+  if (!asin) return <span>—</span>;
+  
+  const imgUrl = `https://m.media-amazon.com/images/P/${asin}.jpg`;
+  
+  return (
+    <span 
+      style={{ cursor: 'pointer', color: 'var(--cyan)' }}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => { setShow(false); setImgLoaded(false); }}
+    >
+      {asin}
+      {show && (
+        <div style={{
+          position: 'fixed',
+          left: pos.x,
+          top: pos.y,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          background: '#1a1a2e',
+          border: '1px solid #2a2a4e',
+          borderRadius: 10,
+          padding: 8,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+          display: imgLoaded ? 'block' : 'none'
+        }}>
+          <img 
+            src={imgUrl} 
+            alt={asin}
+            onLoad={() => setImgLoaded(true)}
+            onError={(e) => e.target.style.display = 'none'}
+            style={{ width: 150, height: 150, objectFit: 'contain', background: '#fff', borderRadius: 6 }}
+          />
+        </div>
+      )}
+    </span>
+  );
 }
 function MiniChart({ data, color }) {
   const max = Math.max(...data.map(d => d.count), 1);
@@ -396,7 +491,7 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
             <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
             <td>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : <ProductWithImage name={p.product_name} asin={p.asin} />}</td>
             <td className="mono">{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.sku} onChange={e => setEditData({ ...editData, sku: e.target.value })} /> : (p.sku || "—")}</td>
-            <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : (p.asin || "—")}</td>
+            <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : <AsinWithImage asin={p.asin} />}</td>
             <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : p.quantity}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.tracking_number} onChange={e => setEditData({ ...editData, tracking_number: e.target.value })} /> : (p.tracking_number || "—")}</td>
             <td>{p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
@@ -1728,7 +1823,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
               <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
               <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
-              <td className="mono" style={{ fontSize: 12 }}>{p.asin || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
               <td className="mono">{p.quantity}</td>
               <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received || "—")}</td>
               <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
