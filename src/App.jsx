@@ -425,7 +425,7 @@ function PrepFeesPage() {
   return (
     <><div className="page-header"><div><div className="page-title">Prep Fees</div><div className="page-subtitle">FBA prep pricing</div></div></div>
     <div className="page-body">
-      <div className="fee-grid" style={{ marginBottom: 28 }}>{[{ name: "Standard Prep", price: "£0.45", desc: "Label, poly bag" }, { name: "Bundle Prep", price: "£0.65", desc: "Multi-pack bundling" }, { name: "Oversize Prep", price: "£1.50", desc: "Large/heavy items" }].map(f => <div className="fee-card" key={f.name}><div className="fee-price">{f.price}</div><div className="fee-name">{f.name}</div><div className="fee-desc">{f.desc}</div></div>)}</div>
+      <div className="fee-grid" style={{ marginBottom: 28 }}>{[{ name: "Standard Prep", price: "£0.45", desc: "Label, poly bag" }, { name: "Bundle Prep", price: "£0.65", desc: "Multi-pack bundling" }, { name: "Oversize Prep", price: "£1.50", desc: "Large/heavy items" }].map(f => <div className="fee-card" key={f.name}><div className="fee-price">{f.price} <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span></div><div className="fee-name">{f.name}</div><div className="fee-desc">{f.desc}</div></div>)}</div>
       <div className="card"><div className="card-title">Volume Discounts</div><div style={{ display: "flex", gap: 16, marginTop: 12 }}>{[{ r: "500+", d: "5%" }, { r: "2,000+", d: "10%" }, { r: "5,000+", d: "15%" }].map(v => <div key={v.r} style={{ flex: 1, padding: "12px 16px", background: "var(--bg-primary)", borderRadius: 10, border: "1px solid var(--border)" }}><div style={{ fontWeight: 700, color: "var(--cyan)" }}>{v.d} off</div><div style={{ fontSize: 13, color: "var(--text-muted)" }}>{v.r} units</div></div>)}</div></div>
     </div></>
   );
@@ -616,7 +616,7 @@ function LiquidationFeesPage() {
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Fees</div><div className="page-subtitle">Transparent pricing</div></div></div>
     <div className="page-body">
-      <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "15%", d: "10% if ≥£200", i: "💰" }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦" }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩" }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏" }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
+      <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "15%", d: "10% if ≥£200", i: "💰", vat: false }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦", vat: true }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩", vat: true }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏", vat: true }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p} {f.vat && <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span>}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
       <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts 35 days after sale to allow for returns.</p></div>
     </div></>
   );
@@ -1454,18 +1454,18 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} /> :
         <>
           <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">Custom Pricing</div>
+            <div className="card-title">Custom Pricing <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>+ VAT</span></div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Standard Prep (£)</label>
+                <label className="input-label">Standard Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
                 <input className="input" type="number" step="0.01" value={pricing.prep_standard} onChange={e => setPricing({ ...pricing, prep_standard: e.target.value })} />
               </div>
               <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Bundle Prep (£)</label>
+                <label className="input-label">Bundle Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
                 <input className="input" type="number" step="0.01" value={pricing.prep_bundle} onChange={e => setPricing({ ...pricing, prep_bundle: e.target.value })} />
               </div>
               <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Oversize Prep (£)</label>
+                <label className="input-label">Oversize Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
                 <input className="input" type="number" step="0.01" value={pricing.prep_oversize} onChange={e => setPricing({ ...pricing, prep_oversize: e.target.value })} />
               </div>
               <div className="input-group" style={{ margin: 0 }}>
