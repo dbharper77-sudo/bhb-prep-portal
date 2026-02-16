@@ -128,6 +128,7 @@ const css = `
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:40}
 @media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.sidebar-overlay.open{display:block}.mobile-header{display:flex}.main-content{margin-left:0}.page-header,.page-body{padding:16px}.stats-grid{grid-template-columns:1fr 1fr!important}}
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px;transition:all 0.2s}.card:hover{border-color:var(--border-bright)}.card-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.asin-hover{position:relative;cursor:pointer}.asin-hover:hover .asin-preview{display:block}.asin-preview{display:none;position:fixed;z-index:9999;pointer-events:none;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5)}.asin-preview img{width:150px;height:150px;object-fit:contain;background:#fff;border-radius:6px}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}.stat-card{position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),transparent)}.stat-card.liquidation::before,.stat-card.admin::before{background:linear-gradient(90deg,var(--orange),transparent)}.stat-card.warning::before{background:linear-gradient(90deg,var(--red),transparent)}
 .stat-value{font-size:32px;font-weight:800;font-family:'JetBrains Mono',monospace}.stat-label{font-size:12px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px}
 .badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-shipped,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
@@ -197,6 +198,20 @@ function StatusBadge({ status }) {
   const label = status?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); 
   const cssClass = status === "partial_delivery" ? "partial_delivery" : status?.replace(/_/g, "") || "transit";
   return <span className={`badge badge-${cssClass}`}>{label}</span>; 
+}
+function ProductWithImage({ name, asin }) {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const handleMouseMove = (e) => setPos({ x: e.clientX + 15, y: e.clientY + 15 });
+  if (!asin) return <span style={{ fontWeight: 600 }}>{name}</span>;
+  const imgUrl = `https://ws-eu.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL250_&ID=AsinImage&ServiceVersion=20070822&WS=1`;
+  return (
+    <span className="asin-hover" onMouseMove={handleMouseMove}>
+      <span style={{ fontWeight: 600 }}>{name}</span>
+      <span className="asin-preview" style={{ left: pos.x, top: pos.y }}>
+        <img src={imgUrl} alt={name} onError={(e) => e.target.style.display = 'none'} />
+      </span>
+    </span>
+  );
 }
 function MiniChart({ data, color }) {
   const max = Math.max(...data.map(d => d.count), 1);
@@ -330,7 +345,7 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
             <span style={{ fontWeight: 700, color: "var(--green)" }}>{thisMonthUnits} units</span>
           </div>
         </div>
-        <div className="card"><div className="card-title">Recent Parcels</div>{parcels.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No parcels yet.</div> : <div style={{ marginTop: 12 }}>{parcels.slice(0, 5).map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><div><div style={{ fontWeight: 600 }}>{p.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div></div>{p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</div>)}</div>}</div>
+        <div className="card"><div className="card-title">Recent Parcels</div>{parcels.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No parcels yet.</div> : <div style={{ marginTop: 12 }}>{parcels.slice(0, 5).map(p => <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}><div><ProductWithImage name={p.product_name} asin={p.asin} /><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.quantity} units</div></div>{p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</div>)}</div>}</div>
       </div>
     </div></>
   );
@@ -391,7 +406,7 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
           const isEdit = editingId === p.id, data = isEdit ? editData : p, done = ["shipped", "prepped"].includes(p.status);
           return <tr key={p.id} className={isEdit ? "edit-row" : ""} style={done ? { opacity: 0.6 } : {}}>
             <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
-            <td style={{ fontWeight: 600 }}>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : p.product_name}</td>
+            <td>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : <ProductWithImage name={p.product_name} asin={p.asin} />}</td>
             <td className="mono">{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.sku} onChange={e => setEditData({ ...editData, sku: e.target.value })} /> : (p.sku || "—")}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : (p.asin || "—")}</td>
             <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : p.quantity}</td>
@@ -1722,7 +1737,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
             const isEdit = editingId === p.id, data = isEdit ? editData : p;
             return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
-              <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+              <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
               <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{p.asin || "—"}</td>
