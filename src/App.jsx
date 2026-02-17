@@ -814,13 +814,37 @@ function DealsSubscribePage() {
   );
 }
 
-function BHBDealsPage({ token, hasAccess, startDate }) {
+function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showToast }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [invoiceDetails, setInvoiceDetails] = useState({
+    deals_invoice_name: dbProfile?.deals_invoice_name || '',
+    deals_invoice_business: dbProfile?.deals_invoice_business || '',
+    deals_invoice_email: dbProfile?.deals_invoice_email || ''
+  });
+  const [savingInvoice, setSavingInvoice] = useState(false);
+
+  // Check payment status
+  const lastPayment = dbProfile?.deals_last_payment;
+  const isPaymentOverdue = (() => {
+    if (!lastPayment) return false;
+    const paid = new Date(lastPayment);
+    const due = new Date(paid.getFullYear(), paid.getMonth() + 1, paid.getDate());
+    return new Date() >= due;
+  })();
+  const paymentDueDate = (() => {
+    if (!lastPayment) return null;
+    const paid = new Date(lastPayment);
+    return new Date(paid.getFullYear(), paid.getMonth() + 1, paid.getDate());
+  })();
+  const daysUntilDue = paymentDueDate ? Math.ceil((paymentDueDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
   // If no access, show subscribe page
   if (!hasAccess) return <DealsSubscribePage />;
+  
+  const hasInvoiceDetails = dbProfile?.deals_invoice_name && dbProfile?.deals_invoice_email;
   
   // Get the earliest date they can view
   const minDate = startDate || '2020-01-01';
@@ -839,6 +863,19 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
 
   const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
   const formatPercent = (val) => { const n = parseFloat(val || 0); const display = n > 0 && n < 3 ? n * 100 : n; return `${display.toFixed(0)}%`; };
+
+  const saveInvoiceDetails = async () => {
+    setSavingInvoice(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${dbProfile.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      body: JSON.stringify(invoiceDetails)
+    });
+    showToast("Invoice details saved!");
+    if (onRefresh) onRefresh();
+    setSavingInvoice(false);
+    setShowInvoiceForm(false);
+  };
 
   // Navigate dates - but not before start date
   const changeDate = (days) => {
@@ -883,6 +920,78 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
           />
           <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next →</button>
         </div>
+
+        {/* Payment Status Banner */}
+        {isPaymentOverdue && (
+          <div className="card" style={{ marginBottom: 20, background: 'rgba(255,82,82,0.08)', borderColor: 'rgba(255,82,82,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 28 }}>⚠️</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--red)' }}>Payment Overdue</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Your subscription payment is due. Please make payment to continue receiving deals.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {!isPaymentOverdue && daysUntilDue !== null && daysUntilDue <= 7 && daysUntilDue > 0 && (
+          <div className="card" style={{ marginBottom: 20, background: 'rgba(255,171,0,0.08)', borderColor: 'rgba(255,171,0,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 24 }}>💳</span>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--amber)' }}>Payment due in {daysUntilDue} day{daysUntilDue !== 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Due: {paymentDueDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Invoice Details Section */}
+        {!hasInvoiceDetails && !showInvoiceForm && (
+          <div className="card" style={{ marginBottom: 20, background: 'rgba(0,229,255,0.05)', borderColor: 'rgba(0,229,255,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>📋 Invoice Details Required</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Please enter your details for invoicing</div>
+              </div>
+              <button className="btn btn-primary deals" onClick={() => setShowInvoiceForm(true)}>Add Details</button>
+            </div>
+          </div>
+        )}
+        {(showInvoiceForm || (hasInvoiceDetails && showInvoiceForm)) && (
+          <div className="card" style={{ marginBottom: 20, borderColor: 'rgba(0,230,118,0.2)' }}>
+            <div className="card-title">Invoice Details</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Full Name</label>
+                <input className="input" value={invoiceDetails.deals_invoice_name} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_name: e.target.value })} placeholder="Your full name" />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Business Name</label>
+                <input className="input" value={invoiceDetails.deals_invoice_business} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_business: e.target.value })} placeholder="Business name (optional)" />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Email Address</label>
+                <input className="input" type="email" value={invoiceDetails.deals_invoice_email} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_email: e.target.value })} placeholder="Invoicing email" />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary deals" onClick={saveInvoiceDetails} disabled={savingInvoice || !invoiceDetails.deals_invoice_name || !invoiceDetails.deals_invoice_email}>{savingInvoice ? "Saving..." : "Save Details"}</button>
+              <button className="btn btn-secondary" onClick={() => setShowInvoiceForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {hasInvoiceDetails && !showInvoiceForm && (
+          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', gap: 24, fontSize: 13, color: 'var(--text-secondary)' }}>
+              <span>📋 <strong>{dbProfile.deals_invoice_name}</strong></span>
+              {dbProfile.deals_invoice_business && <span style={{ color: 'var(--text-muted)' }}>{dbProfile.deals_invoice_business}</span>}
+              <span style={{ color: 'var(--text-muted)' }}>{dbProfile.deals_invoice_email}</span>
+            </div>
+            <button className="btn-icon" onClick={() => { setInvoiceDetails({ deals_invoice_name: dbProfile.deals_invoice_name || '', deals_invoice_business: dbProfile.deals_invoice_business || '', deals_invoice_email: dbProfile.deals_invoice_email || '' }); setShowInvoiceForm(true); }}><Icons.Edit /></button>
+          </div>
+        )}
         
         {isBeforeStartDate ? (
           <div className="card empty-state" style={{ background: 'rgba(0,230,118,0.02)', borderColor: 'rgba(0,230,118,0.1)' }}>
@@ -1603,7 +1712,23 @@ function ClientPortal() {
       if (Array.isArray(b)) setBillingPeriods(b);
       if (Array.isArray(l)) setLiquidationStock(l);
       if (Array.isArray(s)) setShipments(s);
-      if (Array.isArray(prof) && prof[0]) setDbProfile(prof[0]);
+      if (Array.isArray(prof) && prof[0]) {
+        setDbProfile(prof[0]);
+        // Auto-deactivate if payment is overdue (1 calendar month past last payment)
+        if (prof[0].deals_access && prof[0].deals_last_payment) {
+          const paid = new Date(prof[0].deals_last_payment);
+          const due = new Date(paid.getFullYear(), paid.getMonth() + 1, paid.getDate());
+          if (new Date() >= due) {
+            // Deactivate access
+            await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
+              method: "PATCH",
+              headers: { ...supabase.headers(token), "Content-Type": "application/json" },
+              body: JSON.stringify({ deals_access: false })
+            });
+            setDbProfile({ ...prof[0], deals_access: false });
+          }
+        }
+      }
     } catch (e) { console.error(e); }
   }, [token]);
 
@@ -1635,7 +1760,7 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
-      return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} />;
+      return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
     }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
@@ -1851,7 +1976,16 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [savingPricing, setSavingPricing] = useState(false);
   const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
   const [dealsStartDate, setDealsStartDate] = useState(client.deals_start_date || '');
+  const [dealsLastPayment, setDealsLastPayment] = useState(client.deals_last_payment || '');
   const [savingDeals, setSavingDeals] = useState(false);
+
+  // Payment overdue check
+  const isPaymentOverdue = (() => {
+    if (!dealsLastPayment) return false;
+    const paid = new Date(dealsLastPayment);
+    const due = new Date(paid.getFullYear(), paid.getMonth() + 1, paid.getDate());
+    return new Date() >= due;
+  })();
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -1860,6 +1994,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     setWebhook(client.discord_webhook || "");
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
+    setDealsLastPayment(client.deals_last_payment || '');
     setPricing({
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
@@ -2073,27 +2208,67 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
             </div>
             {dealsAccess && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                <div className="input-group" style={{ margin: 0, maxWidth: 250 }}>
-                  <label className="input-label">Access Start Date</label>
-                  <input 
-                    type="date" 
-                    className="input" 
-                    style={{ colorScheme: 'dark' }}
-                    value={dealsStartDate}
-                    onChange={async (e) => {
-                      const newDate = e.target.value;
-                      setDealsStartDate(newDate);
-                      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
-                        method: "PATCH", 
-                        headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-                        body: JSON.stringify({ deals_start_date: newDate }) 
-                      });
-                      showToast("Start date updated!");
-                      onRefresh();
-                    }}
-                  />
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Client can only see deals from this date onwards</div>
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                  <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
+                    <label className="input-label">Access Start Date</label>
+                    <input 
+                      type="date" 
+                      className="input" 
+                      style={{ colorScheme: 'dark' }}
+                      value={dealsStartDate}
+                      onChange={async (e) => {
+                        const newDate = e.target.value;
+                        setDealsStartDate(newDate);
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+                          method: "PATCH", 
+                          headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+                          body: JSON.stringify({ deals_start_date: newDate }) 
+                        });
+                        showToast("Start date updated!");
+                        onRefresh();
+                      }}
+                    />
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Can only see deals from this date</div>
+                  </div>
+                  <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
+                    <label className="input-label">Last Payment Date</label>
+                    <input 
+                      type="date" 
+                      className="input" 
+                      style={{ colorScheme: 'dark' }}
+                      value={dealsLastPayment}
+                      onChange={async (e) => {
+                        const newDate = e.target.value;
+                        setDealsLastPayment(newDate);
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+                          method: "PATCH", 
+                          headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+                          body: JSON.stringify({ deals_last_payment: newDate }) 
+                        });
+                        showToast("Payment date updated!");
+                        onRefresh();
+                      }}
+                    />
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Auto-deactivates after 1 month</div>
+                  </div>
                 </div>
+                {isPaymentOverdue && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,82,82,0.1)', border: '1px solid rgba(255,82,82,0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>⚠️</span>
+                    <span style={{ fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>Payment overdue — subscription will auto-deactivate</span>
+                  </div>
+                )}
+                {/* Client invoice details (read-only for admin) */}
+                {(client.deals_invoice_name || client.deals_invoice_email) && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-primary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Client Invoice Details</div>
+                    <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
+                      <span><strong>{client.deals_invoice_name}</strong></span>
+                      {client.deals_invoice_business && <span style={{ color: 'var(--text-muted)' }}>{client.deals_invoice_business}</span>}
+                      <span style={{ color: 'var(--text-muted)' }}>{client.deals_invoice_email}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
