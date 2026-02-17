@@ -814,13 +814,16 @@ function DealsSubscribePage() {
   );
 }
 
-function BHBDealsPage({ token, hasAccess }) {
+function BHBDealsPage({ token, hasAccess, startDate }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
   // If no access, show subscribe page
   if (!hasAccess) return <DealsSubscribePage />;
+  
+  // Get the earliest date they can view
+  const minDate = startDate || '2020-01-01';
   
   useEffect(() => {
     loadDeals();
@@ -837,12 +840,18 @@ function BHBDealsPage({ token, hasAccess }) {
   const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
   const formatPercent = (val) => `${parseFloat(val || 0).toFixed(1)}%`;
 
-  // Navigate dates
+  // Navigate dates - but not before start date
   const changeDate = (days) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const newDate = d.toISOString().split('T')[0];
+    if (newDate >= minDate) {
+      setSelectedDate(newDate);
+    }
   };
+  
+  // Check if selected date is before start date
+  const isBeforeStartDate = selectedDate < minDate;
 
   const formatDisplayDate = (dateStr) => {
     const d = new Date(dateStr);
@@ -861,19 +870,27 @@ function BHBDealsPage({ token, hasAccess }) {
       <div className="page-body">
         {/* Date Navigation */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
-          <button className="btn btn-secondary" onClick={() => changeDate(-1)}>← Previous</button>
+          <button className="btn btn-secondary" onClick={() => changeDate(-1)} disabled={selectedDate <= minDate}>← Previous</button>
           <input 
             type="date" 
             className="input" 
             style={{ width: 200, textAlign: 'center', fontSize: 16, fontWeight: 600, colorScheme: 'dark' }} 
             value={selectedDate} 
-            onChange={e => setSelectedDate(e.target.value)} 
+            min={minDate}
+            onChange={e => {
+              if (e.target.value >= minDate) setSelectedDate(e.target.value);
+            }} 
           />
           <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next →</button>
         </div>
-
-        {/* Deals List */}
-        {loading ? (
+        
+        {isBeforeStartDate ? (
+          <div className="card empty-state" style={{ background: 'rgba(0,230,118,0.02)', borderColor: 'rgba(0,230,118,0.1)' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+            <p>Your subscription started on {new Date(minDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+            <p style={{ fontSize: 13, marginTop: 8, color: 'var(--text-muted)' }}>You can only view deals from this date onwards.</p>
+          </div>
+        ) : loading ? (
           <div className="card empty-state"><div className="spinner" style={{ borderTopColor: '#00e676' }} /></div>
         ) : deals.length === 0 ? (
           <div className="card empty-state" style={{ background: 'rgba(0,230,118,0.02)', borderColor: 'rgba(0,230,118,0.1)' }}>
@@ -1596,7 +1613,7 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
-      return <BHBDealsPage token={token} hasAccess={profile?.deals_access} />;
+      return <BHBDealsPage token={token} hasAccess={profile?.deals_access} startDate={profile?.deals_start_date} />;
     }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
@@ -1989,31 +2006,54 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
 
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-title">BHB Deals Access</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>Deal Sheet Subscription</div>
                 <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Allow this client to view the daily deal sheet</div>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input 
-                  type="checkbox" 
-                  checked={client.deals_access || false}
-                  onChange={async (e) => {
-                    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
-                      method: "PATCH", 
-                      headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-                      body: JSON.stringify({ deals_access: e.target.checked }) 
-                    });
-                    showToast(e.target.checked ? "Deals access granted!" : "Deals access revoked");
-                    onRefresh();
-                  }}
-                  style={{ width: 20, height: 20, accentColor: "#00e676" }}
-                />
-                <span style={{ fontWeight: 600, color: client.deals_access ? "#00e676" : "var(--text-muted)" }}>
-                  {client.deals_access ? "Active" : "No Access"}
-                </span>
-              </label>
+              <button 
+                className={`btn ${client.deals_access ? "btn-primary deals" : "btn-secondary"}`}
+                onClick={async () => {
+                  const newAccess = !client.deals_access;
+                  const updates = { deals_access: newAccess };
+                  if (newAccess && !client.deals_start_date) {
+                    updates.deals_start_date = new Date().toISOString().split('T')[0];
+                  }
+                  await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+                    method: "PATCH", 
+                    headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+                    body: JSON.stringify(updates) 
+                  });
+                  showToast(newAccess ? "Deals access granted!" : "Deals access revoked");
+                  onRefresh();
+                }}
+              >
+                {client.deals_access ? "✓ Active" : "No Access"}
+              </button>
             </div>
+            {client.deals_access && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                <div className="input-group" style={{ margin: 0, maxWidth: 250 }}>
+                  <label className="input-label">Access Start Date</label>
+                  <input 
+                    type="date" 
+                    className="input" 
+                    style={{ colorScheme: 'dark' }}
+                    value={client.deals_start_date || new Date().toISOString().split('T')[0]}
+                    onChange={async (e) => {
+                      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+                        method: "PATCH", 
+                        headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+                        body: JSON.stringify({ deals_start_date: e.target.value }) 
+                      });
+                      showToast("Start date updated!");
+                      onRefresh();
+                    }}
+                  />
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Client can only see deals from this date onwards</div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
