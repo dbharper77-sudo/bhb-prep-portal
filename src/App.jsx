@@ -794,12 +794,16 @@ function BHBDealsPage({ token }) {
       </div>
       <div className="page-body">
         {/* Date Navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <button className="btn btn-secondary" onClick={() => changeDate(-1)}>← Previous Day</button>
-          <div className="date-picker">
-            <span style={{ fontSize: 18, fontWeight: 700 }}>{formatDisplayDate(selectedDate)}</span>
-          </div>
-          <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next Day →</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
+          <button className="btn btn-secondary" onClick={() => changeDate(-1)}>← Previous</button>
+          <input 
+            type="date" 
+            className="input" 
+            style={{ width: 200, textAlign: 'center', fontSize: 16, fontWeight: 600 }} 
+            value={selectedDate} 
+            onChange={e => setSelectedDate(e.target.value)} 
+          />
+          <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next →</button>
         </div>
 
         {/* Deals List */}
