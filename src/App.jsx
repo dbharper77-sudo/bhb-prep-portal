@@ -799,7 +799,7 @@ function BHBDealsPage({ token }) {
           <input 
             type="date" 
             className="input" 
-            style={{ width: 200, textAlign: 'center', fontSize: 16, fontWeight: 600 }} 
+            style={{ width: 200, textAlign: 'center', fontSize: 16, fontWeight: 600, colorScheme: 'dark' }} 
             value={selectedDate} 
             onChange={e => setSelectedDate(e.target.value)} 
           />
@@ -973,8 +973,10 @@ function AdminDealsPage({ token, showToast }) {
       <div className="page-body">
         {/* Date & Actions */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <input type="date" className="input" style={{ width: 180 }} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d.toISOString().split('T')[0]); }}>←</button>
+            <input type="date" className="input" style={{ width: 160, colorScheme: 'dark' }} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+            <button className="btn btn-secondary" onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d.toISOString().split('T')[0]); }}>→</button>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button className="btn btn-primary deals" onClick={() => { resetForm(); setShowForm(true); }}><Icons.Plus /> Add Deal</button>
