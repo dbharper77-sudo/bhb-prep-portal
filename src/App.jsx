@@ -841,8 +841,48 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
   })();
   const daysUntilDue = paymentDueDate ? Math.ceil((paymentDueDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
-  // If no access, show subscribe page
-  if (!hasAccess) return <DealsSubscribePage />;
+  // If no access - check if they were a previous subscriber (have last payment date)
+  if (!hasAccess) {
+    if (dbProfile?.deals_last_payment) {
+      // They were a subscriber but payment is overdue
+      return (
+        <div className="deals-theme">
+          <div className="page-header deals-header">
+            <div>
+              <div className="page-title" style={{ color: 'var(--red)' }}>📋 BHB Deals</div>
+              <div className="page-subtitle">Subscription Inactive</div>
+            </div>
+          </div>
+          <div className="page-body">
+            <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
+              <div style={{ fontSize: 64, marginBottom: 20 }}>⚠️</div>
+              <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12, color: 'var(--red)' }}>Payment Overdue</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
+                Your BHB Deals subscription has been paused because your payment is overdue. 
+                Please make your payment to regain access to the daily deal sheet.
+              </p>
+              <div className="card" style={{ textAlign: 'left', marginBottom: 24, borderColor: 'rgba(255,82,82,0.2)', background: 'rgba(255,82,82,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Last Payment</span>
+                  <strong>{new Date(dbProfile.deals_last_payment).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Status</span>
+                  <strong style={{ color: 'var(--red)' }}>Overdue</strong>
+                </div>
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 16 }}>Contact <strong style={{ color: '#00e676' }}>@dbhfba</strong> on Instagram or email us to arrange payment</p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <a href="https://instagram.com/dbhfba" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: 16, padding: '12px 28px' }}>📱 Instagram</a>
+                <a href="mailto:dbharper77@gmail.com?subject=BHB%20Deals%20Subscription%20Payment" className="btn btn-primary deals" style={{ fontSize: 16, padding: '12px 28px' }}>📧 Email Us</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <DealsSubscribePage />;
+  }
   
   const hasInvoiceDetails = dbProfile?.deals_invoice_name && dbProfile?.deals_invoice_email;
   
