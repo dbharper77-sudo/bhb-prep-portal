@@ -2028,6 +2028,18 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     return new Date() >= due;
   })();
 
+  // Auto-deactivate if payment overdue
+  useEffect(() => {
+    if (isPaymentOverdue && dealsAccess) {
+      setDealsAccess(false);
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+        method: "PATCH", 
+        headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+        body: JSON.stringify({ deals_access: false }) 
+      }).then(() => onRefresh());
+    }
+  }, [isPaymentOverdue]);
+
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Sync state when client changes
