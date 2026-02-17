@@ -948,48 +948,15 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
         )}
 
         {/* Invoice Details Section */}
-        {!hasInvoiceDetails && !showInvoiceForm && (
+        {!hasInvoiceDetails && (
           <div className="card" style={{ marginBottom: 20, background: 'rgba(0,229,255,0.05)', borderColor: 'rgba(0,229,255,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20 }}>📋</span>
               <div>
-                <div style={{ fontWeight: 600 }}>📋 Invoice Details Required</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Please enter your details for invoicing</div>
-              </div>
-              <button className="btn btn-primary deals" onClick={() => setShowInvoiceForm(true)}>Add Details</button>
-            </div>
-          </div>
-        )}
-        {(showInvoiceForm || (hasInvoiceDetails && showInvoiceForm)) && (
-          <div className="card" style={{ marginBottom: 20, borderColor: 'rgba(0,230,118,0.2)' }}>
-            <div className="card-title">Invoice Details</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Full Name</label>
-                <input className="input" value={invoiceDetails.deals_invoice_name} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_name: e.target.value })} placeholder="Your full name" />
-              </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Business Name</label>
-                <input className="input" value={invoiceDetails.deals_invoice_business} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_business: e.target.value })} placeholder="Business name (optional)" />
-              </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Email Address</label>
-                <input className="input" type="email" value={invoiceDetails.deals_invoice_email} onChange={e => setInvoiceDetails({ ...invoiceDetails, deals_invoice_email: e.target.value })} placeholder="Invoicing email" />
+                <div style={{ fontWeight: 600 }}>Invoice details required</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Go to <strong>Invoice Details</strong> in the sidebar to add your billing info</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary deals" onClick={saveInvoiceDetails} disabled={savingInvoice || !invoiceDetails.deals_invoice_name || !invoiceDetails.deals_invoice_email}>{savingInvoice ? "Saving..." : "Save Details"}</button>
-              <button className="btn btn-secondary" onClick={() => setShowInvoiceForm(false)}>Cancel</button>
-            </div>
-          </div>
-        )}
-        {hasInvoiceDetails && !showInvoiceForm && (
-          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10 }}>
-            <div style={{ display: 'flex', gap: 24, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <span>📋 <strong>{dbProfile.deals_invoice_name}</strong></span>
-              {dbProfile.deals_invoice_business && <span style={{ color: 'var(--text-muted)' }}>{dbProfile.deals_invoice_business}</span>}
-              <span style={{ color: 'var(--text-muted)' }}>{dbProfile.deals_invoice_email}</span>
-            </div>
-            <button className="btn-icon" onClick={() => { setInvoiceDetails({ deals_invoice_name: dbProfile.deals_invoice_name || '', deals_invoice_business: dbProfile.deals_invoice_business || '', deals_invoice_email: dbProfile.deals_invoice_email || '' }); setShowInvoiceForm(true); }}><Icons.Edit /></button>
           </div>
         )}
         
@@ -1049,6 +1016,78 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Client Invoice Details Page
+function DealsInvoiceDetailsPage({ token, dbProfile, onRefresh, showToast }) {
+  const [form, setForm] = useState({
+    deals_invoice_name: dbProfile?.deals_invoice_name || '',
+    deals_invoice_business: dbProfile?.deals_invoice_business || '',
+    deals_invoice_email: dbProfile?.deals_invoice_email || ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      deals_invoice_name: dbProfile?.deals_invoice_name || '',
+      deals_invoice_business: dbProfile?.deals_invoice_business || '',
+      deals_invoice_email: dbProfile?.deals_invoice_email || ''
+    });
+  }, [dbProfile]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${dbProfile.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      body: JSON.stringify(form)
+    });
+    showToast("Invoice details saved!");
+    if (onRefresh) onRefresh();
+    setSaving(false);
+  };
+
+  const hasSaved = dbProfile?.deals_invoice_name && dbProfile?.deals_invoice_email;
+
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#00e676' }}>📋 Invoice Details</div>
+          <div className="page-subtitle">Your billing information for BHB Deals</div>
+        </div>
+      </div>
+      <div className="page-body">
+        <div className="card" style={{ maxWidth: 600, borderColor: 'rgba(0,230,118,0.2)' }}>
+          <div className="card-title">Billing Information</div>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>This information will be used for your subscription invoices.</p>
+          <div className="input-group">
+            <label className="input-label">Full Name *</label>
+            <input className="input" value={form.deals_invoice_name} onChange={e => setForm({ ...form, deals_invoice_name: e.target.value })} placeholder="Your full name" />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Business Name</label>
+            <input className="input" value={form.deals_invoice_business} onChange={e => setForm({ ...form, deals_invoice_business: e.target.value })} placeholder="Business name (optional)" />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Email Address *</label>
+            <input className="input" type="email" value={form.deals_invoice_email} onChange={e => setForm({ ...form, deals_invoice_email: e.target.value })} placeholder="Email for invoices" />
+          </div>
+          <button className="btn btn-primary deals" onClick={handleSave} disabled={saving || !form.deals_invoice_name || !form.deals_invoice_email}>{saving ? "Saving..." : hasSaved ? "Update Details" : "Save Details"}</button>
+        </div>
+        {hasSaved && (
+          <div className="card" style={{ maxWidth: 600, marginTop: 20, background: 'rgba(0,230,118,0.03)', borderColor: 'rgba(0,230,118,0.15)' }}>
+            <div className="card-title" style={{ color: '#00e676' }}>✓ Current Details</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, fontSize: 14 }}>
+              <div><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Name:</span> <strong>{dbProfile.deals_invoice_name}</strong></div>
+              {dbProfile.deals_invoice_business && <div><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Business:</span> <strong>{dbProfile.deals_invoice_business}</strong></div>}
+              <div><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Email:</span> <strong>{dbProfile.deals_invoice_email}</strong></div>
+            </div>
           </div>
         )}
       </div>
@@ -1733,7 +1772,7 @@ function ClientPortal() {
   }, [token]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { setPage("dashboard"); }, [service]);
+  useEffect(() => { setPage(service === "deals" ? "deals" : "dashboard"); }, [service]);
 
   const prepNav = [
     { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
@@ -1751,7 +1790,8 @@ function ClientPortal() {
     { id: "billing", label: "Billing", icon: Icons.Receipt }
   ];
   const dealsNav = [
-    { id: "deals", label: "Today's Deals", icon: Icons.List }
+    { id: "deals", label: "Deals", icon: Icons.List },
+    { id: "invoice-details", label: "Invoice Details", icon: Icons.Receipt }
   ];
   const sharedNav = [{ id: "profile", label: "Profile", icon: Icons.User }];
   const currentNav = service === "prep" ? prepNav : service === "liquidation" ? liqNav : dealsNav;
@@ -1760,6 +1800,7 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
+      if (page === "invoice-details") return <DealsInvoiceDetailsPage token={token} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
       return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
     }
     if (service === "prep") {
