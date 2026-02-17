@@ -814,17 +814,11 @@ function DealsSubscribePage() {
   );
 }
 
-function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showToast }) {
+function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showToast, userId }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-  const [invoiceDetails, setInvoiceDetails] = useState({
-    deals_invoice_name: dbProfile?.deals_invoice_name || '',
-    deals_invoice_business: dbProfile?.deals_invoice_business || '',
-    deals_invoice_email: dbProfile?.deals_invoice_email || ''
-  });
-  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [interactions, setInteractions] = useState({});
 
   // Check payment status
   const lastPayment = dbProfile?.deals_last_payment;
@@ -893,6 +887,10 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
     loadDeals();
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (userId && token) loadInteractions();
+  }, [userId, token]);
+
   const loadDeals = async () => {
     setLoading(true);
     const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&is_published=eq.true&order=sort_order.asc.nullsfirst,created_at.desc`, { headers: supabase.headers(token) });
@@ -901,21 +899,65 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
     setLoading(false);
   };
 
+  const loadInteractions = async () => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?user_id=eq.${userId}&select=*`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      const map = {};
+      data.forEach(d => { map[d.deal_id] = d; });
+      setInteractions(map);
+    }
+  };
+
+  const toggleShortlist = async (deal) => {
+    const existing = interactions[deal.id];
+    if (existing) {
+      if (existing.status === 'bought') return; // don't remove from shortlist if bought
+      await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${existing.id}`, { method: 'DELETE', headers: supabase.headers(token) });
+      const newInt = { ...interactions }; delete newInt[deal.id]; setInteractions(newInt);
+    } else {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions`, {
+        method: 'POST', headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ user_id: userId, deal_id: deal.id, status: 'shortlisted', deal_date: deal.deal_date, product_name: deal.product_name, asin: deal.asin, cost_price: deal.cost_price, sale_price: deal.sale_price, profit: deal.profit, roi: deal.roi, source_url: deal.source_url, amazon_url: deal.amazon_url })
+      });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) setInteractions({ ...interactions, [deal.id]: data[0] });
+    }
+  };
+
+  const markBought = async (deal) => {
+    const existing = interactions[deal.id];
+    if (existing && existing.status === 'bought') {
+      // Un-buy: revert to shortlisted
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${existing.id}`, {
+        method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'shortlisted' })
+      });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) setInteractions({ ...interactions, [deal.id]: data[0] });
+      return;
+    }
+    if (existing) {
+      // Upgrade shortlisted to bought
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${existing.id}`, {
+        method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'bought' })
+      });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) setInteractions({ ...interactions, [deal.id]: data[0] });
+    } else {
+      // Create as bought directly
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions`, {
+        method: 'POST', headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ user_id: userId, deal_id: deal.id, status: 'bought', deal_date: deal.deal_date, product_name: deal.product_name, asin: deal.asin, cost_price: deal.cost_price, sale_price: deal.sale_price, profit: deal.profit, roi: deal.roi, source_url: deal.source_url, amazon_url: deal.amazon_url })
+      });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) setInteractions({ ...interactions, [deal.id]: data[0] });
+    }
+  };
+
   const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
   const formatPercent = (val) => { const n = parseFloat(val || 0); const display = n > 0 && n < 3 ? n * 100 : n; return `${display.toFixed(0)}%`; };
-
-  const saveInvoiceDetails = async () => {
-    setSavingInvoice(true);
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${dbProfile.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-      body: JSON.stringify(invoiceDetails)
-    });
-    showToast("Invoice details saved!");
-    if (onRefresh) onRefresh();
-    setSavingInvoice(false);
-    setShowInvoiceForm(false);
-  };
 
   // Navigate dates - but not before start date
   const changeDate = (days) => {
@@ -1018,13 +1060,17 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
           <div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{deals.length} deal{deals.length !== 1 ? 's' : ''} found</div>
             {deals.map(deal => (
-              <div key={deal.id} className="deal-row" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+              <div key={deal.id} className="deal-row" style={{ padding: 0, overflow: 'hidden', marginBottom: 16, borderColor: interactions[deal.id]?.status === 'bought' ? 'rgba(0,230,118,0.3)' : interactions[deal.id] ? 'rgba(255,171,0,0.3)' : undefined }}>
                 {/* Header */}
                 <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.4, marginBottom: 6 }}>{deal.product_name}</div>
-                      <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{deal.asin}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <button onClick={() => toggleShortlist(deal)} title={interactions[deal.id] ? "Remove from shortlist" : "Add to shortlist"} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, padding: 0, lineHeight: 1, opacity: interactions[deal.id] ? 1 : 0.3, transition: 'all 0.2s' }}>{interactions[deal.id] ? '⭐' : '☆'}</button>
+                        <button onClick={() => markBought(deal)} title={interactions[deal.id]?.status === 'bought' ? "Remove from bought" : "Mark as bought"} style={{ background: interactions[deal.id]?.status === 'bought' ? 'rgba(0,230,118,0.15)' : 'none', border: interactions[deal.id]?.status === 'bought' ? '1px solid rgba(0,230,118,0.3)' : '1px solid transparent', borderRadius: 6, cursor: 'pointer', fontSize: 18, padding: '2px 6px', lineHeight: 1, opacity: interactions[deal.id]?.status === 'bought' ? 1 : 0.3, transition: 'all 0.2s' }}>🛒</button>
+                        <div style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.4 }}>{deal.product_name}</div>
+                      </div>
+                      <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 70 }}>{deal.asin}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>
                       {deal.asin && <a href={`https://sas.selleramp.com/sas/lookup?SasLookup%5Bsearch_term%5D=${deal.asin}&SasLookup%5Bcost%5D=${deal.cost_price || ''}&SasLookup%5Bsale_price%5D=${deal.sale_price || ''}`} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,150,255,0.1)', color: '#0096ff', border: '1px solid rgba(0,150,255,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>SAS</a>}
@@ -1054,6 +1100,250 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
                     {deal.notes && <div style={{ padding: '10px 14px', background: 'rgba(0,230,118,0.04)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '3px solid rgba(0,230,118,0.4)', lineHeight: 1.5 }}>{deal.notes}</div>}
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Client Shortlist Page
+function DealsShortlistPage({ token, userId, showToast }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteText, setNoteText] = useState('');
+
+  useEffect(() => { loadItems(); }, []);
+
+  const loadItems = async () => {
+    setLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?user_id=eq.${userId}&status=in.(shortlisted,bought)&order=created_at.desc`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) setItems(data.filter(d => d.status === 'shortlisted'));
+    setLoading(false);
+  };
+
+  const removeItem = async (id) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${id}`, { method: 'DELETE', headers: supabase.headers(token) });
+    setItems(items.filter(i => i.id !== id));
+    showToast('Removed from shortlist');
+  };
+
+  const moveToBought = async (item) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${item.id}`, {
+      method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'bought' })
+    });
+    setItems(items.filter(i => i.id !== item.id));
+    showToast('Moved to Bought!');
+  };
+
+  const saveNote = async (item) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${item.id}`, {
+      method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_notes: noteText })
+    });
+    setItems(items.map(i => i.id === item.id ? { ...i, client_notes: noteText } : i));
+    setEditingNote(null);
+    showToast('Note saved');
+  };
+
+  const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
+
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#ffab00' }}>⭐ Shortlist</div>
+          <div className="page-subtitle">Deals you're interested in</div>
+        </div>
+        <div className="deals-badge" style={{ background: 'rgba(255,171,0,0.15)', color: 'var(--amber)', borderColor: 'rgba(255,171,0,0.3)' }}>{items.length} deal{items.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div className="page-body">
+        {loading ? <div className="card empty-state"><div className="spinner" style={{ borderTopColor: '#ffab00' }} /></div> :
+        items.length === 0 ? (
+          <div className="card empty-state"><div style={{ fontSize: 48, marginBottom: 16 }}>⭐</div><p>No shortlisted deals yet.</p><p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Star deals from the daily sheet to add them here.</p></div>
+        ) : (
+          <div>
+            {items.map(item => (
+              <div key={item.id} className="deal-row" style={{ padding: 0, overflow: 'hidden', marginBottom: 12, borderColor: 'rgba(255,171,0,0.2)' }}>
+                <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{item.product_name}</div>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      <span className="mono">{item.asin}</span>
+                      <span>{new Date(item.deal_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+                      <span>Cost: <strong className="mono">{formatCurrency(item.cost_price)}</strong></span>
+                      <span>Sale: <strong className="mono">{formatCurrency(item.sale_price)}</strong></span>
+                      <span style={{ color: '#00e676' }}>Profit: <strong className="mono">{formatCurrency(item.profit)}</strong></span>
+                      <span style={{ color: 'var(--cyan)' }}>ROI: <strong className="mono">{(() => { const n = parseFloat(item.roi || 0); return n > 0 && n < 3 ? (n*100).toFixed(0) : n.toFixed(0); })()}%</strong></span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 12 }}>
+                    {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>Source</a>}
+                    {item.amazon_url && <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>Amazon</a>}
+                    <button onClick={() => moveToBought(item)} style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontFamily: 'Outfit' }}>🛒 Bought</button>
+                    <button className="btn-icon btn-danger" onClick={() => removeItem(item.id)} style={{ width: 28, height: 28 }}><Icons.X /></button>
+                  </div>
+                </div>
+                {/* Notes section */}
+                <div style={{ padding: '0 20px 14px' }}>
+                  {editingNote === item.id ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input className="input" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add your notes..." style={{ fontSize: 13 }} onKeyDown={e => e.key === 'Enter' && saveNote(item)} />
+                      <button className="btn btn-primary deals" style={{ padding: '8px 14px', fontSize: 12 }} onClick={() => saveNote(item)}>Save</button>
+                      <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: 12 }} onClick={() => setEditingNote(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div onClick={() => { setEditingNote(item.id); setNoteText(item.client_notes || ''); }} style={{ cursor: 'pointer', padding: '8px 12px', background: item.client_notes ? 'rgba(255,171,0,0.05)' : 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: item.client_notes ? 'var(--text-secondary)' : 'var(--text-muted)', minHeight: 36, display: 'flex', alignItems: 'center' }}>
+                      {item.client_notes || '📝 Click to add notes...'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Client Bought Page
+function DealsBoughtPage({ token, userId, showToast }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteText, setNoteText] = useState('');
+  const [editingQty, setEditingQty] = useState(null);
+  const [qtyText, setQtyText] = useState('');
+
+  useEffect(() => { loadItems(); }, []);
+
+  const loadItems = async () => {
+    setLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?user_id=eq.${userId}&status=eq.bought&order=created_at.desc`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) setItems(data);
+    setLoading(false);
+  };
+
+  const removeItem = async (id) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${id}`, {
+      method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'shortlisted' })
+    });
+    setItems(items.filter(i => i.id !== id));
+    showToast('Moved back to shortlist');
+  };
+
+  const saveNote = async (item) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${item.id}`, {
+      method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_notes: noteText })
+    });
+    setItems(items.map(i => i.id === item.id ? { ...i, client_notes: noteText } : i));
+    setEditingNote(null);
+    showToast('Note saved');
+  };
+
+  const saveQty = async (item) => {
+    const qty = parseInt(qtyText) || 1;
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?id=eq.${item.id}`, {
+      method: 'PATCH', headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity: qty })
+    });
+    setItems(items.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+    setEditingQty(null);
+    showToast('Quantity updated');
+  };
+
+  const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
+  const fmtRoi = (val) => { const n = parseFloat(val || 0); return n > 0 && n < 3 ? (n*100).toFixed(0) : n.toFixed(0); };
+
+  // Totals
+  const totalCost = items.reduce((sum, i) => sum + (parseFloat(i.cost_price) || 0) * (i.quantity || 1), 0);
+  const totalSale = items.reduce((sum, i) => sum + (parseFloat(i.sale_price) || 0) * (i.quantity || 1), 0);
+  const totalProfit = items.reduce((sum, i) => sum + (parseFloat(i.profit) || 0) * (i.quantity || 1), 0);
+  const avgRoi = totalCost > 0 ? ((totalProfit / totalCost) * 100) : 0;
+  const totalUnits = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
+
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#00e676' }}>🛒 Bought</div>
+          <div className="page-subtitle">Deals you've purchased</div>
+        </div>
+        <div className="deals-badge">{items.length} deal{items.length !== 1 ? 's' : ''} · {totalUnits} units</div>
+      </div>
+      <div className="page-body">
+        {/* Summary Stats */}
+        {items.length > 0 && (
+          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
+            <div className="card stat-card deals-stat"><div className="card-title">Total COGS</div><div className="stat-value" style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalCost)}</div><div className="stat-label">{totalUnits} units</div></div>
+            <div className="card stat-card deals-stat"><div className="card-title">Expected Revenue</div><div className="stat-value" style={{ color: 'var(--cyan)' }}>{formatCurrency(totalSale)}</div></div>
+            <div className="card stat-card deals-stat"><div className="card-title">Expected Profit</div><div className="stat-value" style={{ color: '#00e676' }}>{formatCurrency(totalProfit)}</div></div>
+            <div className="card stat-card deals-stat"><div className="card-title">Avg ROI</div><div className="stat-value" style={{ color: 'var(--cyan)' }}>{avgRoi.toFixed(0)}%</div></div>
+          </div>
+        )}
+
+        {loading ? <div className="card empty-state"><div className="spinner" style={{ borderTopColor: '#00e676' }} /></div> :
+        items.length === 0 ? (
+          <div className="card empty-state"><div style={{ fontSize: 48, marginBottom: 16 }}>🛒</div><p>No bought deals yet.</p><p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Mark deals as bought from the daily sheet or your shortlist.</p></div>
+        ) : (
+          <div>
+            {items.map(item => (
+              <div key={item.id} className="deal-row" style={{ padding: 0, overflow: 'hidden', marginBottom: 12, borderColor: 'rgba(0,230,118,0.2)' }}>
+                <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{item.product_name}</div>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      <span className="mono">{item.asin}</span>
+                      <span>{new Date(item.deal_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span>Cost: <strong className="mono">{formatCurrency(item.cost_price)}</strong></span>
+                      <span>Sale: <strong className="mono">{formatCurrency(item.sale_price)}</strong></span>
+                      <span style={{ color: '#00e676' }}>Profit: <strong className="mono">{formatCurrency(item.profit)}</strong></span>
+                      <span style={{ color: 'var(--cyan)' }}>ROI: <strong className="mono">{fmtRoi(item.roi)}%</strong></span>
+                      <span>×</span>
+                      {editingQty === item.id ? (
+                        <span style={{ display: 'inline-flex', gap: 4 }}>
+                          <input className="inline-input" style={{ width: 60, textAlign: 'center' }} value={qtyText} onChange={e => setQtyText(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveQty(item)} autoFocus />
+                          <button onClick={() => saveQty(item)} style={{ background: '#00e676', color: '#000', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>✓</button>
+                        </span>
+                      ) : (
+                        <span onClick={() => { setEditingQty(item.id); setQtyText(String(item.quantity || 1)); }} style={{ cursor: 'pointer', background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', borderRadius: 6, padding: '2px 10px', fontWeight: 700, color: '#00e676', fontFamily: 'JetBrains Mono' }}>{item.quantity || 1} qty</span>
+                      )}
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>= <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency((parseFloat(item.cost_price) || 0) * (item.quantity || 1))}</strong> total cost</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 12 }}>
+                    {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>Source</a>}
+                    {item.amazon_url && <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>Amazon</a>}
+                    <button onClick={() => removeItem(item.id)} style={{ background: 'rgba(255,171,0,0.1)', color: 'var(--amber)', border: '1px solid rgba(255,171,0,0.3)', padding: '6px 10px', fontSize: 11, borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontFamily: 'Outfit' }}>↩ Undo</button>
+                  </div>
+                </div>
+                {/* Notes section */}
+                <div style={{ padding: '0 20px 14px' }}>
+                  {editingNote === item.id ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input className="input" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add your notes..." style={{ fontSize: 13 }} onKeyDown={e => e.key === 'Enter' && saveNote(item)} />
+                      <button className="btn btn-primary deals" style={{ padding: '8px 14px', fontSize: 12 }} onClick={() => saveNote(item)}>Save</button>
+                      <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: 12 }} onClick={() => setEditingNote(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div onClick={() => { setEditingNote(item.id); setNoteText(item.client_notes || ''); }} style={{ cursor: 'pointer', padding: '8px 12px', background: item.client_notes ? 'rgba(0,230,118,0.05)' : 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: item.client_notes ? 'var(--text-secondary)' : 'var(--text-muted)', minHeight: 36, display: 'flex', alignItems: 'center' }}>
+                      {item.client_notes || '📝 Click to add notes...'}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1854,6 +2144,8 @@ function ClientPortal() {
   ];
   const dealsNav = [
     { id: "deals", label: "Deals", icon: Icons.List },
+    { id: "shortlist", label: "Shortlist", icon: Icons.Zap },
+    { id: "bought", label: "Bought", icon: Icons.Package },
     { id: "invoice-details", label: "Invoice Details", icon: Icons.Receipt }
   ];
   const sharedNav = [{ id: "profile", label: "Profile", icon: Icons.User }];
@@ -1864,7 +2156,9 @@ function ClientPortal() {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
       if (page === "invoice-details") return <DealsInvoiceDetailsPage token={token} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
-      return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
+      if (page === "shortlist") return <DealsShortlistPage token={token} userId={user.id} showToast={showToast} />;
+      if (page === "bought") return <DealsBoughtPage token={token} userId={user.id} showToast={showToast} />;
+      return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} userId={user.id} />;
     }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
@@ -2389,6 +2683,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
             )}
           </div>
 
+          <AdminClientDeals client={client} token={token} />
+
           <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div className="card-title" style={{ margin: 0 }}>Generate Invoice</div>
@@ -2479,6 +2775,76 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
 }
 
 // Admin - Client Prep Tab (Inbound + Shipments)
+function AdminClientDeals({ client, token }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('shortlisted');
+
+  useEffect(() => {
+    loadItems();
+  }, [client.id]);
+
+  const loadItems = async () => {
+    setLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_interactions?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) setItems(data);
+    setLoading(false);
+  };
+
+  const filtered = items.filter(i => i.status === tab);
+  const boughtItems = items.filter(i => i.status === 'bought');
+  const totalCost = boughtItems.reduce((sum, i) => sum + (parseFloat(i.cost_price) || 0) * (i.quantity || 1), 0);
+  const totalProfit = boughtItems.reduce((sum, i) => sum + (parseFloat(i.profit) || 0) * (i.quantity || 1), 0);
+  const totalUnits = boughtItems.reduce((sum, i) => sum + (i.quantity || 1), 0);
+  const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
+  const fmtRoi = (val) => { const n = parseFloat(val || 0); return n > 0 && n < 3 ? (n*100).toFixed(0) : n.toFixed(0); };
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div className="card-title" style={{ margin: 0 }}>Client Deal Activity</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => setTab('shortlisted')} className={`btn ${tab === 'shortlisted' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', fontSize: 12 }}>⭐ Shortlist ({items.filter(i => i.status === 'shortlisted').length})</button>
+          <button onClick={() => setTab('bought')} className={`btn ${tab === 'bought' ? 'btn-primary deals' : 'btn-secondary'}`} style={{ padding: '6px 14px', fontSize: 12 }}>🛒 Bought ({boughtItems.length})</button>
+        </div>
+      </div>
+      {tab === 'bought' && boughtItems.length > 0 && (
+        <div style={{ display: 'flex', gap: 20, marginBottom: 16, padding: '10px 14px', background: 'var(--bg-primary)', borderRadius: 8, fontSize: 13 }}>
+          <span>COGS: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalCost)}</strong></span>
+          <span>Exp Profit: <strong style={{ color: '#00e676' }}>{formatCurrency(totalProfit)}</strong></span>
+          <span>Units: <strong>{totalUnits}</strong></span>
+          <span>ROI: <strong style={{ color: 'var(--cyan)' }}>{totalCost > 0 ? ((totalProfit / totalCost) * 100).toFixed(0) : 0}%</strong></span>
+        </div>
+      )}
+      {loading ? <div style={{ padding: 20, textAlign: 'center' }}><div className="spinner" style={{ borderTopColor: '#00e676', width: 24, height: 24, margin: '0 auto' }} /></div> :
+      filtered.length === 0 ? (
+        <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No {tab === 'shortlisted' ? 'shortlisted' : 'bought'} deals</div>
+      ) : (
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {filtered.map(item => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{item.product_name}</div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  <span className="mono">{item.asin}</span>
+                  <span>{formatCurrency(item.cost_price)} → {formatCurrency(item.sale_price)}</span>
+                  <span style={{ color: '#00e676' }}>{formatCurrency(item.profit)} ({fmtRoi(item.roi)}%)</span>
+                  {item.quantity > 1 && <span style={{ color: 'var(--amber)' }}>×{item.quantity}</span>}
+                </div>
+                {item.client_notes && <div style={{ fontSize: 12, color: 'var(--amber)', marginTop: 4 }}>📝 {item.client_notes}</div>}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
+                {new Date(item.deal_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
