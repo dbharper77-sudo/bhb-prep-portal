@@ -895,7 +895,7 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
 
   const loadDeals = async () => {
     setLoading(true);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&is_published=eq.true&order=created_at.desc`, { headers: supabase.headers(token) });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&is_published=eq.true&order=sort_order.asc.nullsfirst,created_at.desc`, { headers: supabase.headers(token) });
     const data = await res.json();
     if (Array.isArray(data)) setDeals(data);
     setLoading(false);
@@ -1151,10 +1151,26 @@ function AdminDealsPage({ token, showToast }) {
 
   const loadDeals = async () => {
     setLoading(true);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&order=created_at.desc`, { headers: supabase.headers(token) });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&order=sort_order.asc.nullsfirst,created_at.desc`, { headers: supabase.headers(token) });
     const data = await res.json();
     if (Array.isArray(data)) setDeals(data);
     setLoading(false);
+  };
+
+  const moveDeal = async (index, direction) => {
+    const newDeals = [...deals];
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= newDeals.length) return;
+    [newDeals[index], newDeals[swapIndex]] = [newDeals[swapIndex], newDeals[index]];
+    setDeals(newDeals);
+    // Save new sort orders
+    await Promise.all(newDeals.map((deal, i) => 
+      fetch(`${SUPABASE_URL}/rest/v1/deals?id=eq.${deal.id}`, {
+        method: 'PATCH',
+        headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_order: i })
+      })
+    ));
   };
 
   const resetForm = () => {
@@ -1317,6 +1333,7 @@ function AdminDealsPage({ token, showToast }) {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 30 }}>#</th>
                   <th>Product</th>
                   <th>ASIN</th>
                   <th>Cost</th>
@@ -1330,8 +1347,14 @@ function AdminDealsPage({ token, showToast }) {
                 </tr>
               </thead>
               <tbody>
-                {deals.map(deal => (
+                {deals.map((deal, index) => (
                   <tr key={deal.id}>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <button onClick={() => moveDeal(index, -1)} disabled={index === 0} style={{ background: 'none', border: 'none', color: index === 0 ? 'var(--border)' : 'var(--text-secondary)', cursor: index === 0 ? 'default' : 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>▲</button>
+                        <button onClick={() => moveDeal(index, 1)} disabled={index === deals.length - 1} style={{ background: 'none', border: 'none', color: index === deals.length - 1 ? 'var(--border)' : 'var(--text-secondary)', cursor: index === deals.length - 1 ? 'default' : 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>▼</button>
+                      </div>
+                    </td>
                     <td style={{ fontWeight: 600, maxWidth: 200 }}>{deal.product_name}</td>
                     <td className="mono" style={{ fontSize: 12 }}>{deal.asin}</td>
                     <td className="mono">{formatCurrency(deal.cost_price)}</td>
