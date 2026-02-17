@@ -2534,48 +2534,18 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       </div>
     </div>
     <div className="page-body">
-      <div className="service-tabs" style={{ maxWidth: 450, marginBottom: 24, padding: 6 }}>
+      <div className="service-tabs" style={{ maxWidth: 600, marginBottom: 24, padding: 6 }}>
         <div className={`service-tab ${tab === "prep" ? "active prep" : ""}`} onClick={() => setTab("prep")}>📦 Prep</div>
         <div className={`service-tab ${tab === "liquidation" ? "active liquidation" : ""}`} onClick={() => setTab("liquidation")}>💰 Liquidation</div>
+        <div className={`service-tab deals ${tab === "deals" ? "active deals" : ""}`} onClick={() => setTab("deals")}>📋 Deals</div>
         <div className={`service-tab ${tab === "settings" ? "active admin" : ""}`} onClick={() => setTab("settings")}>⚙️ Settings</div>
       </div>
       {tab === "prep" ? 
         <AdminClientPrep client={client} parcels={parcels} shipments={shipments} token={token} showToast={showToast} onRefresh={onRefresh} /> :
        tab === "liquidation" ?
         <AdminClientLiquidation client={client} liquidation={liquidation} token={token} showToast={showToast} onRefresh={onRefresh} /> :
+       tab === "deals" ? (
         <>
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">Custom Pricing <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>+ VAT</span></div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Standard Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
-                <input className="input" type="number" step="0.01" value={pricing.prep_standard} onChange={e => setPricing({ ...pricing, prep_standard: e.target.value })} />
-              </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Bundle Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
-                <input className="input" type="number" step="0.01" value={pricing.prep_bundle} onChange={e => setPricing({ ...pricing, prep_bundle: e.target.value })} />
-              </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Oversize Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
-                <input className="input" type="number" step="0.01" value={pricing.prep_oversize} onChange={e => setPricing({ ...pricing, prep_oversize: e.target.value })} />
-              </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Liquidation (%)</label>
-                <input className="input" type="number" step="1" value={pricing.liq_commission} onChange={e => setPricing({ ...pricing, liq_commission: e.target.value })} />
-              </div>
-            </div>
-            <button className="btn btn-primary admin" onClick={savePricing} disabled={savingPricing}>{savingPricing ? "Saving..." : "Save Pricing"}</button>
-          </div>
-
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">Discord Webhook</div>
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
-            </div>
-            <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
-          </div>
-
           <div className="card" style={{ marginBottom: 24, borderColor: dealsAccess ? 'rgba(0,230,118,0.3)' : 'rgba(255,82,82,0.2)', background: dealsAccess ? 'rgba(0,230,118,0.03)' : 'rgba(255,82,82,0.03)' }}>
             <div className="card-title" style={{ color: dealsAccess ? '#00e676' : 'var(--red)' }}>BHB Deals Access — {dealsAccess ? '🟢 ACTIVE' : '🔴 INACTIVE'}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -2621,44 +2591,24 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
                     <label className="input-label">Access Start Date</label>
-                    <input 
-                      type="date" 
-                      className="input" 
-                      style={{ colorScheme: 'dark' }}
-                      value={dealsStartDate}
+                    <input type="date" className="input" style={{ colorScheme: 'dark' }} value={dealsStartDate}
                       onChange={async (e) => {
                         const newDate = e.target.value;
                         setDealsStartDate(newDate);
-                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
-                          method: "PATCH", 
-                          headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-                          body: JSON.stringify({ deals_start_date: newDate }) 
-                        });
-                        showToast("Start date updated!");
-                        onRefresh();
-                      }}
-                    />
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ deals_start_date: newDate }) });
+                        showToast("Start date updated!"); onRefresh();
+                      }} />
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Can only see deals from this date</div>
                   </div>
                   <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
                     <label className="input-label">Last Payment Date</label>
-                    <input 
-                      type="date" 
-                      className="input" 
-                      style={{ colorScheme: 'dark' }}
-                      value={dealsLastPayment}
+                    <input type="date" className="input" style={{ colorScheme: 'dark' }} value={dealsLastPayment}
                       onChange={async (e) => {
                         const newDate = e.target.value;
                         setDealsLastPayment(newDate);
-                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
-                          method: "PATCH", 
-                          headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-                          body: JSON.stringify({ deals_last_payment: newDate }) 
-                        });
-                        showToast("Payment date updated!");
-                        onRefresh();
-                      }}
-                    />
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ deals_last_payment: newDate }) });
+                        showToast("Payment date updated!"); onRefresh();
+                      }} />
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Auto-deactivates after 1 month</div>
                   </div>
                 </div>
@@ -2668,7 +2618,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                     <span style={{ fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>Payment overdue — subscription will auto-deactivate</span>
                   </div>
                 )}
-                {/* Client invoice details (read-only for admin) */}
                 {(client.deals_invoice_name || client.deals_invoice_email) && (
                   <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-primary)', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Client Invoice Details</div>
@@ -2682,8 +2631,41 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
               </div>
             )}
           </div>
-
           <AdminClientDeals client={client} token={token} />
+        </>
+      ) :
+        <>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Custom Pricing <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>+ VAT</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Standard Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_standard} onChange={e => setPricing({ ...pricing, prep_standard: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Bundle Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_bundle} onChange={e => setPricing({ ...pricing, prep_bundle: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Oversize Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
+                <input className="input" type="number" step="0.01" value={pricing.prep_oversize} onChange={e => setPricing({ ...pricing, prep_oversize: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Liquidation (%)</label>
+                <input className="input" type="number" step="1" value={pricing.liq_commission} onChange={e => setPricing({ ...pricing, liq_commission: e.target.value })} />
+              </div>
+            </div>
+            <button className="btn btn-primary admin" onClick={savePricing} disabled={savingPricing}>{savingPricing ? "Saving..." : "Save Pricing"}</button>
+          </div>
+
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Discord Webhook</div>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
+            </div>
+            <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
+          </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
