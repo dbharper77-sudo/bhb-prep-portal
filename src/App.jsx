@@ -164,7 +164,7 @@ const css = `
 .deal-metric{text-align:center;padding:8px 12px}.deal-metric-value{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}.deal-metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
 .deal-metric.profit .deal-metric-value{color:var(--deals-green)}.deal-metric.roi .deal-metric-value{color:var(--cyan)}
 .date-picker{display:flex;align-items:center;gap:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:8px 16px}.date-picker input{background:none;border:none;color:var(--text-primary);font-size:16px;font-family:'Outfit',sans-serif;outline:none}
-.service-tab.deals{border-color:rgba(0,230,118,0.3)}.service-tab.active.deals{background:linear-gradient(135deg,var(--deals-green),var(--deals-green-dim));color:#000}
+.service-tab.deals{}.service-tab.active.deals{background:linear-gradient(135deg,var(--deals-green),var(--deals-green-dim));color:#000}
 `;
 
 // Helpers
@@ -800,13 +800,6 @@ function BHBDealsPage({ token }) {
             <span style={{ fontSize: 18, fontWeight: 700 }}>{formatDisplayDate(selectedDate)}</span>
           </div>
           <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next Day →</button>
-        </div>
-
-        {/* Stats */}
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 24 }}>
-          <div className="card stat-card deals-stat"><div className="card-title">Today's Deals</div><div className="stat-value" style={{ color: '#00e676' }}>{deals.length}</div></div>
-          <div className="card stat-card deals-stat"><div className="card-title">Avg ROI</div><div className="stat-value" style={{ color: 'var(--cyan)' }}>{deals.length ? formatPercent(deals.reduce((sum, d) => sum + (parseFloat(d.roi) || 0), 0) / deals.length) : '0%'}</div></div>
-          <div className="card stat-card deals-stat"><div className="card-title">Total Profit Potential</div><div className="stat-value" style={{ color: '#00e676' }}>{formatCurrency(deals.reduce((sum, d) => sum + (parseFloat(d.profit) || 0), 0))}</div></div>
         </div>
 
         {/* Deals List */}
