@@ -900,29 +900,43 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
           </div>
         ) : (
           <div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{deals.length} deal{deals.length !== 1 ? 's' : ''} found</div>
             {deals.map(deal => (
-              <div key={deal.id} className="deal-row">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{deal.product_name}</div>
-                    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-                      <span className="mono">ASIN: {deal.asin}</span>
-                      {deal.spm && <span>SPM: {deal.spm}</span>}
+              <div key={deal.id} className="deal-row" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+                {/* Header */}
+                <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.4, marginBottom: 6 }}>{deal.product_name}</div>
+                      <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{deal.asin}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>
+                      {deal.source_url && <a href={deal.source_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>Source</a>}
+                      {deal.amazon_url && <a href={deal.amazon_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>Amazon</a>}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {deal.source_url && <a href={deal.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '6px 12px', fontSize: 12 }}>Source</a>}
-                    {deal.amazon_url && <a href={deal.amazon_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '6px 12px', fontSize: 12 }}>Amazon</a>}
-                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, background: 'var(--bg-primary)', borderRadius: 10, padding: 12 }}>
+                
+                {/* Metrics */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', background: 'var(--bg-primary)', padding: '14px 8px' }}>
                   <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.cost_price)}</div><div className="deal-metric-label">Cost</div></div>
                   <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.sale_price)}</div><div className="deal-metric-label">Sale</div></div>
                   <div className="deal-metric profit"><div className="deal-metric-value">{formatCurrency(deal.profit)}</div><div className="deal-metric-label">Profit</div></div>
                   <div className="deal-metric roi"><div className="deal-metric-value">{formatPercent(deal.roi)}</div><div className="deal-metric-label">ROI</div></div>
-                  <div className="deal-metric"><div className="deal-metric-value">{deal.spm || '—'}</div><div className="deal-metric-label">SPM</div></div>
                 </div>
-                {deal.notes && <div style={{ marginTop: 12, padding: 12, background: 'rgba(0,230,118,0.05)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '3px solid #00e676' }}>{deal.notes}</div>}
+
+                {/* Code + SPM + Notes footer */}
+                {(deal.code || deal.spm || deal.notes) && (
+                  <div style={{ padding: '12px 20px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(deal.code || deal.spm) && (
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {deal.code && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(179,136,255,0.1)', border: '1px solid rgba(179,136,255,0.25)', borderRadius: 8, padding: '6px 12px' }}><span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Code</span><span className="mono" style={{ fontSize: 13, color: 'var(--purple)', fontWeight: 700 }}>{deal.code}</span></div>}
+                        {deal.spm && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 8, padding: '6px 12px' }}><span style={{ fontSize: 11, color: 'var(--cyan)', fontWeight: 600 }}>SPM</span><span className="mono" style={{ fontSize: 13, color: 'var(--cyan)', fontWeight: 600 }}>{deal.spm}</span></div>}
+                      </div>
+                    )}
+                    {deal.notes && <div style={{ padding: '10px 14px', background: 'rgba(0,230,118,0.04)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '3px solid rgba(0,230,118,0.4)', lineHeight: 1.5 }}>{deal.notes}</div>}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -941,7 +955,7 @@ function AdminDealsPage({ token, showToast }) {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
-    product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', source_url: '', amazon_url: '', notes: ''
+    product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', code: '', source_url: '', amazon_url: '', notes: ''
   });
 
   useEffect(() => { loadDeals(); }, [selectedDate]);
@@ -955,7 +969,7 @@ function AdminDealsPage({ token, showToast }) {
   };
 
   const resetForm = () => {
-    setForm({ product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', source_url: '', amazon_url: '', notes: '' });
+    setForm({ product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', code: '', source_url: '', amazon_url: '', notes: '' });
     setEditingId(null);
   };
 
@@ -1016,6 +1030,7 @@ function AdminDealsPage({ token, showToast }) {
       profit: deal.profit || '',
       roi: deal.roi || '',
       spm: deal.spm || '',
+      code: deal.code || '',
       source_url: deal.source_url || '',
       amazon_url: deal.amazon_url || '',
       notes: deal.notes || ''
@@ -1086,7 +1101,8 @@ function AdminDealsPage({ token, showToast }) {
               <div className="input-group"><label className="input-label">ROI (%)</label><input type="number" step="0.1" className="input" value={form.roi} readOnly style={{ background: 'var(--bg-secondary)' }} /></div>
               <div className="input-group"><label className="input-label">SPM</label><input className="input" value={form.spm} onChange={e => setForm({ ...form, spm: e.target.value })} placeholder="> 50" /></div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              <div className="input-group"><label className="input-label">Discount Code</label><input className="input" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="e.g. SAVE20" /></div>
               <div className="input-group"><label className="input-label">Source URL</label><input className="input" value={form.source_url} onChange={e => setForm({ ...form, source_url: e.target.value })} placeholder="https://..." /></div>
               <div className="input-group"><label className="input-label">Amazon URL</label><input className="input" value={form.amazon_url} onChange={e => setForm({ ...form, amazon_url: e.target.value })} placeholder="https://amazon.co.uk/..." /></div>
             </div>
@@ -1119,6 +1135,7 @@ function AdminDealsPage({ token, showToast }) {
                   <th>Profit</th>
                   <th>ROI</th>
                   <th>SPM</th>
+                  <th>Code</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -1133,6 +1150,7 @@ function AdminDealsPage({ token, showToast }) {
                     <td className="mono" style={{ color: '#00e676', fontWeight: 600 }}>{formatCurrency(deal.profit)}</td>
                     <td className="mono" style={{ color: 'var(--cyan)' }}>{deal.roi}%</td>
                     <td>{deal.spm || '—'}</td>
+                    <td className="mono" style={{ color: 'var(--purple)' }}>{deal.code || '—'}</td>
                     <td>{deal.is_published ? <span className="deals-badge">Published</span> : <span className="badge badge-pending">Draft</span>}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
