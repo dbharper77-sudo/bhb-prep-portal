@@ -838,7 +838,7 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
   };
 
   const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
-  const formatPercent = (val) => `${parseFloat(val || 0).toFixed(1)}%`;
+  const formatPercent = (val) => { const n = parseFloat(val || 0); const display = n > 0 && n < 3 ? n * 100 : n; return `${display.toFixed(0)}%`; };
 
   // Navigate dates - but not before start date
   const changeDate = (days) => {
@@ -918,20 +918,20 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
                 </div>
                 
                 {/* Metrics */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', background: 'var(--bg-primary)', padding: '14px 8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', background: 'var(--bg-primary)', padding: '14px 8px' }}>
                   <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.cost_price)}</div><div className="deal-metric-label">Cost</div></div>
                   <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.sale_price)}</div><div className="deal-metric-label">Sale</div></div>
                   <div className="deal-metric profit"><div className="deal-metric-value">{formatCurrency(deal.profit)}</div><div className="deal-metric-label">Profit</div></div>
                   <div className="deal-metric roi"><div className="deal-metric-value">{formatPercent(deal.roi)}</div><div className="deal-metric-label">ROI</div></div>
+                  <div className="deal-metric"><div className="deal-metric-value" style={{ color: 'var(--amber)' }}>{deal.spm || '—'}</div><div className="deal-metric-label">SPM</div></div>
                 </div>
 
-                {/* Code + SPM + Notes footer */}
-                {(deal.code || deal.spm || deal.notes) && (
+                {/* Code + Notes footer */}
+                {(deal.code || deal.notes) && (
                   <div style={{ padding: '12px 20px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(deal.code || deal.spm) && (
+                    {deal.code && (
                       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        {deal.code && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(179,136,255,0.1)', border: '1px solid rgba(179,136,255,0.25)', borderRadius: 8, padding: '6px 12px' }}><span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Code</span><span className="mono" style={{ fontSize: 13, color: 'var(--purple)', fontWeight: 700 }}>{deal.code}</span></div>}
-                        {deal.spm && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 8, padding: '6px 12px' }}><span style={{ fontSize: 11, color: 'var(--cyan)', fontWeight: 600 }}>SPM</span><span className="mono" style={{ fontSize: 13, color: 'var(--cyan)', fontWeight: 600 }}>{deal.spm}</span></div>}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(179,136,255,0.1)', border: '1px solid rgba(179,136,255,0.25)', borderRadius: 8, padding: '6px 12px' }}><span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Code</span><span className="mono" style={{ fontSize: 13, color: 'var(--purple)', fontWeight: 700 }}>{deal.code}</span></div>
                       </div>
                     )}
                     {deal.notes && <div style={{ padding: '10px 14px', background: 'rgba(0,230,118,0.04)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '3px solid rgba(0,230,118,0.4)', lineHeight: 1.5 }}>{deal.notes}</div>}
