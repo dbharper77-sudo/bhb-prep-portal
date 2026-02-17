@@ -751,10 +751,76 @@ function LiquidationBillingPage({ liquidationStock }) {
 }
 
 // ============ BHB DEALS ============
-function BHBDealsPage({ token }) {
+function DealsSubscribePage() {
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#00e676' }}>📋 BHB Deals</div>
+          <div className="page-subtitle">Daily Amazon FBA Deal Sheet</div>
+        </div>
+      </div>
+      <div className="page-body">
+        <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ fontSize: 80, marginBottom: 24 }}>🔒</div>
+          <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16 }}>Subscribe to BHB Deals</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 18, marginBottom: 40, lineHeight: 1.6 }}>
+            Get access to our exclusive daily deal sheet with hand-picked Amazon FBA arbitrage opportunities.
+          </p>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 40 }}>
+            <div className="deals-card" style={{ padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📈</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>High ROI Deals</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>30-100%+ ROI opportunities</div>
+            </div>
+            <div className="deals-card" style={{ padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Daily Updates</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Fresh deals every day</div>
+            </div>
+            <div className="deals-card" style={{ padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>👑</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Expert Vetted</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>By a 7-figure Amazon seller</div>
+            </div>
+            <div className="deals-card" style={{ padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🔒</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Limited Members</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Capped at 15 members</div>
+            </div>
+          </div>
+          
+          <div style={{ background: 'rgba(0,230,118,0.1)', border: '2px solid rgba(0,230,118,0.3)', borderRadius: 16, padding: 24, marginBottom: 24 }}>
+            <div style={{ fontSize: 14, color: '#00e676', fontWeight: 600, marginBottom: 8 }}>EXAMPLE DEAL</div>
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>Jellycat Amuseable Avocado</div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 24 }}>
+              <div><span style={{ color: 'var(--text-muted)' }}>Cost:</span> <strong>£12.99</strong></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Sale:</span> <strong>£24.99</strong></div>
+              <div><span style={{ color: '#00e676' }}>Profit:</span> <strong style={{ color: '#00e676' }}>£8.50</strong></div>
+              <div><span style={{ color: 'var(--cyan)' }}>ROI:</span> <strong style={{ color: 'var(--cyan)' }}>65%</strong></div>
+            </div>
+          </div>
+          
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
+            DM <strong style={{ color: '#00e676' }}>@dbhfba</strong> on Instagram to subscribe
+          </p>
+          <a href="https://instagram.com/dbhfba" target="_blank" rel="noopener noreferrer" className="btn btn-primary deals" style={{ fontSize: 18, padding: '14px 32px' }}>
+            📱 Message on Instagram
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BHBDealsPage({ token, hasAccess }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // If no access, show subscribe page
+  if (!hasAccess) return <DealsSubscribePage />;
   
   useEffect(() => {
     loadDeals();
@@ -1530,7 +1596,7 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
-      return <BHBDealsPage token={token} />;
+      return <BHBDealsPage token={token} hasAccess={profile?.deals_access} />;
     }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
@@ -1919,6 +1985,35 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Notifications for: Shipped, Needs Attention, Liquidation Sold</div>
             </div>
             <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
+          </div>
+
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">BHB Deals Access</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>Deal Sheet Subscription</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Allow this client to view the daily deal sheet</div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input 
+                  type="checkbox" 
+                  checked={client.deals_access || false}
+                  onChange={async (e) => {
+                    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
+                      method: "PATCH", 
+                      headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+                      body: JSON.stringify({ deals_access: e.target.checked }) 
+                    });
+                    showToast(e.target.checked ? "Deals access granted!" : "Deals access revoked");
+                    onRefresh();
+                  }}
+                  style={{ width: 20, height: 20, accentColor: "#00e676" }}
+                />
+                <span style={{ fontWeight: 600, color: client.deals_access ? "#00e676" : "var(--text-muted)" }}>
+                  {client.deals_access ? "Active" : "No Access"}
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
