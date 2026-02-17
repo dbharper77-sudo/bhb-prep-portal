@@ -164,7 +164,7 @@ const css = `
 .deal-metric{text-align:center;padding:8px 12px}.deal-metric-value{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}.deal-metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
 .deal-metric.profit .deal-metric-value{color:var(--deals-green)}.deal-metric.roi .deal-metric-value{color:var(--cyan)}
 .date-picker{display:flex;align-items:center;gap:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:8px 16px}.date-picker input{background:none;border:none;color:var(--text-primary);font-size:16px;font-family:'Outfit',sans-serif;outline:none}
-.service-tab.deals{}.service-tab.active.deals{background:linear-gradient(135deg,var(--deals-green),var(--deals-green-dim));color:#000}
+.service-tab.deals{border:1px solid rgba(0,230,118,0.2);color:var(--deals-green)}.service-tab.active.deals{background:linear-gradient(135deg,var(--deals-green),var(--deals-green-dim));color:#000;border-color:var(--deals-green);font-weight:700}
 `;
 
 // Helpers
@@ -1066,8 +1066,8 @@ function BHBDealsPage({ token, hasAccess, startDate, dbProfile, onRefresh, showT
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                        <button onClick={() => toggleShortlist(deal)} title={interactions[deal.id] ? "Remove from shortlist" : "Add to shortlist"} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, padding: 0, lineHeight: 1, opacity: interactions[deal.id] ? 1 : 0.3, transition: 'all 0.2s' }}>{interactions[deal.id] ? '⭐' : '☆'}</button>
-                        <button onClick={() => markBought(deal)} title={interactions[deal.id]?.status === 'bought' ? "Remove from bought" : "Mark as bought"} style={{ background: interactions[deal.id]?.status === 'bought' ? 'rgba(0,230,118,0.15)' : 'none', border: interactions[deal.id]?.status === 'bought' ? '1px solid rgba(0,230,118,0.3)' : '1px solid transparent', borderRadius: 6, cursor: 'pointer', fontSize: 18, padding: '2px 6px', lineHeight: 1, opacity: interactions[deal.id]?.status === 'bought' ? 1 : 0.3, transition: 'all 0.2s' }}>🛒</button>
+                        <button onClick={() => toggleShortlist(deal)} title={interactions[deal.id] ? "Remove from shortlist" : "Add to shortlist"} style={{ background: interactions[deal.id] ? 'rgba(255,171,0,0.15)' : 'var(--bg-primary)', border: interactions[deal.id] ? '2px solid rgba(255,171,0,0.4)' : '2px solid var(--border)', borderRadius: 10, cursor: 'pointer', fontSize: 20, padding: '6px 10px', lineHeight: 1, transition: 'all 0.2s' }}>{interactions[deal.id] ? '⭐' : '☆'}</button>
+                        <button onClick={() => markBought(deal)} title={interactions[deal.id]?.status === 'bought' ? "Remove from bought" : "Mark as bought"} style={{ background: interactions[deal.id]?.status === 'bought' ? 'rgba(0,230,118,0.15)' : 'var(--bg-primary)', border: interactions[deal.id]?.status === 'bought' ? '2px solid rgba(0,230,118,0.4)' : '2px solid var(--border)', borderRadius: 10, cursor: 'pointer', fontSize: 20, padding: '6px 10px', lineHeight: 1, transition: 'all 0.2s' }}>🛒</button>
                         <div style={{ fontWeight: 700, fontSize: 17, lineHeight: 1.4 }}>{deal.product_name}</div>
                       </div>
                       <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 70 }}>{deal.asin}</span>
