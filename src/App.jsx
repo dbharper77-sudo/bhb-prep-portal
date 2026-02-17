@@ -102,6 +102,7 @@ const Icons = {
   AlertTriangle: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   Truck: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   Settings: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+  List: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
 };
 
 const css = `
@@ -153,6 +154,17 @@ const css = `
 .chart-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted)}
 .back-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:14px;cursor:pointer;font-family:'Outfit',sans-serif}.back-btn:hover{border-color:var(--cyan);color:var(--cyan)}
 .client-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer}.client-card:hover{border-color:var(--orange)}
+.deals-theme{--deals-green:#00e676;--deals-green-dim:#00c853;--deals-green-glow:rgba(0,230,118,0.15)}
+.deals-header{background:linear-gradient(135deg,rgba(0,230,118,0.1),transparent);border-bottom:1px solid rgba(0,230,118,0.2)}
+.deals-card{background:linear-gradient(135deg,rgba(0,230,118,0.05),var(--bg-card));border:1px solid rgba(0,230,118,0.2);border-radius:14px;padding:20px;transition:all 0.2s}.deals-card:hover{border-color:var(--deals-green);transform:translateY(-2px)}
+.deals-stat::before{background:linear-gradient(90deg,var(--deals-green),transparent)!important}
+.btn-primary.deals{background:var(--deals-green);color:#000}.btn-primary.deals:hover{background:var(--deals-green-dim)}
+.deals-badge{background:rgba(0,230,118,0.15);color:var(--deals-green);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.deal-row{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:all 0.2s}.deal-row:hover{border-color:rgba(0,230,118,0.4);background:rgba(0,230,118,0.02)}
+.deal-metric{text-align:center;padding:8px 12px}.deal-metric-value{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}.deal-metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
+.deal-metric.profit .deal-metric-value{color:var(--deals-green)}.deal-metric.roi .deal-metric-value{color:var(--cyan)}
+.date-picker{display:flex;align-items:center;gap:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:8px 16px}.date-picker input{background:none;border:none;color:var(--text-primary);font-size:16px;font-family:'Outfit',sans-serif;outline:none}
+.service-tab.deals{border-color:rgba(0,230,118,0.3)}.service-tab.active.deals{background:linear-gradient(135deg,var(--deals-green),var(--deals-green-dim));color:#000}
 `;
 
 // Helpers
@@ -738,6 +750,325 @@ function LiquidationBillingPage({ liquidationStock }) {
   );
 }
 
+// ============ BHB DEALS ============
+function BHBDealsPage({ token }) {
+  const [deals, setDeals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  useEffect(() => {
+    loadDeals();
+  }, [selectedDate]);
+
+  const loadDeals = async () => {
+    setLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&is_published=eq.true&order=created_at.desc`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) setDeals(data);
+    setLoading(false);
+  };
+
+  const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
+  const formatPercent = (val) => `${parseFloat(val || 0).toFixed(1)}%`;
+
+  // Navigate dates
+  const changeDate = (days) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  const formatDisplayDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#00e676' }}>📋 BHB Deals</div>
+          <div className="page-subtitle">Daily Amazon FBA Deal Sheet</div>
+        </div>
+        <span className="deals-badge">🔒 Exclusive Access</span>
+      </div>
+      <div className="page-body">
+        {/* Date Navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <button className="btn btn-secondary" onClick={() => changeDate(-1)}>← Previous Day</button>
+          <div className="date-picker">
+            <span style={{ fontSize: 18, fontWeight: 700 }}>{formatDisplayDate(selectedDate)}</span>
+          </div>
+          <button className="btn btn-secondary" onClick={() => changeDate(1)}>Next Day →</button>
+        </div>
+
+        {/* Stats */}
+        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 24 }}>
+          <div className="card stat-card deals-stat"><div className="card-title">Today's Deals</div><div className="stat-value" style={{ color: '#00e676' }}>{deals.length}</div></div>
+          <div className="card stat-card deals-stat"><div className="card-title">Avg ROI</div><div className="stat-value" style={{ color: 'var(--cyan)' }}>{deals.length ? formatPercent(deals.reduce((sum, d) => sum + (parseFloat(d.roi) || 0), 0) / deals.length) : '0%'}</div></div>
+          <div className="card stat-card deals-stat"><div className="card-title">Total Profit Potential</div><div className="stat-value" style={{ color: '#00e676' }}>{formatCurrency(deals.reduce((sum, d) => sum + (parseFloat(d.profit) || 0), 0))}</div></div>
+        </div>
+
+        {/* Deals List */}
+        {loading ? (
+          <div className="card empty-state"><div className="spinner" style={{ borderTopColor: '#00e676' }} /></div>
+        ) : deals.length === 0 ? (
+          <div className="card empty-state" style={{ background: 'rgba(0,230,118,0.02)', borderColor: 'rgba(0,230,118,0.1)' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <p>No deals published for this date yet.</p>
+            <p style={{ fontSize: 13, marginTop: 8 }}>Check back later or try a different date.</p>
+          </div>
+        ) : (
+          <div>
+            {deals.map(deal => (
+              <div key={deal.id} className="deal-row">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{deal.product_name}</div>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
+                      <span className="mono">ASIN: {deal.asin}</span>
+                      {deal.spm && <span>SPM: {deal.spm}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {deal.source_url && <a href={deal.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '6px 12px', fontSize: 12 }}>Source</a>}
+                    {deal.amazon_url && <a href={deal.amazon_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '6px 12px', fontSize: 12 }}>Amazon</a>}
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, background: 'var(--bg-primary)', borderRadius: 10, padding: 12 }}>
+                  <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.cost_price)}</div><div className="deal-metric-label">Cost</div></div>
+                  <div className="deal-metric"><div className="deal-metric-value">{formatCurrency(deal.sale_price)}</div><div className="deal-metric-label">Sale</div></div>
+                  <div className="deal-metric profit"><div className="deal-metric-value">{formatCurrency(deal.profit)}</div><div className="deal-metric-label">Profit</div></div>
+                  <div className="deal-metric roi"><div className="deal-metric-value">{formatPercent(deal.roi)}</div><div className="deal-metric-label">ROI</div></div>
+                  <div className="deal-metric"><div className="deal-metric-value">{deal.spm || '—'}</div><div className="deal-metric-label">SPM</div></div>
+                </div>
+                {deal.notes && <div style={{ marginTop: 12, padding: 12, background: 'rgba(0,230,118,0.05)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '3px solid #00e676' }}>{deal.notes}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Admin Deals Management Page
+function AdminDealsPage({ token, showToast }) {
+  const [deals, setDeals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({
+    product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', source_url: '', amazon_url: '', notes: ''
+  });
+
+  useEffect(() => { loadDeals(); }, [selectedDate]);
+
+  const loadDeals = async () => {
+    setLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}&order=created_at.desc`, { headers: supabase.headers(token) });
+    const data = await res.json();
+    if (Array.isArray(data)) setDeals(data);
+    setLoading(false);
+  };
+
+  const resetForm = () => {
+    setForm({ product_name: '', asin: '', cost_price: '', sale_price: '', profit: '', roi: '', spm: '', source_url: '', amazon_url: '', notes: '' });
+    setEditingId(null);
+  };
+
+  const calculateMetrics = (cost, sale) => {
+    const c = parseFloat(cost) || 0;
+    const s = parseFloat(sale) || 0;
+    const profit = s - c;
+    const roi = c > 0 ? (profit / c) * 100 : 0;
+    return { profit: profit.toFixed(2), roi: roi.toFixed(1) };
+  };
+
+  const updatePrices = (field, value) => {
+    const newForm = { ...form, [field]: value };
+    if (field === 'cost_price' || field === 'sale_price') {
+      const metrics = calculateMetrics(
+        field === 'cost_price' ? value : form.cost_price,
+        field === 'sale_price' ? value : form.sale_price
+      );
+      newForm.profit = metrics.profit;
+      newForm.roi = metrics.roi;
+    }
+    setForm(newForm);
+  };
+
+  const saveDeal = async () => {
+    if (!form.product_name || !form.asin) return;
+    setSaving(true);
+    const dealData = { ...form, deal_date: selectedDate, is_published: false };
+    
+    if (editingId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/deals?id=eq.${editingId}`, {
+        method: 'PATCH',
+        headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(dealData)
+      });
+      showToast('Deal updated!');
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/deals`, {
+        method: 'POST',
+        headers: { ...supabase.headers(token), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(dealData)
+      });
+      showToast('Deal added!');
+    }
+    
+    resetForm();
+    setShowForm(false);
+    loadDeals();
+    setSaving(false);
+  };
+
+  const editDeal = (deal) => {
+    setForm({
+      product_name: deal.product_name || '',
+      asin: deal.asin || '',
+      cost_price: deal.cost_price || '',
+      sale_price: deal.sale_price || '',
+      profit: deal.profit || '',
+      roi: deal.roi || '',
+      spm: deal.spm || '',
+      source_url: deal.source_url || '',
+      amazon_url: deal.amazon_url || '',
+      notes: deal.notes || ''
+    });
+    setEditingId(deal.id);
+    setShowForm(true);
+  };
+
+  const deleteDeal = async (id) => {
+    if (!confirm('Delete this deal?')) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/deals?id=eq.${id}`, { method: 'DELETE', headers: supabase.headers(token) });
+    showToast('Deal deleted!');
+    loadDeals();
+  };
+
+  const publishDeals = async () => {
+    if (!confirm(`Publish all ${deals.length} deals for ${selectedDate}? This will make them visible to subscribers.`)) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/deals?deal_date=eq.${selectedDate}`, {
+      method: 'PATCH',
+      headers: { ...supabase.headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_published: true })
+    });
+    showToast('Deals published!');
+    loadDeals();
+  };
+
+  const unpublishedCount = deals.filter(d => !d.is_published).length;
+  const formatCurrency = (val) => `£${parseFloat(val || 0).toFixed(2)}`;
+
+  return (
+    <div className="deals-theme">
+      <div className="page-header deals-header">
+        <div>
+          <div className="page-title" style={{ color: '#00e676' }}>📋 BHB Deals Admin</div>
+          <div className="page-subtitle">Manage daily deal sheets</div>
+        </div>
+      </div>
+      <div className="page-body">
+        {/* Date & Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <input type="date" className="input" style={{ width: 180 }} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="btn btn-primary deals" onClick={() => { resetForm(); setShowForm(true); }}><Icons.Plus /> Add Deal</button>
+            {deals.length > 0 && unpublishedCount > 0 && (
+              <button className="btn btn-primary" style={{ background: '#ff9100' }} onClick={publishDeals}>
+                🚀 Publish {unpublishedCount} Deal{unpublishedCount > 1 ? 's' : ''}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Add/Edit Form */}
+        {showForm && (
+          <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(0,230,118,0.3)' }}>
+            <div className="card-title">{editingId ? 'Edit Deal' : 'Add New Deal'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+              <div className="input-group"><label className="input-label">Product Name *</label><input className="input" value={form.product_name} onChange={e => setForm({ ...form, product_name: e.target.value })} /></div>
+              <div className="input-group"><label className="input-label">ASIN *</label><input className="input" value={form.asin} onChange={e => setForm({ ...form, asin: e.target.value })} /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
+              <div className="input-group"><label className="input-label">Cost Price (£)</label><input type="number" step="0.01" className="input" value={form.cost_price} onChange={e => updatePrices('cost_price', e.target.value)} /></div>
+              <div className="input-group"><label className="input-label">Sale Price (£)</label><input type="number" step="0.01" className="input" value={form.sale_price} onChange={e => updatePrices('sale_price', e.target.value)} /></div>
+              <div className="input-group"><label className="input-label">Profit (£)</label><input type="number" step="0.01" className="input" value={form.profit} readOnly style={{ background: 'var(--bg-secondary)' }} /></div>
+              <div className="input-group"><label className="input-label">ROI (%)</label><input type="number" step="0.1" className="input" value={form.roi} readOnly style={{ background: 'var(--bg-secondary)' }} /></div>
+              <div className="input-group"><label className="input-label">SPM</label><input className="input" value={form.spm} onChange={e => setForm({ ...form, spm: e.target.value })} placeholder="> 50" /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="input-group"><label className="input-label">Source URL</label><input className="input" value={form.source_url} onChange={e => setForm({ ...form, source_url: e.target.value })} placeholder="https://..." /></div>
+              <div className="input-group"><label className="input-label">Amazon URL</label><input className="input" value={form.amazon_url} onChange={e => setForm({ ...form, amazon_url: e.target.value })} placeholder="https://amazon.co.uk/..." /></div>
+            </div>
+            <div className="input-group"><label className="input-label">Notes</label><textarea className="input" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Any additional notes for subscribers..." /></div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button className="btn btn-primary deals" onClick={saveDeal} disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update Deal' : 'Add Deal'}</button>
+              <button className="btn btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Deals List */}
+        {loading ? (
+          <div className="card empty-state"><div className="spinner" style={{ borderTopColor: '#00e676' }} /></div>
+        ) : deals.length === 0 ? (
+          <div className="card empty-state" style={{ background: 'rgba(0,230,118,0.02)', borderColor: 'rgba(0,230,118,0.1)' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <p>No deals for this date yet.</p>
+            <p style={{ fontSize: 13, marginTop: 8 }}>Click "Add Deal" to get started.</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>ASIN</th>
+                  <th>Cost</th>
+                  <th>Sale</th>
+                  <th>Profit</th>
+                  <th>ROI</th>
+                  <th>SPM</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {deals.map(deal => (
+                  <tr key={deal.id}>
+                    <td style={{ fontWeight: 600, maxWidth: 200 }}>{deal.product_name}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>{deal.asin}</td>
+                    <td className="mono">{formatCurrency(deal.cost_price)}</td>
+                    <td className="mono">{formatCurrency(deal.sale_price)}</td>
+                    <td className="mono" style={{ color: '#00e676', fontWeight: 600 }}>{formatCurrency(deal.profit)}</td>
+                    <td className="mono" style={{ color: 'var(--cyan)' }}>{deal.roi}%</td>
+                    <td>{deal.spm || '—'}</td>
+                    <td>{deal.is_published ? <span className="deals-badge">Published</span> : <span className="badge badge-pending">Draft</span>}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn-icon" onClick={() => editDeal(deal)}><Icons.Edit /></button>
+                        <button className="btn-icon btn-danger" onClick={() => deleteDeal(deal.id)}><Icons.Trash /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============ ADMIN PAGES ============
 function AdminPrepPage({ token, showToast }) {
   const [clients, setClients] = useState([]);
@@ -1190,12 +1521,18 @@ function ClientPortal() {
     { id: "fees", label: "Fees", icon: Icons.Calculator },
     { id: "billing", label: "Billing", icon: Icons.Receipt }
   ];
+  const dealsNav = [
+    { id: "deals", label: "Today's Deals", icon: Icons.List }
+  ];
   const sharedNav = [{ id: "profile", label: "Profile", icon: Icons.User }];
-  const currentNav = service === "prep" ? prepNav : liqNav;
+  const currentNav = service === "prep" ? prepNav : service === "liquidation" ? liqNav : dealsNav;
   const initials = (profile?.full_name || user?.email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
+    if (service === "deals") {
+      return <BHBDealsPage token={token} />;
+    }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
       if (page === "add-order") return <PrepAddOrderPage token={token} onRefresh={loadData} showToast={showToast} />;
@@ -1221,9 +1558,9 @@ function ClientPortal() {
       <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-logo"><div className="sidebar-logo-icon">BHB</div><div><div className="sidebar-logo-text">BHB PREP</div><div className="sidebar-logo-sub">Client Portal</div></div></div>
-        <div className="service-tabs"><div className={`service-tab ${service === "prep" ? "active prep" : ""}`} onClick={() => setService("prep")}>📦 Prep</div><div className={`service-tab ${service === "liquidation" ? "active liquidation" : ""}`} onClick={() => setService("liquidation")}>💰 Liquidation</div></div>
+        <div className="service-tabs"><div className={`service-tab ${service === "prep" ? "active prep" : ""}`} onClick={() => setService("prep")}>📦 Prep</div><div className={`service-tab ${service === "liquidation" ? "active liquidation" : ""}`} onClick={() => setService("liquidation")}>💰 Liquidation</div><div className={`service-tab deals ${service === "deals" ? "active deals" : ""}`} onClick={() => setService("deals")}>📋 Deals</div></div>
         <nav className="sidebar-nav">
-          <div className="sidebar-section-title">{service === "prep" ? "FBA Prep" : "Liquidation"}</div>
+          <div className="sidebar-section-title">{service === "prep" ? "FBA Prep" : service === "liquidation" ? "Liquidation" : "BHB Deals"}</div>
           {currentNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? `active ${service}` : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
           <div className="sidebar-section-title" style={{ marginTop: 16 }}>Account</div>
           {sharedNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? `active ${service}` : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
@@ -1272,11 +1609,13 @@ function AdminPortal() {
 
   const adminNav = [
     { id: "clients", label: "All Clients", icon: Icons.Users },
+    { id: "deals", label: "BHB Deals", icon: Icons.List },
     { id: "settings", label: "Settings", icon: Icons.Settings }
   ];
 
   const renderPage = () => {
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
+    if (page === "deals") return <AdminDealsPage token={token} showToast={showToast} />;
     if (page === "client" && selectedClient) {
       return <AdminClientPage 
         client={selectedClient} 
