@@ -1564,24 +1564,27 @@ function ClientPortal() {
   const [billingPeriods, setBillingPeriods] = useState([]);
   const [liquidationStock, setLiquidationStock] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [dbProfile, setDbProfile] = useState(null);
   const [toast, setToast] = useState(null);
   const showToast = useCallback(msg => setToast(msg), []);
 
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, i, b, l, s] = await Promise.all([
+      const [p, i, b, l, s, prof] = await Promise.all([
         supabase.from("parcels", token).select(),
         supabase.from("invoices", token).select(),
         supabase.from("billing_periods", token).select(),
         supabase.from("liquidation_stock", token).select(),
-        supabase.from("shipments", token).select()
+        supabase.from("shipments", token).select(),
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json())
       ]);
       if (Array.isArray(p)) setParcels(p);
       if (Array.isArray(i)) setInvoices(i);
       if (Array.isArray(b)) setBillingPeriods(b);
       if (Array.isArray(l)) setLiquidationStock(l);
       if (Array.isArray(s)) setShipments(s);
+      if (Array.isArray(prof) && prof[0]) setDbProfile(prof[0]);
     } catch (e) { console.error(e); }
   }, [token]);
 
@@ -1613,7 +1616,7 @@ function ClientPortal() {
   const renderPage = () => {
     if (page === "profile") return <ProfilePage />;
     if (service === "deals") {
-      return <BHBDealsPage token={token} hasAccess={profile?.deals_access} startDate={profile?.deals_start_date} />;
+      return <BHBDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} />;
     }
     if (service === "prep") {
       if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
@@ -1827,12 +1830,17 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     liq_commission: client.liq_commission || "30"
   });
   const [savingPricing, setSavingPricing] = useState(false);
+  const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
+  const [dealsStartDate, setDealsStartDate] = useState(client.deals_start_date || '');
+  const [savingDeals, setSavingDeals] = useState(false);
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Sync state when client changes
   useEffect(() => {
     setWebhook(client.discord_webhook || "");
+    setDealsAccess(client.deals_access || false);
+    setDealsStartDate(client.deals_start_date || '');
     setPricing({
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
@@ -2004,34 +2012,47 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
             <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveWebhook} disabled={savingWebhook}>{savingWebhook ? "Saving..." : "Save Webhook"}</button>
           </div>
 
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">BHB Deals Access</div>
+          <div className="card" style={{ marginBottom: 24, borderColor: dealsAccess ? 'rgba(0,230,118,0.3)' : 'rgba(255,82,82,0.2)', background: dealsAccess ? 'rgba(0,230,118,0.03)' : 'rgba(255,82,82,0.03)' }}>
+            <div className="card-title" style={{ color: dealsAccess ? '#00e676' : 'var(--red)' }}>BHB Deals Access — {dealsAccess ? '🟢 ACTIVE' : '🔴 INACTIVE'}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>Deal Sheet Subscription</div>
-                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Allow this client to view the daily deal sheet</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{dealsAccess ? "This client can view the daily deal sheet" : "This client CANNOT see any deals"}</div>
               </div>
               <button 
-                className={`btn ${client.deals_access ? "btn-primary deals" : "btn-secondary"}`}
+                className="btn"
+                disabled={savingDeals}
+                style={{ 
+                  background: dealsAccess ? '#00e676' : 'var(--red)',
+                  color: dealsAccess ? '#000' : '#fff',
+                  fontWeight: 700,
+                  minWidth: 140,
+                  fontSize: 15
+                }}
                 onClick={async () => {
-                  const newAccess = !client.deals_access;
+                  setSavingDeals(true);
+                  const newAccess = !dealsAccess;
                   const updates = { deals_access: newAccess };
-                  if (newAccess && !client.deals_start_date) {
-                    updates.deals_start_date = new Date().toISOString().split('T')[0];
+                  if (newAccess && !dealsStartDate) {
+                    const today = new Date().toISOString().split('T')[0];
+                    updates.deals_start_date = today;
+                    setDealsStartDate(today);
                   }
+                  setDealsAccess(newAccess);
                   await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
                     method: "PATCH", 
                     headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
                     body: JSON.stringify(updates) 
                   });
-                  showToast(newAccess ? "Deals access granted!" : "Deals access revoked");
+                  showToast(newAccess ? "Deals access granted!" : "Deals access revoked!");
                   onRefresh();
+                  setSavingDeals(false);
                 }}
               >
-                {client.deals_access ? "✓ Active" : "No Access"}
+                {savingDeals ? "Saving..." : dealsAccess ? "✓ ACTIVE" : "✗ INACTIVE"}
               </button>
             </div>
-            {client.deals_access && (
+            {dealsAccess && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
                 <div className="input-group" style={{ margin: 0, maxWidth: 250 }}>
                   <label className="input-label">Access Start Date</label>
@@ -2039,12 +2060,14 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                     type="date" 
                     className="input" 
                     style={{ colorScheme: 'dark' }}
-                    value={client.deals_start_date || new Date().toISOString().split('T')[0]}
+                    value={dealsStartDate}
                     onChange={async (e) => {
+                      const newDate = e.target.value;
+                      setDealsStartDate(newDate);
                       await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
                         method: "PATCH", 
                         headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-                        body: JSON.stringify({ deals_start_date: e.target.value }) 
+                        body: JSON.stringify({ deals_start_date: newDate }) 
                       });
                       showToast("Start date updated!");
                       onRefresh();
