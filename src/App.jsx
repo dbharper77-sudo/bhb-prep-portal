@@ -911,6 +911,7 @@ function BHBDealsPage({ token, hasAccess, startDate }) {
                       <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{deal.asin}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>
+                      {deal.asin && <a href={`https://sas.selleramp.com/sas/lookup?SasLookup%5Bsearch_term%5D=${deal.asin}&SasLookup%5Bcost%5D=${deal.cost_price || ''}&SasLookup%5Bsale_price%5D=${deal.sale_price || ''}`} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,150,255,0.1)', color: '#0096ff', border: '1px solid rgba(0,150,255,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>SAS</a>}
                       {deal.source_url && <a href={deal.source_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(0,230,118,0.1)', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>Source</a>}
                       {deal.amazon_url && <a href={deal.amazon_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,153,0,0.1)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)', padding: '8px 14px', fontSize: 12, borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>Amazon</a>}
                     </div>
