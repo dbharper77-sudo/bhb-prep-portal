@@ -2262,8 +2262,13 @@ function ClientPortal() {
             <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. BHB Prep accepts no liability for transit damage or consequential losses.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>8. Liquidation Services</h3>
             <p>Commission is deducted per sale at the agreed rate. No guarantees on sale price or timeframe. Items unsold after 90 days may be disposed of unless the Client requests return at their expense.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>9. Confidentiality</h3>
-            <p>Both parties agree to keep commercially sensitive information confidential.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>9. Confidentiality & Deal Sheet Non-Disclosure</h3>
+            <p><strong>General:</strong> Both parties agree to keep commercially sensitive information confidential, including but not limited to product sourcing information, pricing, supplier details, and business strategies.</p>
+            <p><strong>BHB Deals — Strict Confidentiality:</strong> The BHB Deals daily deal sheet is an exclusive, members-only service strictly limited to 15 active subscribers. The Client agrees to the following:</p>
+            <p><strong>a)</strong> The content of the deal sheet (including product leads, ASINs, pricing data, source links, discount codes, and any associated analysis) is <strong>strictly confidential</strong> and must not be shared, forwarded, screenshot, or disclosed to any third party under any circumstances.</p>
+            <p><strong>b)</strong> The Client must not share their portal login credentials or allow any other person to access the deal sheet through their account.</p>
+            <p><strong>c)</strong> BHB Prep actively monitors seller counts and marketplace activity on featured products to detect patterns of unauthorised sharing. Any evidence or reasonable suspicion of sharing will result in <strong>immediate termination</strong> of deal sheet access without refund.</p>
+            <p><strong>d)</strong> In the event of a confirmed breach of this confidentiality clause, BHB Prep reserves the right to terminate all services (including prep and liquidation) and pursue damages for any commercial loss suffered.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>10. Client Portal & Data</h3>
             <p>The Client is responsible for login security. Data is processed in accordance with UK GDPR solely for service delivery.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>11. Termination</h3>
