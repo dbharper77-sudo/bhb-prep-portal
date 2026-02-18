@@ -2203,6 +2203,113 @@ function ClientPortal() {
     }
   };
 
+  // T&Cs signing gate
+  const [tcsForm, setTcsForm] = useState({ full_name: '', business_name: '', position: '', phone: '' });
+  const [signingTcs, setSigningTcs] = useState(false);
+  const [tcsScrolled, setTcsScrolled] = useState(false);
+
+  const signTcs = async () => {
+    if (!tcsForm.full_name) return;
+    setSigningTcs(true);
+    const signedData = {
+      tcs_signed: true,
+      tcs_signed_at: new Date().toISOString(),
+      tcs_signed_name: tcsForm.full_name,
+      tcs_signed_business: tcsForm.business_name,
+      tcs_signed_position: tcsForm.position,
+      tcs_signed_phone: tcsForm.phone
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
+      method: "PATCH",
+      headers: { ...supabase.headers(token), "Content-Type": "application/json" },
+      body: JSON.stringify(signedData)
+    });
+    setDbProfile({ ...dbProfile, ...signedData });
+    setSigningTcs(false);
+  };
+
+  if (dbProfile && !dbProfile.tcs_signed) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', padding: '40px 20px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ maxWidth: 700, width: '100%' }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div className="sidebar-logo-icon" style={{ width: 64, height: 64, fontSize: 22, margin: '0 auto 16px' }}>BHB</div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: '#fff' }}>Terms & Conditions</h1>
+            <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>Please read and accept our terms before accessing the portal</p>
+          </div>
+          <div onScroll={e => { if (e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 50) setTcsScrolled(true); }}
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '32px 28px', maxHeight: 500, overflowY: 'auto', marginBottom: 24, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <h2 style={{ fontSize: 18, color: '#fff', marginBottom: 16 }}>BHB PREP — Service Agreement</h2>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>1. Parties</h3>
+            <p>This Service Agreement is entered into between BHB Prep ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>2. Services Provided</h3>
+            <p><strong>a) FBA Preparation</strong> — Receiving, inspecting, labelling, poly-bagging, bundling, and preparing inventory for Amazon FBA.</p>
+            <p><strong>b) Liquidation</strong> — Receiving, listing and selling returned/unfulfillable inventory on behalf of the Client.</p>
+            <p><strong>c) BHB Deals</strong> — Access to daily curated deal sheet (where applicable, subject to separate subscription).</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>3. Client Responsibilities</h3>
+            <p>The Client agrees to provide accurate product information, ensure inventory complies with Amazon policies, provide tracking for inbound shipments, and respond to flagged issues within 48 hours. BHB Prep may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>4. Pricing & Fees</h3>
+            <p>Prep fees are charged per-unit at the agreed rate. Additional charges may apply for oversized items, bundling, box costs, and ancillary services. All prices are exclusive of VAT. BHB Prep may adjust pricing with 14 days written notice.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>5. Invoicing & Payment</h3>
+            <p><strong>a)</strong> Invoices are issued on the <strong>1st of each calendar month</strong> for work completed in the preceding month.</p>
+            <p><strong>b)</strong> Payment is due within <strong>5 working days</strong> of the invoice date.</p>
+            <p><strong>c)</strong> Late payment may result in: suspension of services and holding of inventory; a 5% late payment fee; 2% monthly interest on overdue amounts; and debt recovery via legal channels at the Client's cost.</p>
+            <p><strong>d)</strong> BHB Prep retains a <strong>lien over all inventory</strong> until all invoices are paid in full.</p>
+            <p><strong>e)</strong> The Client acknowledges that by signing this Agreement, they accept full responsibility for the payment of all invoices raised by BHB Prep for services rendered.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>6. Turnaround & Shipping</h3>
+            <p>BHB Prep aims for 24-48 hour turnaround. We are not responsible for carrier or Amazon receiving delays.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>7. Liability & Damages</h3>
+            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. BHB Prep accepts no liability for transit damage or consequential losses.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>8. Liquidation Services</h3>
+            <p>Commission is deducted per sale at the agreed rate. No guarantees on sale price or timeframe. Items unsold after 90 days may be disposed of unless the Client requests return at their expense.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>9. Confidentiality</h3>
+            <p>Both parties agree to keep commercially sensitive information confidential.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>10. Client Portal & Data</h3>
+            <p>The Client is responsible for login security. Data is processed in accordance with UK GDPR solely for service delivery.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>11. Termination</h3>
+            <p>Either party may terminate with 14 days written notice. Outstanding invoices must be settled within 5 working days. Inventory is released once all payments are received. BHB Prep may terminate immediately for non-payment exceeding 14 days.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>12. Governing Law</h3>
+            <p>This Agreement is governed by the laws of England and Wales.</p>
+            {!tcsScrolled && <div style={{ textAlign: 'center', padding: '20px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>↓ Scroll to read all terms ↓</div>}
+          </div>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '28px' }}>
+            <h3 style={{ fontSize: 16, color: '#fff', marginBottom: 16 }}>Declaration & Signature</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>By completing the form below, I confirm that I have read, understood, and agree to be bound by the terms and conditions set out above. I accept full responsibility for the payment of all invoices raised by BHB Prep.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Full Name *</label>
+                <input className="input" value={tcsForm.full_name} onChange={e => setTcsForm({ ...tcsForm, full_name: e.target.value })} placeholder="Your full legal name" />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Business Name</label>
+                <input className="input" value={tcsForm.business_name} onChange={e => setTcsForm({ ...tcsForm, business_name: e.target.value })} placeholder="Your business/trading name" />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Position / Role</label>
+                <input className="input" value={tcsForm.position} onChange={e => setTcsForm({ ...tcsForm, position: e.target.value })} placeholder="e.g. Director, Owner" />
+              </div>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label">Phone Number</label>
+                <input className="input" value={tcsForm.phone} onChange={e => setTcsForm({ ...tcsForm, phone: e.target.value })} placeholder="Contact number" />
+              </div>
+            </div>
+            <div style={{ background: 'rgba(255,171,0,0.05)', border: '1px solid rgba(255,171,0,0.2)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                <input type="checkbox" id="tcs-agree" style={{ marginTop: 3 }} />
+                <span>I confirm that I am authorised to enter into this Agreement and accept the terms and conditions set out above, including the obligation to pay all invoices within 5 working days of issue.</span>
+              </label>
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%', padding: '14px', fontSize: 16, fontWeight: 700, background: '#00e676', color: '#000' }} disabled={signingTcs || !tcsForm.full_name} onClick={() => {
+              if (!document.getElementById('tcs-agree')?.checked) { alert('Please tick the checkbox to confirm you agree to the terms.'); return; }
+              signTcs();
+            }}>{signingTcs ? "Signing..." : "✍️  Sign & Accept Terms"}</button>
+            <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>A copy of this signed agreement will be recorded to your account.<br/>Date of signing: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-wrapper">
       <div className="mobile-header"><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="sidebar-logo-icon" style={{ width: 32, height: 32, fontSize: 11 }}>BHB</div><span style={{ fontWeight: 700 }}>BHB PREP</span></div><button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><Icons.Menu /></button></div>
@@ -2659,6 +2766,23 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         </>
       ) :
         <>
+          {/* T&Cs Status */}
+          <div className="card" style={{ marginBottom: 24, borderColor: client.tcs_signed ? 'rgba(0,230,118,0.2)' : 'rgba(255,82,82,0.2)', background: client.tcs_signed ? 'rgba(0,230,118,0.03)' : 'rgba(255,82,82,0.03)' }}>
+            <div className="card-title" style={{ color: client.tcs_signed ? '#00e676' : 'var(--red)' }}>Terms & Conditions — {client.tcs_signed ? '✅ Signed' : '❌ Not Signed'}</div>
+            {client.tcs_signed ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
+                <div><span style={{ color: 'var(--text-muted)' }}>Signed by:</span> <strong>{client.tcs_signed_name}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Business:</span> <strong>{client.tcs_signed_business || '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Position:</span> <strong>{client.tcs_signed_position || '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Phone:</span> <strong>{client.tcs_signed_phone || '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Signed on:</span> <strong>{client.tcs_signed_at ? new Date(client.tcs_signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Email:</span> <strong>{client.email}</strong></div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>This client has not yet signed the Terms & Conditions. They will be prompted to sign when they next log in.</div>
+            )}
+          </div>
+
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-title">Custom Pricing <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>+ VAT</span></div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
