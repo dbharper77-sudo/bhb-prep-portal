@@ -2044,8 +2044,9 @@ function AdminShipmentsPage({ token, showToast }) {
   );
 }
 
-function ProfilePage() {
+function ProfilePage({ dbProfile }) {
   const { user, profile, signOut } = useAuth();
+  const [showTcs, setShowTcs] = useState(false);
   return (
     <><div className="page-header"><div><div className="page-title">Profile</div><div className="page-subtitle">Your account</div></div></div>
     <div className="page-body"><div className="card" style={{ maxWidth: 600 }}>
@@ -2055,7 +2056,65 @@ function ProfilePage() {
         <div style={{ marginBottom: 16 }}><div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>Company</div><div style={{ fontWeight: 600 }}>{profile?.company_name || "—"}</div></div>
         <div><div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>Email</div><div style={{ fontWeight: 600 }}>{user?.email}</div></div>
       </div>
-    </div><div className="card" style={{ maxWidth: 600, marginTop: 20 }}><button className="btn btn-secondary" onClick={signOut}><Icons.LogOut /> Sign Out</button></div></div></>
+    </div>
+
+    {/* Signed T&Cs */}
+    {dbProfile?.tcs_signed && (
+      <div className="card" style={{ maxWidth: 600, marginTop: 20, borderColor: 'rgba(0,230,118,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card-title" style={{ margin: 0, color: '#00e676' }}>✅ Terms & Conditions — Signed</div>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowTcs(!showTcs)}>{showTcs ? 'Hide' : 'View Terms'}</button>
+        </div>
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
+          <div><span style={{ color: 'var(--text-muted)' }}>Signed by:</span> <strong>{dbProfile.tcs_signed_name}</strong></div>
+          <div><span style={{ color: 'var(--text-muted)' }}>Business:</span> <strong>{dbProfile.tcs_signed_business || '—'}</strong></div>
+          <div><span style={{ color: 'var(--text-muted)' }}>Position:</span> <strong>{dbProfile.tcs_signed_position || '—'}</strong></div>
+          <div><span style={{ color: 'var(--text-muted)' }}>Date:</span> <strong>{dbProfile.tcs_signed_at ? new Date(dbProfile.tcs_signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</strong></div>
+        </div>
+        {showTcs && (
+          <div style={{ marginTop: 16, padding: '24px 20px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, maxHeight: 400, overflowY: 'auto', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <h3 style={{ fontSize: 14, color: '#fff', marginBottom: 12 }}>BHB PREP — Service Agreement</h3>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>1. Parties</h4>
+            <p>This Service Agreement is entered into between BHB Prep ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>2. Services Provided</h4>
+            <p><strong>a) FBA Preparation</strong> — Receiving, inspecting, labelling, poly-bagging, bundling, and preparing inventory for Amazon FBA.</p>
+            <p><strong>b) Liquidation</strong> — Receiving, listing and selling returned/unfulfillable inventory on behalf of the Client.</p>
+            <p><strong>c) BHB Deals</strong> — Access to daily curated deal sheet (where applicable, subject to separate subscription).</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>3. Client Responsibilities</h4>
+            <p>The Client agrees to provide accurate product information, ensure inventory complies with Amazon policies, provide tracking for inbound shipments, and respond to flagged issues within 48 hours. BHB Prep may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>4. Pricing & Fees</h4>
+            <p>Prep fees are charged per-unit at the agreed rate. Additional charges may apply for oversized items, bundling, box costs, and ancillary services. All prices are exclusive of VAT. BHB Prep may adjust pricing with 14 days written notice.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>5. Invoicing & Payment</h4>
+            <p><strong>a)</strong> Invoices are issued on the <strong>1st of each calendar month</strong> for work completed in the preceding month.</p>
+            <p><strong>b)</strong> Payment is due within <strong>5 working days</strong> of the invoice date.</p>
+            <p><strong>c)</strong> Late payment may result in: suspension of services and holding of inventory; a 5% late payment fee; 2% monthly interest on overdue amounts; and debt recovery via legal channels at the Client's cost.</p>
+            <p><strong>d)</strong> BHB Prep retains a <strong>lien over all inventory</strong> until all invoices are paid in full.</p>
+            <p><strong>e)</strong> The Client acknowledges that by signing this Agreement, they accept full responsibility for the payment of all invoices raised by BHB Prep for services rendered.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>6. Turnaround & Shipping</h4>
+            <p>BHB Prep aims for 24-48 hour turnaround. We are not responsible for carrier or Amazon receiving delays.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>7. Liability & Damages</h4>
+            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. BHB Prep accepts no liability for transit damage or consequential losses.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>8. Liquidation Services</h4>
+            <p>Commission is deducted per sale at the agreed rate. No guarantees on sale price or timeframe. Items unsold after 90 days may be disposed of unless the Client requests return at their expense.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>9. Confidentiality & Deal Sheet Non-Disclosure</h4>
+            <p><strong>General:</strong> Both parties agree to keep commercially sensitive information confidential.</p>
+            <p><strong>BHB Deals — Strict Confidentiality:</strong> The deal sheet is exclusive and limited to 15 members. The Client agrees:</p>
+            <p><strong>a)</strong> Deal sheet content is <strong>strictly confidential</strong> — no sharing, forwarding, or screenshots.</p>
+            <p><strong>b)</strong> Login credentials must not be shared.</p>
+            <p><strong>c)</strong> BHB Prep monitors seller counts to detect unauthorised sharing. Suspicion of sharing results in <strong>immediate termination</strong> without refund.</p>
+            <p><strong>d)</strong> Confirmed breaches may result in termination of all services and pursuit of damages.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>10. Client Portal & Data</h4>
+            <p>The Client is responsible for login security. Data is processed in accordance with UK GDPR solely for service delivery.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>11. Termination</h4>
+            <p>Either party may terminate with 14 days written notice. Outstanding invoices must be settled within 5 working days. Inventory is released once all payments are received. BHB Prep may terminate immediately for non-payment exceeding 14 days.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>12. Governing Law</h4>
+            <p>This Agreement is governed by the laws of England and Wales.</p>
+          </div>
+        )}
+      </div>
+    )}
+
+    <div className="card" style={{ maxWidth: 600, marginTop: 20 }}><button className="btn btn-secondary" onClick={signOut}><Icons.LogOut /> Sign Out</button></div></div></>
   );
 }
 
@@ -2177,7 +2236,7 @@ function ClientPortal() {
   const initials = (profile?.full_name || user?.email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 
   const renderPage = () => {
-    if (page === "profile") return <ProfilePage />;
+    if (page === "profile") return <ProfilePage dbProfile={dbProfile} />;
     if (service === "deals") {
       if (page === "invoice-details") return <DealsInvoiceDetailsPage token={token} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
       if (page === "shortlist") return <DealsShortlistPage token={token} userId={user.id} showToast={showToast} />;
