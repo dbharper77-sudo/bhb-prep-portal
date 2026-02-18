@@ -169,7 +169,7 @@ const css = `
 
 // Helpers
 const PREP_STATUSES = ["in_transit", "partial_delivery", "delivered", "prepped", "shipped"];
-const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product"];
+const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product", "Other"];
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
 function formatShortDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
