@@ -131,7 +131,7 @@ const css = `
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px;transition:all 0.2s}.card:hover{border-color:var(--border-bright)}.card-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}.stat-card{position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),transparent)}.stat-card.liquidation::before,.stat-card.admin::before{background:linear-gradient(90deg,var(--orange),transparent)}.stat-card.warning::before{background:linear-gradient(90deg,var(--red),transparent)}
 .stat-value{font-size:32px;font-weight:800;font-family:'JetBrains Mono',monospace}.stat-label{font-size:12px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px}
-.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-collected,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
+.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-collected,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-ready_for_collection{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)}td{padding:14px 16px;font-size:14px;border-bottom:1px solid var(--border)}tr:hover td{background:var(--bg-card-hover)}.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:'Outfit',sans-serif;transition:all 0.2s}.btn-primary{background:var(--cyan);color:var(--bg-primary)}.btn-primary:hover{background:var(--cyan-dim)}.btn-primary.liquidation,.btn-primary.admin{background:var(--orange)}.btn-primary.liquidation:hover,.btn-primary.admin:hover{background:#e68200}
 .btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}.btn-secondary:hover{border-color:var(--cyan)}
@@ -2942,11 +2942,12 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     return units + boxes + other;
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = (s) => {
     setEditingShipment(s.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "pending" });
+    const linkedParcels = parcels.filter(p => p.shipment_id === s.id).map(p => p.id);
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
     setShowShipmentForm(true);
   };
 
@@ -2954,14 +2955,33 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "collected" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
     try {
+      let shipId;
       if (editingShipment) {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(baseData) });
-        if (!res.ok) console.error("Update error:", await res.text());
+        await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(baseData) });
+        shipId = editingShipment;
       } else {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ ...baseData, user_id: client.id }) });
-        if (!res.ok) console.error("Create error:", await res.text());
+        const data = await res.json();
+        shipId = data?.[0]?.id;
+      }
+      // Unlink any previously linked parcels
+      if (editingShipment) {
+        await fetch(`${SUPABASE_URL}/rest/v1/parcels?shipment_id=eq.${shipId}&user_id=eq.${client.id}`, { 
+          method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
+          body: JSON.stringify({ shipment_id: null, status: "prepped" }) 
+        });
+      }
+      // Link selected parcels to shipment and set status to collected
+      if (shipmentForm.selected_parcels.length > 0 && shipId) {
+        const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
+        for (const pid of shipmentForm.selected_parcels) {
+          await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, {
+            method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" },
+            body: JSON.stringify({ shipment_id: shipId, status: parcelStatus })
+          });
+        }
       }
       showToast(editingShipment ? "Updated!" : "Shipment created!"); resetShipmentForm(); setShowShipmentForm(false); onRefresh();
     } catch (e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
@@ -2994,19 +3014,24 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   const totalCharges = shipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
 
   // Calculate unit counts
+  const activeParcels = parcels.filter(p => p.status !== "collected");
+  const completedParcels = parcels.filter(p => p.status === "collected");
   const inboundParcels = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status));
   const inboundUnits = inboundParcels.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
   const inWarehouseParcels = parcels.filter(p => p.status === "delivered");
   const inWarehouseUnits = inWarehouseParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
   const preppedParcels = parcels.filter(p => p.status === "prepped");
   const preppedUnits = preppedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+  const collectedUnits = completedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
+  const sortedActive = sortByStatus(activeParcels);
 
   return (
     <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: 24 }}>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(6, 1fr)", marginBottom: 24 }}>
         <div className="card stat-card"><div className="card-title">Inbound</div><div className="stat-value" style={{ color: "var(--purple)" }}>{inboundUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inWarehouseUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{preppedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
+        <div className="card stat-card"><div className="card-title">Collected</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>{collectedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">{monthNames[currentMonth]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
@@ -3015,7 +3040,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
         </div>
-        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No parcels.</div> :
+        {sortedActive.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
           <tbody>{sorted.map(p => {
@@ -3049,6 +3074,11 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
                 <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Status</label>
+                <select className="input" value={shipmentForm.status || "ready_for_collection"} onChange={e => setShipmentForm({ ...shipmentForm, status: e.target.value })}>
+                  <option value="ready_for_collection">Ready for Collection</option>
+                  <option value="collected">Collected</option>
+                </select></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label>
                 <input className="input" type="date" value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
@@ -3060,6 +3090,29 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
                 <input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
             </div>
+            {/* Parcel selector */}
+            {preppedParcels.length > 0 && (
+              <div style={{ marginBottom: 16, marginTop: 16 }}>
+                <label className="input-label">Link Prepped Parcels to Shipment</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                  {preppedParcels.map(p => (
+                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, background: shipmentForm.selected_parcels?.includes(p.id) ? 'rgba(0,230,118,0.08)' : 'transparent', border: shipmentForm.selected_parcels?.includes(p.id) ? '1px solid rgba(0,230,118,0.2)' : '1px solid transparent' }}>
+                      <input type="checkbox" checked={shipmentForm.selected_parcels?.includes(p.id) || false} onChange={e => {
+                        const sel = shipmentForm.selected_parcels || [];
+                        setShipmentForm({ ...shipmentForm, selected_parcels: e.target.checked ? [...sel, p.id] : sel.filter(id => id !== p.id) });
+                      }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.product_name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.qty_received || p.quantity} units · {p.asin || '—'}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {shipmentForm.selected_parcels?.length > 0 && (
+                  <div style={{ fontSize: 12, color: '#00e676', marginTop: 6, fontWeight: 600 }}>{shipmentForm.selected_parcels.length} parcel{shipmentForm.selected_parcels.length !== 1 ? 's' : ''} selected — {shipmentForm.selected_parcels.reduce((sum, id) => { const p = preppedParcels.find(pp => pp.id === id); return sum + (parseInt(p?.qty_received || p?.quantity) || 0); }, 0)} units</div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentTotal(shipmentForm).toFixed(2)}</span></div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -3072,20 +3125,48 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
         {shipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
         <div className="table-wrap"><table>
-          <thead><tr><th>Shipment ID</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
-          <tbody>{shipments.map(s => (
+          <thead><tr><th>Shipment ID</th><th>Parcels</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <tbody>{shipments.map(s => {
+            const linkedParcels = parcels.filter(p => p.shipment_id === s.id);
+            return (
             <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
+              <td>{linkedParcels.length > 0 ? <div style={{ fontSize: 11 }}>{linkedParcels.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
               <td className="mono">{s.units_prepped || 0}</td>
               <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
-              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "collected" ? "collected" : "pending"}`}>{s.status}</span></td>
+              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "collected" ? "collected" : "pending"}`}>{s.status === "ready_for_collection" ? "Ready" : s.status}</span></td>
               <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
             </tr>
-          ))}</tbody>
+          );})}</tbody>
         </table></div>}
       </div>
+
+      {/* Completed Section */}
+      {completedParcels.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(0,230,118,0.15)', background: 'rgba(0,230,118,0.02)' }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div className="card-title" style={{ margin: 0, color: '#00e676' }}>✓ Completed ({completedParcels.length})</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{collectedUnits} units collected</div>
+          </div>
+          <div className="table-wrap"><table>
+            <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>Units</th><th>Shipment</th></tr></thead>
+            <tbody>{completedParcels.map(p => {
+              const linkedShipment = shipments.find(s => s.id === p.shipment_id);
+              return (
+                <tr key={p.id} style={{ opacity: 0.7 }}>
+                  <td style={{ fontSize: 12 }}>{formatShortDate(p.created_at)}</td>
+                  <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+                  <td className="mono" style={{ fontSize: 12 }}>{p.asin || '—'}</td>
+                  <td className="mono">{p.qty_received || p.quantity}</td>
+                  <td className="mono" style={{ fontSize: 12, color: 'var(--cyan)' }}>{linkedShipment?.shipment_id || '—'}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div>
+        </div>
+      )}
     </>
   );
 }
