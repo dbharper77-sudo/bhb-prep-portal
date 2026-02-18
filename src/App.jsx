@@ -131,7 +131,7 @@ const css = `
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px;transition:all 0.2s}.card:hover{border-color:var(--border-bright)}.card-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}.stat-card{position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),transparent)}.stat-card.liquidation::before,.stat-card.admin::before{background:linear-gradient(90deg,var(--orange),transparent)}.stat-card.warning::before{background:linear-gradient(90deg,var(--red),transparent)}
 .stat-value{font-size:32px;font-weight:800;font-family:'JetBrains Mono',monospace}.stat-label{font-size:12px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px}
-.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-shipped,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
+.badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}.badge-transit{background:rgba(179,136,255,0.15);color:var(--purple)}.badge-partial_delivery{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-delivered{background:rgba(0,229,255,0.15);color:var(--cyan)}.badge-prepped,.badge-collected,.badge-paid,.badge-sold{background:rgba(0,230,118,0.15);color:var(--green)}.badge-pending{background:rgba(255,171,0,0.15);color:var(--amber)}.badge-attention{background:rgba(255,82,82,0.15);color:var(--red)}
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)}td{padding:14px 16px;font-size:14px;border-bottom:1px solid var(--border)}tr:hover td{background:var(--bg-card-hover)}.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:'Outfit',sans-serif;transition:all 0.2s}.btn-primary{background:var(--cyan);color:var(--bg-primary)}.btn-primary:hover{background:var(--cyan-dim)}.btn-primary.liquidation,.btn-primary.admin{background:var(--orange)}.btn-primary.liquidation:hover,.btn-primary.admin:hover{background:#e68200}
 .btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}.btn-secondary:hover{border-color:var(--cyan)}
@@ -168,7 +168,7 @@ const css = `
 `;
 
 // Helpers
-const PREP_STATUSES = ["in_transit", "partial_delivery", "delivered", "prepped", "shipped"];
+const PREP_STATUSES = ["in_transit", "partial_delivery", "delivered", "prepped", "collected"];
 const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product", "Other"];
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
@@ -196,7 +196,7 @@ function getDailyData(items, field, days = 7) {
   }
   return result;
 }
-function sortByStatus(items, completed = ["shipped", "prepped"]) {
+function sortByStatus(items, completed = ["collected", "prepped"]) {
   return [...items].sort((a, b) => {
     const ac = completed.includes(a.status), bc = completed.includes(b.status);
     if (ac && !bc) return 1; if (!ac && bc) return -1;
@@ -479,7 +479,7 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
   const startEdit = item => { setEditingId(item.id); setEditData({ product_name: item.product_name || "", sku: item.sku || "", asin: item.asin || "", quantity: item.quantity || 1, tracking_number: item.tracking_number || "" }); };
   const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
   const deleteItem = async (id, status) => { 
-    if (["shipped", "prepped", "delivered"].includes(status)) {
+    if (["collected", "prepped", "delivered"].includes(status)) {
       alert("Cannot delete items that have been delivered, prepped or shipped.");
       return;
     }
@@ -488,8 +488,8 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
     showToast("Deleted!"); 
     onRefresh(); 
   };
-  const canEdit = (status) => !["shipped", "prepped"].includes(status);
-  const canDelete = (status) => !["shipped", "prepped", "delivered"].includes(status);
+  const canEdit = (status) => !["collected", "prepped"].includes(status);
+  const canDelete = (status) => !["collected", "prepped", "delivered"].includes(status);
   return (
     <><div className="page-header"><div><div className="page-title">My Inventory</div><div className="page-subtitle">Your prep orders</div></div></div>
     <div className="page-body">
@@ -498,7 +498,7 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
       <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
         <thead><tr><th>Date</th><th>Product</th><th>SKU</th><th>ASIN</th><th>Qty</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
         <tbody>{filtered.map(p => {
-          const isEdit = editingId === p.id, data = isEdit ? editData : p, done = ["shipped", "prepped"].includes(p.status);
+          const isEdit = editingId === p.id, data = isEdit ? editData : p, done = ["collected", "prepped"].includes(p.status);
           return <tr key={p.id} className={isEdit ? "edit-row" : ""} style={done ? { opacity: 0.6 } : {}}>
             <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
             <td>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : <ProductWithImage name={p.product_name} asin={p.asin} />}</td>
@@ -1711,9 +1711,33 @@ function AdminPrepPage({ token, showToast }) {
     const client = clients.find(c => c.id === oldItem?.user_id);
     const clientWebhook = client?.discord_webhook || webhookUrl;
     if (clientWebhook) {
-      if (editData.status === "shipped" && oldItem?.status !== "shipped") {
+      if (editData.status === "delivered" && oldItem?.status !== "delivered") {
         await sendDiscordNotification(clientWebhook, null, {
-          title: "📦 SHIPPED",
+          title: "📬 DELIVERED TO WAREHOUSE",
+          color: 0x00e5ff,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client?.full_name || client?.email }
+        });
+      }
+      if (editData.status === "prepped" && oldItem?.status !== "prepped") {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "✅ PREPPED & READY",
+          color: 0x00c853,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client?.full_name || client?.email }
+        });
+      }
+      if (editData.status === "collected" && oldItem?.status !== "collected") {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "📦 COLLECTED",
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
@@ -2853,9 +2877,33 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     
     const clientWebhook = client.discord_webhook || webhookUrl;
     if (clientWebhook) {
-      if (editData.status === "shipped" && oldItem?.status !== "shipped") {
+      if (editData.status === "delivered" && oldItem?.status !== "delivered") {
         await sendDiscordNotification(clientWebhook, null, {
-          title: "📦 SHIPPED",
+          title: "📬 DELIVERED TO WAREHOUSE",
+          color: 0x00e5ff,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client.full_name || client.email }
+        });
+      }
+      if (editData.status === "prepped" && oldItem?.status !== "prepped") {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "✅ PREPPED & READY",
+          color: 0x00c853,
+          fields: [
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
+            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
+            { name: "SKU", value: oldItem?.sku || "—", inline: true }
+          ],
+          footer: { text: client.full_name || client.email }
+        });
+      }
+      if (editData.status === "collected" && oldItem?.status !== "collected") {
+        await sendDiscordNotification(clientWebhook, null, {
+          title: "📦 COLLECTED",
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
@@ -2906,7 +2954,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "shipped" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "collected" };
     try {
       if (editingShipment) {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(baseData) });
@@ -3032,7 +3080,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
               <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
-              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "shipped" ? "shipped" : "pending"}`}>{s.status}</span></td>
+              <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "collected" ? "collected" : "pending"}`}>{s.status}</span></td>
               <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
             </tr>
           ))}</tbody>
