@@ -3125,17 +3125,18 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
   const calcShipmentTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
+    const oversized = (parseFloat(s.oversized_units) || 0) * (parseFloat(s.oversized_unit_cost) || 0);
     const boxes = parseFloat(s.box_cost) || 0;
     const other = parseFloat(s.other_fees) || 0;
-    return units + boxes + other;
+    return units + oversized + boxes + other;
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: client?.prep_standard || "0.45", box_count: "", box_cost: "", other_fees: "", oversized_units: "", oversized_unit_cost: client?.prep_oversized || "1.50", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = (s) => {
     setEditingShipment(s.id);
     const linkedParcels = parcels.filter(p => p.shipment_id === s.id).map(p => p.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", oversized_units: s.oversized_units || "", oversized_unit_cost: s.oversized_unit_cost || client?.prep_oversized || "1.50", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
     setShowShipmentForm(true);
   };
 
@@ -3143,7 +3144,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, oversized_units: parseInt(shipmentForm.oversized_units) || 0, oversized_unit_cost: parseFloat(shipmentForm.oversized_unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
@@ -3190,7 +3191,8 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   
   const calcShipmentCost = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+    const oversized = (parseFloat(s.oversized_units) || 0) * (parseFloat(s.oversized_unit_cost) || 0);
+    return units + oversized + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
   };
   
   const thisMonthShipments = shipments.filter(s => {
@@ -3273,6 +3275,10 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
                 <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
                 <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Oversized Units</label>
+                <input className="input" type="number" value={shipmentForm.oversized_units} onChange={e => setShipmentForm({ ...shipmentForm, oversized_units: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Oversized Unit</label>
+                <input className="input" type="number" step="0.01" value={shipmentForm.oversized_unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, oversized_unit_cost: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes Used</label>
                 <input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
@@ -3320,7 +3326,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
             <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
               <td>{linkedParcels.length > 0 ? <div style={{ fontSize: 11 }}>{linkedParcels.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
-              <td className="mono">{s.units_prepped || 0}</td>
+              <td className="mono">{s.units_prepped || 0}{s.oversized_units > 0 ? <span style={{ fontSize: 11, color: 'var(--orange)', marginLeft: 4 }}>+{s.oversized_units}OS</span> : null}</td>
               <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
