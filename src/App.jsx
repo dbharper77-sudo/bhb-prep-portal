@@ -2798,8 +2798,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 {savingDeals ? "Saving..." : dealsAccess ? "✓ ACTIVE" : "✗ INACTIVE"}
               </button>
             </div>
-            {dealsAccess && (
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
                     <label className="input-label">Access Start Date</label>
@@ -2852,7 +2851,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                   </div>
                 )}
               </div>
-            )}
           </div>
           <AdminClientDeals client={client} token={token} />
         </>
