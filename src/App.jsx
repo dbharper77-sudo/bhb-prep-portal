@@ -2522,7 +2522,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const paymentDue = c.next_payment_date ? new Date(c.next_payment_date) <= today : false;
           const renewalSubject = encodeURIComponent("BHB Deals — Subscription Renewal Due");
           const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour BHB Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nBHB Prep`);
-          const renewalMailto = `mailto:${c.email}?subject=${renewalSubject}&body=${renewalBody}`;
+          const renewalMailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(c.email)}&su=${renewalSubject}&body=${renewalBody}`;
           return (
             <div key={c.id} className="client-card" onClick={() => onSelectClient(c)} style={paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -2538,7 +2538,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
               </div>
               {paymentDue && (
                 <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
-                  <a href={renewalMailto} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(255,82,82,0.12)", color: "var(--red)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                  <a href={renewalMailto} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(255,82,82,0.12)", color: "var(--red)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
                     <Icons.Send /> Send Renewal Email
                   </a>
                 </div>
