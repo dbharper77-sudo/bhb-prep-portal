@@ -2518,16 +2518,31 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const cl = liquidation.filter(l => l.user_id === c.id);
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
+          const paymentDue = c.next_payment_date ? new Date(c.next_payment_date) <= new Date() : false;
+          const renewalSubject = encodeURIComponent("BHB Deals — Subscription Renewal Due");
+          const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour BHB Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nBHB Prep`);
+          const renewalMailto = `mailto:${c.email}?subject=${renewalSubject}&body=${renewalBody}`;
           return (
-            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)}>
+            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)} style={paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 1px rgba(255,82,82,0.2)' } : {}}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
+                    {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)", whiteSpace: "nowrap" }}>⚠ PAYMENT DUE</span>}
+                  </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
                 <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
               </div>
+              {paymentDue && (
+                <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                  <a href={renewalMailto} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(255,82,82,0.12)", color: "var(--red)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                    <Icons.Send /> Send Renewal Email
+                  </a>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
                 <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{inbound}</div>
@@ -2570,6 +2585,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
   const [dealsStartDate, setDealsStartDate] = useState(client.deals_start_date || '');
   const [dealsLastPayment, setDealsLastPayment] = useState(client.deals_last_payment || '');
+  const [nextPaymentDate, setNextPaymentDate] = useState(client.next_payment_date || '');
   const [savingDeals, setSavingDeals] = useState(false);
 
   // Payment overdue check
@@ -2600,6 +2616,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
     setDealsLastPayment(client.deals_last_payment || '');
+    setNextPaymentDate(client.next_payment_date || '');
     setPricing({
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
@@ -2805,6 +2822,17 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                         showToast("Payment date updated!"); onRefresh();
                       }} />
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Auto-deactivates after 1 month</div>
+                  </div>
+                  <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
+                    <label className="input-label">Next Payment Due</label>
+                    <input type="date" className="input" style={{ colorScheme: 'dark' }} value={nextPaymentDate}
+                      onChange={async (e) => {
+                        const newDate = e.target.value;
+                        setNextPaymentDate(newDate);
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ next_payment_date: newDate }) });
+                        showToast("Next payment date saved!"); onRefresh();
+                      }} />
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Shows alert on client card when due</div>
                   </div>
                 </div>
                 {isPaymentOverdue && (
@@ -3125,18 +3153,17 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
 
   const calcShipmentTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const oversized = (parseFloat(s.oversized_units) || 0) * (parseFloat(s.oversized_unit_cost) || 0);
     const boxes = parseFloat(s.box_cost) || 0;
     const other = parseFloat(s.other_fees) || 0;
-    return units + oversized + boxes + other;
+    return units + boxes + other;
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: client?.prep_standard || "0.45", box_count: "", box_cost: "", other_fees: "", oversized_units: "", oversized_unit_cost: client?.prep_oversized || "1.50", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = (s) => {
     setEditingShipment(s.id);
     const linkedParcels = parcels.filter(p => p.shipment_id === s.id).map(p => p.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", oversized_units: s.oversized_units || "", oversized_unit_cost: s.oversized_unit_cost || client?.prep_oversized || "1.50", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
     setShowShipmentForm(true);
   };
 
@@ -3144,7 +3171,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, oversized_units: parseInt(shipmentForm.oversized_units) || 0, oversized_unit_cost: parseFloat(shipmentForm.oversized_unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
@@ -3191,8 +3218,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
   
   const calcShipmentCost = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const oversized = (parseFloat(s.oversized_units) || 0) * (parseFloat(s.oversized_unit_cost) || 0);
-    return units + oversized + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+    return units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
   };
   
   const thisMonthShipments = shipments.filter(s => {
@@ -3275,10 +3301,6 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
                 <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
                 <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Oversized Units</label>
-                <input className="input" type="number" value={shipmentForm.oversized_units} onChange={e => setShipmentForm({ ...shipmentForm, oversized_units: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Oversized Unit</label>
-                <input className="input" type="number" step="0.01" value={shipmentForm.oversized_unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, oversized_unit_cost: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes Used</label>
                 <input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
@@ -3326,7 +3348,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
             <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
               <td>{linkedParcels.length > 0 ? <div style={{ fontSize: 11 }}>{linkedParcels.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
-              <td className="mono">{s.units_prepped || 0}{s.oversized_units > 0 ? <span style={{ fontSize: 11, color: 'var(--orange)', marginLeft: 4 }}>+{s.oversized_units}OS</span> : null}</td>
+              <td className="mono">{s.units_prepped || 0}</td>
               <td className="mono">{s.box_count || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
