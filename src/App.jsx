@@ -1632,6 +1632,7 @@ function AdminDealsPage({ token, showToast }) {
                   <th>ROI</th>
                   <th>SPM</th>
                   <th>Code</th>
+                  <th>Notes</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -1653,6 +1654,7 @@ function AdminDealsPage({ token, showToast }) {
                     <td className="mono" style={{ color: 'var(--cyan)' }}>{fmtRoi(deal.roi)}%</td>
                     <td>{deal.spm || '—'}</td>
                     <td className="mono" style={{ color: 'var(--purple)' }}>{deal.code || '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 200 }}>{deal.notes || '—'}</td>
                     <td>{deal.is_published ? <span className="deals-badge">Published</span> : <span className="badge badge-pending">Draft</span>}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
