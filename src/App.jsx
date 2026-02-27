@@ -3065,103 +3065,73 @@ function AdminClientDeals({ client, token }) {
   );
 }
 
-function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefresh }) {
+function AdminClientPrep({ client, parcels: initialParcels, shipments: initialShipments, token, showToast, onRefresh }) {
+  const [localParcels, setLocalParcels] = useState(initialParcels);
+  const [localShipments, setLocalShipments] = useState(initialShipments);
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [showShipmentForm, setShowShipmentForm] = useState(false);
-  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" });
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
 
-  useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
+  useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
+  useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) })
+      .then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); });
+  }, []);
 
-  const sorted = sortByStatus(parcels);
-  const inbound = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status)).length;
+  const activeParcels = localParcels.filter(p => p.status !== "collected");
+  const completedParcels = localParcels.filter(p => p.status === "collected");
+  const preppedParcels = localParcels.filter(p => p.status === "prepped");
+  const sorted = sortByStatus(activeParcels);
+
+  const inboundUnits = localParcels.filter(p => ["in_transit","partial_delivery"].includes(p.status)).reduce((s,p)=>s+(parseInt(p.quantity)||0),0);
+  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const preppedUnits = preppedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const collectedUnits = completedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+
+  const now = new Date();
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const calcShipmentCost = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0)+(parseFloat(s.box_cost)||0)+(parseFloat(s.other_fees)||0);
+  const thisMonthTotal = localShipments.filter(s=>{ const d=new Date(s.date_shipped||s.created_at); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); }).reduce((s,x)=>s+calcShipmentCost(x),0);
+  const totalCharges = localShipments.reduce((s,x)=>s+calcShipmentCost(x),0);
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ status: item.status || "in_transit", admin_notes: item.admin_notes || "", needs_attention: item.needs_attention || false, attention_reason: item.attention_reason || "", qty_received: item.qty_received || "" });
+    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"" });
   };
 
   const saveEdit = async () => {
     setSaving(true);
-    const oldItem = parcels.find(p => p.id === editingId);
+    const oldItem = localParcels.find(p => p.id === editingId);
     await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
-    
+    // Immediately update UI
+    setLocalParcels(prev => prev.map(p => p.id === editingId ? { ...p, ...editData } : p));
     const clientWebhook = client.discord_webhook || webhookUrl;
     if (clientWebhook) {
-      if (editData.status === "delivered" && oldItem?.status !== "delivered") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "📬 DELIVERED TO WAREHOUSE",
-          color: 0x00e5ff,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "✅ PREPPED & READY",
-          color: 0x00c853,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.status === "collected" && oldItem?.status !== "collected") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "📦 COLLECTED",
-          color: 0x22c55e,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.needs_attention && !oldItem?.needs_attention) {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "⚠️ NEEDS ATTENTION",
-          color: 0xef4444,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Issue", value: editData.attention_reason || "Unknown", inline: true }
-          ],
-          description: editData.admin_notes || null,
-          footer: { text: client.full_name || client.email }
-        });
-      }
+      if (editData.status === "delivered" && oldItem?.status !== "delivered") await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (editData.status === "prepped" && oldItem?.status !== "prepped") await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (editData.status === "collected" && oldItem?.status !== "collected") await sendDiscordNotification(clientWebhook, null, { title: "📦 COLLECTED", color: 0x22c55e, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (editData.needs_attention && !oldItem?.needs_attention) await sendDiscordNotification(clientWebhook, null, { title: "⚠️ NEEDS ATTENTION", color: 0xef4444, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Issue", value: editData.attention_reason||"Unknown", inline: true }], description: editData.admin_notes||null, footer: { text: client.full_name||client.email } });
     }
-    showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
+    showToast("Saved!"); setEditingId(null); setSaving(false); onRefresh();
   };
 
-  const deleteParcel = async (id) => {
+  const deleteParcel = async id => {
     if (!confirm("Delete this parcel?")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    setLocalParcels(prev => prev.filter(p => p.id !== id));
     showToast("Deleted!"); onRefresh();
-  };
-
-  const calcShipmentTotal = (s) => {
-    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
-    const other = parseFloat(s.other_fees) || 0;
-    return units + boxes + other;
   };
 
   const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
-  const startEditShipment = (s) => {
+  const startEditShipment = s => {
     setEditingShipment(s.id);
-    const linkedParcels = parcels.filter(p => p.shipment_id === s.id).map(p => p.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
     setShowShipmentForm(true);
   };
 
@@ -3169,75 +3139,44 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
         await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(baseData) });
         shipId = editingShipment;
+        await fetch(`${SUPABASE_URL}/rest/v1/parcels?shipment_id=eq.${shipId}&user_id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: null, status: "prepped" }) });
       } else {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ ...baseData, user_id: client.id }) });
-        const data = await res.json();
-        shipId = data?.[0]?.id;
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch(e) { data = []; }
+        shipId = Array.isArray(data) ? data?.[0]?.id : data?.id;
       }
-      // Unlink any previously linked parcels
-      if (editingShipment) {
-        await fetch(`${SUPABASE_URL}/rest/v1/parcels?shipment_id=eq.${shipId}&user_id=eq.${client.id}`, { 
-          method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-          body: JSON.stringify({ shipment_id: null, status: "prepped" }) 
-        });
-      }
-      // Link selected parcels to shipment and set status to collected
-      if (shipmentForm.selected_parcels.length > 0 && shipId) {
+      if (shipmentForm.selected_parcels?.length > 0 && shipId) {
         const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
         for (const pid of shipmentForm.selected_parcels) {
-          await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, {
-            method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" },
-            body: JSON.stringify({ shipment_id: shipId, status: parcelStatus })
-          });
+          await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: shipId, status: parcelStatus }) });
         }
       }
-      showToast(editingShipment ? "Updated!" : "Shipment created!"); resetShipmentForm(); setShowShipmentForm(false); onRefresh();
-    } catch (e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
+      // Refresh local state immediately so UI updates without waiting for parent
+      const [freshShipments, freshParcels] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/shipments?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json())
+      ]);
+      if (Array.isArray(freshShipments)) setLocalShipments(freshShipments);
+      if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
+      showToast(editingShipment ? "Updated!" : "Shipment created!");
+      resetShipmentForm(); setShowShipmentForm(false); onRefresh();
+    } catch(e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
     setSaving(false);
   };
 
-  const deleteShipment = async (id) => {
+  const deleteShipment = async id => {
     if (!confirm("Delete shipment?")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    setLocalShipments(prev => prev.filter(s => s.id !== id));
     showToast("Deleted!"); onRefresh();
   };
-
-  // Calculate monthly charges from shipments
-  const now = new Date();
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  
-  const calcShipmentCost = (s) => {
-    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
-  };
-  
-  const thisMonthShipments = shipments.filter(s => {
-    const d = new Date(s.date_shipped || s.created_at);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  });
-  const thisMonthTotal = thisMonthShipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
-  
-  const totalCharges = shipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
-
-  // Calculate unit counts
-  const activeParcels = parcels.filter(p => p.status !== "collected");
-  const completedParcels = parcels.filter(p => p.status === "collected");
-  const inboundParcels = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status));
-  const inboundUnits = inboundParcels.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
-  const inWarehouseParcels = parcels.filter(p => p.status === "delivered");
-  const inWarehouseUnits = inWarehouseParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const preppedParcels = parcels.filter(p => p.status === "prepped");
-  const preppedUnits = preppedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const collectedUnits = completedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const sortedActive = sortByStatus(activeParcels);
 
   return (
     <>
@@ -3246,7 +3185,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inWarehouseUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{preppedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">Collected</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>{collectedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
-        <div className="card stat-card"><div className="card-title">{monthNames[currentMonth]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">{monthNames[now.getMonth()]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
@@ -3254,10 +3193,10 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
         </div>
-        {sortedActive.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
+        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
-          <tbody>{sortedActive.map(p => {
+          <tbody>{sorted.map(p => {
             const isEdit = editingId === p.id, data = isEdit ? editData : p;
             return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
@@ -3286,49 +3225,30 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         {showShipmentForm && (
           <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
-                <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Status</label>
-                <select className="input" value={shipmentForm.status || "ready_for_collection"} onChange={e => setShipmentForm({ ...shipmentForm, status: e.target.value })}>
-                  <option value="ready_for_collection">Ready for Collection</option>
-                  <option value="collected">Collected</option>
-                </select></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label>
-                <input className="input" type="date" value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
-                <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
-                <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes Used</label>
-                <input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
-                <input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label><input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Status</label><select className="input" value={shipmentForm.status} onChange={e => setShipmentForm({ ...shipmentForm, status: e.target.value })}><option value="ready_for_collection">Ready for Collection</option><option value="collected">Collected</option></select></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label><input className="input" type="date" style={{ colorScheme: "dark" }} value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label><input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label><input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes</label><input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label><input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
             </div>
-            {/* Parcel selector */}
             {preppedParcels.length > 0 && (
-              <div style={{ marginBottom: 16, marginTop: 16 }}>
-                <label className="input-label">Link Prepped Parcels to Shipment</label>
+              <div style={{ marginBottom: 16 }}>
+                <label className="input-label">Link Prepped Parcels</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
                   {preppedParcels.map(p => (
                     <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, background: shipmentForm.selected_parcels?.includes(p.id) ? 'rgba(0,230,118,0.08)' : 'transparent', border: shipmentForm.selected_parcels?.includes(p.id) ? '1px solid rgba(0,230,118,0.2)' : '1px solid transparent' }}>
-                      <input type="checkbox" checked={shipmentForm.selected_parcels?.includes(p.id) || false} onChange={e => {
-                        const sel = shipmentForm.selected_parcels || [];
-                        setShipmentForm({ ...shipmentForm, selected_parcels: e.target.checked ? [...sel, p.id] : sel.filter(id => id !== p.id) });
-                      }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.product_name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.qty_received || p.quantity} units · {p.asin || '—'}</div>
-                      </div>
+                      <input type="checkbox" checked={shipmentForm.selected_parcels?.includes(p.id) || false} onChange={e => { const sel = shipmentForm.selected_parcels || []; setShipmentForm({ ...shipmentForm, selected_parcels: e.target.checked ? [...sel, p.id] : sel.filter(id => id !== p.id) }); }} />
+                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{p.product_name}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.qty_received || p.quantity} units · {p.asin || '—'}</div></div>
                     </label>
                   ))}
                 </div>
-                {shipmentForm.selected_parcels?.length > 0 && (
-                  <div style={{ fontSize: 12, color: '#00e676', marginTop: 6, fontWeight: 600 }}>{shipmentForm.selected_parcels.length} parcel{shipmentForm.selected_parcels.length !== 1 ? 's' : ''} selected — {shipmentForm.selected_parcels.reduce((sum, id) => { const p = preppedParcels.find(pp => pp.id === id); return sum + (parseInt(p?.qty_received || p?.quantity) || 0); }, 0)} units</div>
-                )}
+                {shipmentForm.selected_parcels?.length > 0 && <div style={{ fontSize: 12, color: '#00e676', marginTop: 6, fontWeight: 600 }}>{shipmentForm.selected_parcels.length} parcel(s) selected</div>}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentTotal(shipmentForm).toFixed(2)}</span></div>
+              <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentCost(shipmentForm).toFixed(2)}</span></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setShowShipmentForm(false); resetShipmentForm(); }}>Cancel</button>
                 <button className="btn btn-primary btn-sm" onClick={saveShipment} disabled={saving || !shipmentForm.shipment_id}>{saving ? "Saving..." : editingShipment ? "Update" : "Create"}</button>
@@ -3337,29 +3257,27 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
           </div>
         )}
 
-        {shipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
+        {localShipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Shipment ID</th><th>Parcels</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
-          <tbody>{shipments.map(s => {
-            const linkedParcels = parcels.filter(p => p.shipment_id === s.id);
-            return (
-            <tr key={s.id}>
+          <tbody>{localShipments.map(s => {
+            const linked = localParcels.filter(p => p.shipment_id === s.id);
+            return <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
-              <td>{linkedParcels.length > 0 ? <div style={{ fontSize: 11 }}>{linkedParcels.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
+              <td>{linked.length > 0 ? <div style={{ fontSize: 11 }}>{linked.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
               <td className="mono">{s.units_prepped || 0}</td>
               <td className="mono">{s.box_count || 0}</td>
-              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentCost(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
               <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "collected" ? "collected" : "pending"}`}>{s.status === "ready_for_collection" ? "Ready" : s.status}</span></td>
               <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
-            </tr>
-          );})}</tbody>
+            </tr>;
+          })}</tbody>
         </table></div>}
       </div>
 
-      {/* Completed Section */}
       {completedParcels.length > 0 && (
-        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(0,230,118,0.15)', background: 'rgba(0,230,118,0.02)' }}>
+        <div className="card" style={{ marginTop: 24, borderColor: 'rgba(0,230,118,0.15)', background: 'rgba(0,230,118,0.02)' }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div className="card-title" style={{ margin: 0, color: '#00e676' }}>✓ Completed ({completedParcels.length})</div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{collectedUnits} units collected</div>
@@ -3367,16 +3285,14 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
           <div className="table-wrap"><table>
             <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>Units</th><th>Shipment</th></tr></thead>
             <tbody>{completedParcels.map(p => {
-              const linkedShipment = shipments.find(s => s.id === p.shipment_id);
-              return (
-                <tr key={p.id} style={{ opacity: 0.7 }}>
-                  <td style={{ fontSize: 12 }}>{formatShortDate(p.created_at)}</td>
-                  <td style={{ fontWeight: 600 }}>{p.product_name}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{p.asin || '—'}</td>
-                  <td className="mono">{p.qty_received || p.quantity}</td>
-                  <td className="mono" style={{ fontSize: 12, color: 'var(--cyan)' }}>{linkedShipment?.shipment_id || '—'}</td>
-                </tr>
-              );
+              const linked = localShipments.find(s => s.id === p.shipment_id);
+              return <tr key={p.id} style={{ opacity: 0.7 }}>
+                <td style={{ fontSize: 12 }}>{formatShortDate(p.created_at)}</td>
+                <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{p.asin || '—'}</td>
+                <td className="mono">{p.qty_received || p.quantity}</td>
+                <td className="mono" style={{ fontSize: 12, color: 'var(--cyan)' }}>{linked?.shipment_id || '—'}</td>
+              </tr>;
             })}</tbody>
           </table></div>
         </div>
@@ -3384,6 +3300,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     </>
   );
 }
+
 
 // Admin - Client Liquidation Tab
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
