@@ -379,7 +379,7 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
   });
   const thisMonthTotal = thisMonthShipments.reduce((sum, s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+    return sum + units + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees) || 0);
   }, 0);
   const thisMonthUnits = thisMonthShipments.reduce((sum, s) => sum + (parseInt(s.units_prepped) || 0), 0);
   
@@ -548,7 +548,7 @@ function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token 
   
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -1927,7 +1927,7 @@ function AdminShipmentsPage({ token, showToast }) {
 
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -2122,7 +2122,7 @@ function ProfilePage({ dbProfile }) {
 function ClientShipmentsPage({ shipments }) {
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -2671,7 +2671,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     shipments.forEach(s => {
       const d = new Date(s.date_shipped || s.created_at);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const cost = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0) + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+      const cost = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees) || 0);
       totals[key] = (totals[key] || 0) + cost;
     });
     return totals;
@@ -3095,7 +3095,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const now = new Date();
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const calcShipmentCost = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0)+(parseFloat(s.box_cost)||0)+(parseFloat(s.other_fees)||0);
+  const calcShipmentCost = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0)+(parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0)+(parseFloat(s.other_fees)||0);
   const thisMonthTotal = localShipments.filter(s=>{ const d=new Date(s.date_shipped||s.created_at); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); }).reduce((s,x)=>s+calcShipmentCost(x),0);
   const totalCharges = localShipments.reduce((s,x)=>s+calcShipmentCost(x),0);
 
