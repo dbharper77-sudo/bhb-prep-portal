@@ -1427,6 +1427,7 @@ function DealsInvoiceDetailsPage({ token, dbProfile, onRefresh, showToast }) {
 
 // Admin Deals Management Page
 function AdminDealsPage({ token, showToast }) {
+  const fmtRoi = (val) => { const n = parseFloat(val || 0); return n > 0 && n < 3 ? (n*100).toFixed(0) : n.toFixed(0); };
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
