@@ -1650,7 +1650,7 @@ function AdminDealsPage({ token, showToast }) {
                     <td className="mono">{formatCurrency(deal.cost_price)}</td>
                     <td className="mono">{formatCurrency(deal.sale_price)}</td>
                     <td className="mono" style={{ color: '#00e676', fontWeight: 600 }}>{formatCurrency(deal.profit)}</td>
-                    <td className="mono" style={{ color: 'var(--cyan)' }}>{deal.roi}%</td>
+                    <td className="mono" style={{ color: 'var(--cyan)' }}>{fmtRoi(deal.roi)}%</td>
                     <td>{deal.spm || '—'}</td>
                     <td className="mono" style={{ color: 'var(--purple)' }}>{deal.code || '—'}</td>
                     <td>{deal.is_published ? <span className="deals-badge">Published</span> : <span className="badge badge-pending">Draft</span>}</td>
