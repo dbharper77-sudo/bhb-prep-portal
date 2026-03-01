@@ -2989,20 +2989,21 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                           Replace
                           <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
                             const file = e.target.files[0]; if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                              const base64 = reader.result.split(',')[1];
-                              const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${client.id}/${inv.invoice_number}.pdf`, {
-                                method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/pdf", "x-upsert": "true" },
-                                body: Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+                            const path = `${client.id}/${inv.invoice_number}.pdf`;
+                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                              body: file
+                            });
+                            if (uploadRes.ok) {
+                              const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/invoices/${path}`, {
+                                method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                                body: JSON.stringify({ expiresIn: 31536000 })
                               });
-                              if (uploadRes.ok) {
-                                const url = `${SUPABASE_URL}/storage/v1/object/public/invoices/${client.id}/${inv.invoice_number}.pdf`;
-                                await updateInvoice(inv.id, { invoice_url: url });
-                                showToast("PDF uploaded!");
-                              } else { showToast("Upload failed — check storage bucket exists"); }
-                            };
-                            reader.readAsDataURL(file);
+                              const signData = await signRes.json();
+                              const url = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+                              await updateInvoice(inv.id, { invoice_url: url });
+                              showToast("PDF uploaded!");
+                            } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                           }} />
                         </label>
                       </div>
@@ -3011,20 +3012,21 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                         📎 Upload PDF
                         <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
                           const file = e.target.files[0]; if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = async () => {
-                            const base64 = reader.result.split(',')[1];
-                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${client.id}/${inv.invoice_number}.pdf`, {
-                              method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/pdf", "x-upsert": "true" },
-                              body: Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+                          const path = `${client.id}/${inv.invoice_number}.pdf`;
+                          const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${path}`, {
+                            method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                            body: file
+                          });
+                          if (uploadRes.ok) {
+                            const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({ expiresIn: 31536000 })
                             });
-                            if (uploadRes.ok) {
-                              const url = `${SUPABASE_URL}/storage/v1/object/public/invoices/${client.id}/${inv.invoice_number}.pdf`;
-                              await updateInvoice(inv.id, { invoice_url: url });
-                              showToast("PDF uploaded!");
-                            } else { showToast("Upload failed — check storage bucket exists"); }
-                          };
-                          reader.readAsDataURL(file);
+                            const signData = await signRes.json();
+                            const url = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+                            await updateInvoice(inv.id, { invoice_url: url });
+                            showToast("PDF uploaded!");
+                          } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                         }} />
                       </label>
                     )}
