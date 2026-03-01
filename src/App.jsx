@@ -2705,13 +2705,13 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     }
   };
 
-  const updateInvoice = async (id, updates) => {
+  const updateInvoice = async (id, updates, silent = false) => {
     await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, { 
       method: "PATCH", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
       body: JSON.stringify(updates) 
     });
-    showToast("Invoice updated!");
+    if (!silent) showToast("Invoice updated!");
     const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
     setInvoices(Array.isArray(inv) ? inv : []);
     setEditingInvoice(null);
@@ -3001,8 +3001,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                               });
                               const signData = await signRes.json();
                               const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
-                              await updateInvoice(inv.id, { invoice_url: url });
-                              showToast("PDF uploaded!");
+                              console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                             } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                           }} />
                         </label>
@@ -3024,8 +3023,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                             });
                             const signData = await signRes.json();
                             const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
-                            await updateInvoice(inv.id, { invoice_url: url });
-                            showToast("PDF uploaded!");
+                            console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                           } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                         }} />
                       </label>
