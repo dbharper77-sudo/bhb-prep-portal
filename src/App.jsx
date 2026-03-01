@@ -2691,7 +2691,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     const res = await fetch(`${SUPABASE_URL}/rest/v1/invoices`, { 
       method: "POST", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
-      body: JSON.stringify({ user_id: client.id, period_month: month + 1, period_year: year, amount, status: "pending" }) 
+      body: JSON.stringify({ user_id: client.id, period_month: month + 1, period_year: year, amount, status: "pending", invoice_number: `INV-${year}${String(month + 1).padStart(2,'0')}-${Date.now().toString().slice(-4)}` }) 
     });
     if (res.ok) {
       showToast("Invoice created!");
