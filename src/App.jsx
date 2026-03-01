@@ -2914,23 +2914,32 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div className="card-title" style={{ margin: 0 }}>Generate Invoice</div>
-            </div>
-            {getUninvoicedMonths().length === 0 ? (
-              <div style={{ color: "var(--text-muted)", marginBottom: 12 }}>No past months to invoice</div>
-            ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {getUninvoicedMonths().map(({ month, year, amount }) => (
-                  <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin" onClick={() => generateInvoice(month, year)}>
-                    {monthNames[month]} {year} — £{amount.toFixed(2)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Or create manual invoice:</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div className="card-title">Generate Invoice</div>
+            {(() => {
+              const totals = getMonthlyTotals();
+              const now = new Date();
+              // Build last 6 months
+              const months = [];
+              for (let i = 1; i <= 6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const m = d.getMonth(), y = d.getFullYear();
+                const key = `${y}-${m}`;
+                months.push({ month: m, year: y, amount: totals[key] || 0 });
+              }
+              return (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                  {months.map(({ month, year, amount }) => (
+                    <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin"
+                      onClick={() => { setManualMonth(month); setManualYear(year); setManualAmount(amount.toFixed(2)); }}>
+                      {monthNames[month]} {year} — £{amount.toFixed(2)}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>Click a month above to pre-fill, or enter manually:</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Month</label>
                   <select className="input" value={manualMonth} onChange={e => setManualMonth(parseInt(e.target.value))}>
@@ -2943,12 +2952,12 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 </div>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Amount (£)</label>
-                  <input className="input" type="number" step="0.01" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="0.00" style={{ width: 100 }} />
+                  <input className="input" type="number" step="0.01" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="0.00" style={{ width: 110 }} />
                 </div>
-                <button className="btn btn-sm admin" onClick={() => {
+                <button className="btn btn-primary admin" onClick={() => {
                   const amt = parseFloat(manualAmount) || 0;
                   if (amt > 0) generateInvoice(manualMonth, manualYear, amt);
-                }}>Create</button>
+                }} disabled={!manualAmount || parseFloat(manualAmount) <= 0}>Create Invoice</button>
               </div>
             </div>
           </div>
@@ -2958,33 +2967,66 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
             {loadingInvoices ? <div style={{ color: "var(--text-muted)" }}>Loading...</div> :
              invoices.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No invoices yet</div> :
              <div className="table-wrap"><table>
-              <thead><tr><th>Period</th><th>Amount</th><th>Status</th><th>Invoice URL</th><th></th></tr></thead>
+              <thead><tr><th>Period</th><th>Ref</th><th>Amount</th><th>Status</th><th>PDF Invoice</th><th></th></tr></thead>
               <tbody>{invoices.map(inv => (
                 <tr key={inv.id}>
                   <td style={{ fontWeight: 600 }}>{monthNames[inv.period_month - 1]} {inv.period_year}</td>
+                  <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{inv.invoice_number}</td>
                   <td style={{ fontWeight: 700, color: "var(--amber)" }}>£{parseFloat(inv.amount).toFixed(2)}</td>
                   <td>
-                    <select 
-                      className="inline-select" 
-                      value={inv.status} 
-                      onChange={e => updateInvoice(inv.id, { status: e.target.value, paid_at: e.target.value === "paid" ? new Date().toISOString() : null })}
-                    >
+                    <select className="inline-select" value={inv.status}
+                      onChange={e => updateInvoice(inv.id, { status: e.target.value, paid_at: e.target.value === "paid" ? new Date().toISOString() : null })}>
                       <option value="pending">Pending</option>
                       <option value="paid">Paid</option>
                       <option value="overdue">Overdue</option>
                     </select>
                   </td>
                   <td>
-                    {editingInvoice === inv.id ? (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <input className="inline-input" placeholder="https://..." value={invoiceUrl} onChange={e => setInvoiceUrl(e.target.value)} style={{ width: 200 }} />
-                        <button className="btn-icon" onClick={() => updateInvoice(inv.id, { invoice_url: invoiceUrl })}><Icons.Save /></button>
-                        <button className="btn-icon btn-danger" onClick={() => { setEditingInvoice(null); setInvoiceUrl(""); }}><Icons.X /></button>
+                    {inv.invoice_url ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
+                        <label style={{ cursor: "pointer", fontSize: 12, color: "var(--text-muted)", textDecoration: "underline" }}>
+                          Replace
+                          <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = async () => {
+                              const base64 = reader.result.split(',')[1];
+                              const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${client.id}/${inv.invoice_number}.pdf`, {
+                                method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/pdf", "x-upsert": "true" },
+                                body: Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+                              });
+                              if (uploadRes.ok) {
+                                const url = `${SUPABASE_URL}/storage/v1/object/public/invoices/${client.id}/${inv.invoice_number}.pdf`;
+                                await updateInvoice(inv.id, { invoice_url: url });
+                                showToast("PDF uploaded!");
+                              } else { showToast("Upload failed — check storage bucket exists"); }
+                            };
+                            reader.readAsDataURL(file);
+                          }} />
+                        </label>
                       </div>
-                    ) : inv.invoice_url ? (
-                      <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>View Invoice</a>
                     ) : (
-                      <button className="btn btn-sm" onClick={() => { setEditingInvoice(inv.id); setInvoiceUrl(inv.invoice_url || ""); }}>Add URL</button>
+                      <label style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+                        📎 Upload PDF
+                        <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                          const file = e.target.files[0]; if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = async () => {
+                            const base64 = reader.result.split(',')[1];
+                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${client.id}/${inv.invoice_number}.pdf`, {
+                              method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/pdf", "x-upsert": "true" },
+                              body: Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+                            });
+                            if (uploadRes.ok) {
+                              const url = `${SUPABASE_URL}/storage/v1/object/public/invoices/${client.id}/${inv.invoice_number}.pdf`;
+                              await updateInvoice(inv.id, { invoice_url: url });
+                              showToast("PDF uploaded!");
+                            } else { showToast("Upload failed — check storage bucket exists"); }
+                          };
+                          reader.readAsDataURL(file);
+                        }} />
+                      </label>
                     )}
                   </td>
                   <td>
