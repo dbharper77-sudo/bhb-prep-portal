@@ -3000,7 +3000,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                                 body: JSON.stringify({ expiresIn: 31536000 })
                               });
                               const signData = await signRes.json();
-                              const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
+                              console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}/storage/v1${rawUrl}`; 
                               console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                             } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                           }} />
@@ -3022,7 +3022,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                               body: JSON.stringify({ expiresIn: 31536000 })
                             });
                             const signData = await signRes.json();
-                            const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
+                            console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}/storage/v1${rawUrl}`; 
                             console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                           } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                         }} />
