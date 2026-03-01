@@ -3000,7 +3000,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                                 body: JSON.stringify({ expiresIn: 31536000 })
                               });
                               const signData = await signRes.json();
-                              const url = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+                              const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
                               await updateInvoice(inv.id, { invoice_url: url });
                               showToast("PDF uploaded!");
                             } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
@@ -3023,7 +3023,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                               body: JSON.stringify({ expiresIn: 31536000 })
                             });
                             const signData = await signRes.json();
-                            const url = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+                            const url = `${SUPABASE_URL}/storage/v1${signData.signedUrl}`;
                             await updateInvoice(inv.id, { invoice_url: url });
                             showToast("PDF uploaded!");
                           } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
