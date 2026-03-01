@@ -2576,6 +2576,9 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState("");
   const [editingInvoice, setEditingInvoice] = useState(null);
+  const [manualMonth, setManualMonth] = useState(new Date().getMonth());
+  const [manualYear, setManualYear] = useState(new Date().getFullYear());
+  const [manualAmount, setManualAmount] = useState("");
   
   // Custom pricing
   const [pricing, setPricing] = useState({
@@ -2680,10 +2683,10 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     return totals;
   };
 
-  const generateInvoice = async (month, year, manualAmount = null) => {
+  const generateInvoice = async (month, year, manualAmt = null) => {
     const totals = getMonthlyTotals();
     const key = `${year}-${month}`;
-    const amount = manualAmount !== null ? manualAmount : (totals[key] || 0);
+    const amount = manualAmt !== null ? manualAmt : (totals[key] || 0);
     
     const res = await fetch(`${SUPABASE_URL}/rest/v1/invoices`, { 
       method: "POST", 
@@ -2692,11 +2695,13 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     });
     if (res.ok) {
       showToast("Invoice created!");
-      // Reload invoices
+      setManualAmount("");
       const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
       setInvoices(Array.isArray(inv) ? inv : []);
     } else {
-      showToast("Error creating invoice");
+      const errText = await res.text();
+      console.error("Invoice create error:", res.status, errText);
+      showToast("Error: " + (JSON.parse(errText)?.message || res.status));
     }
   };
 
@@ -2928,23 +2933,21 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Month</label>
-                  <select className="input" id="manualMonth" defaultValue={new Date().getMonth()}>
+                  <select className="input" value={manualMonth} onChange={e => setManualMonth(parseInt(e.target.value))}>
                     {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
                   </select>
                 </div>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Year</label>
-                  <input className="input" type="number" id="manualYear" defaultValue={new Date().getFullYear()} style={{ width: 80 }} />
+                  <input className="input" type="number" value={manualYear} onChange={e => setManualYear(parseInt(e.target.value))} style={{ width: 80 }} />
                 </div>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Amount (£)</label>
-                  <input className="input" type="number" step="0.01" id="manualAmount" placeholder="0.00" style={{ width: 100 }} />
+                  <input className="input" type="number" step="0.01" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="0.00" style={{ width: 100 }} />
                 </div>
                 <button className="btn btn-sm admin" onClick={() => {
-                  const month = parseInt(document.getElementById("manualMonth").value);
-                  const year = parseInt(document.getElementById("manualYear").value);
-                  const amount = parseFloat(document.getElementById("manualAmount").value) || 0;
-                  if (amount > 0) generateInvoice(month, year, amount);
+                  const amt = parseFloat(manualAmount) || 0;
+                  if (amt > 0) generateInvoice(manualMonth, manualYear, amt);
                 }}>Create</button>
               </div>
             </div>
