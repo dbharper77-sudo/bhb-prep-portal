@@ -2990,12 +2990,12 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                           <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
                             const file = e.target.files[0]; if (!file) return;
                             const path = `${client.id}/${inv.invoice_number}.pdf`;
-                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${path}`, {
+                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
                               method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
                               body: file
                             });
                             if (uploadRes.ok) {
-                              const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/invoices/${path}`, {
+                              const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
                                 method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
                                 body: JSON.stringify({ expiresIn: 31536000 })
                               });
@@ -3013,12 +3013,12 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                         <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
                           const file = e.target.files[0]; if (!file) return;
                           const path = `${client.id}/${inv.invoice_number}.pdf`;
-                          const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/invoices/${path}`, {
+                          const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
                             method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
                             body: file
                           });
                           if (uploadRes.ok) {
-                            const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/invoices/${path}`, {
+                            const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
                               method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
                               body: JSON.stringify({ expiresIn: 31536000 })
                             });
