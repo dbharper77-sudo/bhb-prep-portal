@@ -1830,7 +1830,7 @@ function AdminLiquidationPage({ token, showToast }) {
   const saveEdit = async () => {
     setSaving(true);
     const oldItem = items.find(i => i.id === editingId);
-    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null, date_sold: editData.date_sold || null };
+    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null, date_sold: editData.date_sold || null, quantity: parseInt(editData.quantity) || 1 };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
@@ -1864,8 +1864,9 @@ function AdminLiquidationPage({ token, showToast }) {
     <div className="page-body">
       {!selectedClient && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16, marginBottom: 24 }}>{clients.map(c => { const ci = items.filter(i => i.user_id === c.id); const pending = ci.filter(i => !i.sale_price).length; return <div key={c.id} className="client-card" onClick={() => setSelectedClient(c)}><div style={{ fontWeight: 700 }}>{c.full_name || "No Name"}</div><div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div><div style={{ marginTop: 8, fontSize: 13 }}>Pending: <span style={{ fontWeight: 700, color: "var(--orange)" }}>{pending}</span> • Total: {ci.length}</div></div>; })}</div>}
       {clientItems.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items.</p></div> :
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table style={{ minWidth: 1100 }}>
-        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Payout Date</th><th>Paid</th><th></th></tr></thead>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+        <colgroup><col style={{width:"22%"}}/><col style={{width:"8%"}}/><col style={{width:"5%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/><col style={{width:"9%"}}/><col style={{width:"10%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/></colgroup>
+        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
         <tbody>{clientItems.map(item => {
           const client = clients.find(c => c.id === item.user_id);
           const isEdit = editingId === item.id, data = isEdit ? editData : item;
@@ -1879,10 +1880,9 @@ function AdminLiquidationPage({ token, showToast }) {
             <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
             <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
-            <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
+            <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 100, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
             <td>{isEdit ? <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11 }}><input type="number" step="0.01" className="inline-input" style={{ width: 60 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 60 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
             <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
-            <td style={{ fontSize: 12 }}>{pd ? formatDate(pd) : "—"}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
             <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>}</td>
           </tr>;
@@ -3377,7 +3377,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, 
       ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, 
       shipping: editData.shipping ? parseFloat(editData.shipping) : null,
-      date_sold: editData.date_sold || null
+      date_sold: editData.date_sold || null,
+      quantity: parseInt(editData.quantity) || 1
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
@@ -3412,8 +3413,9 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
-        <div className="table-wrap"><table style={{ minWidth: 1000 }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Payout Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+        <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+          <colgroup><col style={{width:"22%"}}/><col style={{width:"8%"}}/><col style={{width:"5%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/><col style={{width:"9%"}}/><col style={{width:"10%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/></colgroup>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
           <tbody>{liquidation.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
@@ -3425,8 +3427,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
-              <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
-              <td style={{ fontSize: 12 }}>{pd ? formatDate(pd) : "—"}</td>
+              <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 100, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
               <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
               <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
