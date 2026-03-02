@@ -1824,7 +1824,7 @@ function AdminLiquidationPage({ token, showToast }) {
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", fee_prep: item.fee_prep || false, fee_bundle: item.fee_bundle || false, fee_oversize: item.fee_oversize || false, paid: item.paid || false });
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", fee_prep: item.fee_prep || false, fee_bundle: item.fee_bundle || false, fee_oversize: item.fee_oversize || false, paid: item.paid || false, quantity: item.quantity || 1 });
   };
 
   const saveEdit = async () => {
@@ -1865,7 +1865,7 @@ function AdminLiquidationPage({ token, showToast }) {
       {!selectedClient && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16, marginBottom: 24 }}>{clients.map(c => { const ci = items.filter(i => i.user_id === c.id); const pending = ci.filter(i => !i.sale_price).length; return <div key={c.id} className="client-card" onClick={() => setSelectedClient(c)}><div style={{ fontWeight: 700 }}>{c.full_name || "No Name"}</div><div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div><div style={{ marginTop: 8, fontSize: 13 }}>Pending: <span style={{ fontWeight: 700, color: "var(--orange)" }}>{pending}</span> • Total: {ci.length}</div></div>; })}</div>}
       {clientItems.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items.</p></div> :
       <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table style={{ minWidth: 1100 }}>
-        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Payout Date</th><th>Paid</th><th></th></tr></thead>
+        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Payout Date</th><th>Paid</th><th></th></tr></thead>
         <tbody>{clientItems.map(item => {
           const client = clients.find(c => c.id === item.user_id);
           const isEdit = editingId === item.id, data = isEdit ? editData : item;
@@ -1875,6 +1875,7 @@ function AdminLiquidationPage({ token, showToast }) {
             {!selectedClient && <td style={{ fontSize: 13 }}>{client?.full_name || "—"}</td>}
             <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
             <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
+            <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
             <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
             <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
@@ -3000,7 +3001,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                                 body: JSON.stringify({ expiresIn: 31536000 })
                               });
                               const signData = await signRes.json();
-                              console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}/storage/v1${rawUrl}`; 
+                              console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
                               console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                             } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                           }} />
@@ -3022,7 +3023,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                               body: JSON.stringify({ expiresIn: 31536000 })
                             });
                             const signData = await signRes.json();
-                            console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}/storage/v1${rawUrl}`; 
+                            console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
                             console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
                           } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
                         }} />
@@ -3365,7 +3366,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false });
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false, quantity: item.quantity || 1 });
   };
 
   const saveEdit = async () => {
@@ -3412,7 +3413,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
         <div className="table-wrap"><table style={{ minWidth: 1000 }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Payout Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Payout Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
           <tbody>{liquidation.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
@@ -3420,6 +3421,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
+              <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
