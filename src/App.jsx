@@ -693,7 +693,7 @@ function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast 
   const [saving, setSaving] = useState(false);
   const filtered = liquidationStock.filter(s => { if (filter === "all") return true; if (filter === "pending") return !s.sale_price; if (filter === "sold") return s.sale_price && !s.paid; if (filter === "paid") return s.paid; return true; });
   const startEdit = item => { setEditingId(item.id); setEditData({ removal_order_id: item.removal_order_id || "", product_name: item.product_name || "", asin: item.asin || "", sku: item.sku || "", purchase_price: item.purchase_price || "", quantity: item.quantity || 1, cog: item.cog || "" }); };
-  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.purchase_price ? parseFloat(editData.purchase_price) : null, cog: editData.cog ? parseFloat(editData.cog) : null, quantity: parseInt(editData.quantity) || 1 }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
+  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.purchase_price ? parseFloat(editData.purchase_price) : null, cog: editData.cog ? parseFloat(editData.cog) : null, quantity: parseInt(editData.quantity) || 1 }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
   const deleteItem = async id => { if (!confirm("Delete?")) return; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); showToast("Deleted!"); onRefresh(); };
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
@@ -3384,7 +3384,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       cog: editData.cog ? parseFloat(editData.cog) : null
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
