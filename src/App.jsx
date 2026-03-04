@@ -692,8 +692,8 @@ function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast 
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const filtered = liquidationStock.filter(s => { if (filter === "all") return true; if (filter === "pending") return !s.sale_price; if (filter === "sold") return s.sale_price && !s.paid; if (filter === "paid") return s.paid; return true; });
-  const startEdit = item => { setEditingId(item.id); setEditData({ removal_order_id: item.removal_order_id || "", product_name: item.product_name || "", asin: item.asin || "", sku: item.sku || "", purchase_price: item.purchase_price || "", quantity: item.quantity || 1, cog: item.cog || "" }); };
-  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.purchase_price ? parseFloat(editData.purchase_price) : null, cog: editData.cog ? parseFloat(editData.cog) : null, quantity: parseInt(editData.quantity) || 1 }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
+  const startEdit = item => { setEditingId(item.id); setEditData({ removal_order_id: item.removal_order_id || "", product_name: item.product_name || "", asin: item.asin || "", sku: item.sku || "", purchase_price: item.purchase_price || "", quantity: item.quantity || 1, cog: item.cog || item.purchase_price || "" }); };
+  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.cog ? parseFloat(editData.cog) : null, cog: editData.cog ? parseFloat(editData.cog) : null, quantity: parseInt(editData.quantity) || 1 }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
   const deleteItem = async id => { if (!confirm("Delete?")) return; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); showToast("Deleted!"); onRefresh(); };
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
@@ -701,7 +701,7 @@ function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast 
       <div style={{ marginBottom: 20 }}><select className="input" style={{ width: "auto", minWidth: 160 }} value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All Items</option><option value="pending">Pending Sale</option><option value="sold">Sold - Awaiting Payout</option><option value="paid">Paid</option></select></div>
       {filtered.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items found.</p></div> :
       <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty</th><th>COG (£)</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty</th><th>What You Paid</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
         <tbody>{filtered.map(s => {
           const c = calculatePayout(s), pd = getPayoutDate(s.date_sold), isEdit = editingId === s.id, data = isEdit ? editData : s;
           return <tr key={s.id} className={isEdit ? "edit-row" : ""}>
@@ -711,7 +711,7 @@ function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast 
             <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
             <td className="mono">{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span>{s.quantity || 1}</span>}</td>
             <td className="mono">{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} placeholder="0.00" value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—")}</td>
-            <td className="mono">{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.purchase_price} onChange={e => setEditData({ ...editData, purchase_price: e.target.value })} /> : (s.purchase_price ? `£${parseFloat(s.purchase_price).toFixed(2)}` : "—")}</td>
+
             <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
             <td className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{s.sale_price ? `£${c.totalFees.toFixed(2)}` : "—"}</td>
             <td className="mono" style={{ fontWeight: 700, color: s.sale_price ? "var(--green)" : "var(--text-muted)" }}>{s.sale_price ? `£${c.payout.toFixed(2)}` : "—"}</td>
