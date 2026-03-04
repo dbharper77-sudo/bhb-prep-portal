@@ -3384,7 +3384,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       cog: editData.cog ? parseFloat(editData.cog) : null
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
+    const patchText = await patchRes.text(); console.log("PATCH status:", patchRes.status, "body:", patchText, "token:", token?.slice(0,20), "key:", SUPABASE_ANON_KEY?.slice(0,20));
     if (dataToSave.date_sold && !oldItem?.date_sold) {
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
