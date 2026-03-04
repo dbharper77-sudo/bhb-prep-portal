@@ -3374,13 +3374,14 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const saveEdit = async () => {
     setSaving(true);
     const oldItem = liquidation.find(i => i.id === editingId);
-    const { quantity: _q, cog: _c, ...editDataClean } = editData;
     const dataToSave = { 
-      ...editDataClean, 
+      ...editData, 
       sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, 
       ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, 
       shipping: editData.shipping ? parseFloat(editData.shipping) : null,
-      date_sold: editData.date_sold || null
+      date_sold: editData.date_sold || null,
+      quantity: parseInt(editData.quantity) || 1,
+      cog: editData.cog ? parseFloat(editData.cog) : null
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
