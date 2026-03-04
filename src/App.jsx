@@ -671,7 +671,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   const update = f => e => setForm({ ...form, [f]: e.target.value });
   const handleSubmit = async () => {
     if (!form.product_name) return; setSaving(true);
-    await supabase.from("liquidation_stock", token).insert({ ...form, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
+    await supabase.from("liquidation_stock", token).insert({ ...form, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
     showToast("Stock submitted!"); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "" }); onRefresh(); setSaving(false);
   };
   return (
@@ -680,7 +680,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
       <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">SKU</label><input className="input" value={form.sku} onChange={update("sku")} /></div></div>
-      <div className="input-group"><label className="input-label">Purchase Price (£)</label><input className="input" type="number" step="0.01" placeholder="What you paid" value={form.purchase_price} onChange={update("purchase_price")} /></div>
+      <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
       <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
     </div></div></>
   );
