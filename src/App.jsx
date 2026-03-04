@@ -3418,7 +3418,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
         {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
           <colgroup><col style={{width:"22%"}}/><col style={{width:"8%"}}/><col style={{width:"5%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/><col style={{width:"9%"}}/><col style={{width:"10%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/></colgroup>
-          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
           <tbody>{liquidation.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
