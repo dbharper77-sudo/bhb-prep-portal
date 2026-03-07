@@ -3368,7 +3368,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false, quantity: item.quantity || 1, cog: item.cog || "" });
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false, quantity: item.quantity || 1, cog: item.cog || "", received: item.received || false });
   };
 
   const saveEdit = async () => {
@@ -3381,7 +3381,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       shipping: editData.shipping ? parseFloat(editData.shipping) : null,
       date_sold: editData.date_sold || null,
       quantity: parseInt(editData.quantity) || 1,
-      cog: editData.cog ? parseFloat(editData.cog) : null
+      cog: editData.cog ? parseFloat(editData.cog) : null,
+      received: editData.received || false
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
@@ -3418,13 +3419,14 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
         {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
           <colgroup><col style={{width:"22%"}}/><col style={{width:"8%"}}/><col style={{width:"5%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/><col style={{width:"9%"}}/><col style={{width:"10%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/></colgroup>
-          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>Status</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
           <tbody>{liquidation.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
             const pd = getPayoutDate(data.date_sold);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
+              <td>{isEdit ? <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}><input type="checkbox" checked={data.received} onChange={e => setEditData({ ...editData, received: e.target.checked })} /> Received</label> : (item.received ? <span style={{ color: "var(--green)", fontSize: 12, fontWeight: 600 }}>✓ Received</span> : <span style={{ color: "var(--amber)", fontSize: 12 }}>⏳ In Transit</span>)}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} placeholder="0.00" value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
