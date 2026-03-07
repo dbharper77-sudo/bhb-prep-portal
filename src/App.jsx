@@ -3415,6 +3415,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ qty_sold: newQtySold })
     });
+    const hw = client.discord_webhook || webhookUrl;
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
     showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
     await loadSales(); onRefresh();
   };
@@ -3502,7 +3504,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
-                    <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) }); onRefresh(); }}>✓ Received</button>
+                    <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "📦 STOCK RECEIVED", color: 0x00b8d4, fields: [{ name: "Product", value: item.product_name, inline: true }, { name: "Qty", value: `${item.quantity || 1}`, inline: true }], footer: { text: "Your stock has arrived and is ready to list" } }); showToast("Marked received!"); onRefresh(); }}>✓ Received</button>
                   </div>}
               </td>
             </tr>;
@@ -3559,7 +3561,12 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
-              <td style={{ textAlign: "center" }}>{s.paid ? <span style={{ color: "var(--green)" }}>✓</span> : <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--green)", color: "var(--green)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) }); loadSales(); showToast("Marked paid!"); }}>Mark Paid</button>}</td>
+              <td style={{ textAlign: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+                  {s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--green)", color: "var(--green)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) }); loadSales(); showToast("Marked paid!"); }}>Mark Paid</button>}
+                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: stockItem?.product_name || "Unknown", inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
+                </div>
+              </td>
             </tr>;
           })}</tbody>
         </table></div>}
