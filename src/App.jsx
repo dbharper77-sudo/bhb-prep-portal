@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback } from "react";
 
 const SUPABASE_URL = "https://cccsreyspmpwnfbmegwz.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjY3NyZXlzcG1wd25mYm1lZ3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMDk4MzQsImV4cCI6MjA4NTg4NTgzNH0.dk5dPqk7EXBxHZHOX6_mxNxpheNuHD4SAKGDorCuSa8";
