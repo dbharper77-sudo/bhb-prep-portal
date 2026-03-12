@@ -2489,12 +2489,47 @@ function AdminPortal() {
 // Admin - All Clients List
 function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
-  
-  const filteredClients = clients.filter(c => 
+  const [clientOrder, setClientOrder] = useState(() => {
+    try { const saved = sessionStorage.getItem("bhb_client_order"); return saved ? JSON.parse(saved) : []; } catch { return []; }
+  });
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+
+  const sortedClients = React.useMemo(() => {
+    if (!clientOrder.length) return [...clients];
+    const ordered = [...clients].sort((a, b) => {
+      const ai = clientOrder.indexOf(a.id), bi = clientOrder.indexOf(b.id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return ordered;
+  }, [clients, clientOrder]);
+
+  const filteredClients = sortedClients.filter(c => 
     c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     c.email?.toLowerCase().includes(search.toLowerCase()) ||
     c.company_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
+  const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const currentOrder = clientOrder.length ? [...clientOrder] : sortedClients.map(c => c.id);
+    const fromIdx = currentOrder.indexOf(dragId);
+    const toIdx = currentOrder.indexOf(targetId);
+    const newOrder = [...currentOrder];
+    if (fromIdx === -1 || toIdx === -1) { setDragId(null); setDragOverId(null); return; }
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, dragId);
+    setClientOrder(newOrder);
+    try { sessionStorage.setItem("bhb_client_order", JSON.stringify(newOrder)); } catch {}
+    setDragId(null); setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   const deleteClient = async (e, clientId) => {
     e.stopPropagation();
@@ -2530,7 +2565,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour BHB Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nBHB Prep`);
           const renewalMailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(c.email)}&su=${renewalSubject}&body=${renewalBody}`;
           return (
-            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)} style={paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}}>
+            <div key={c.id} className="client-card" draggable onClick={() => onSelectClient(c)} onDragStart={e => handleDragStart(e, c.id)} onDragOver={e => handleDragOver(e, c.id)} onDrop={e => handleDrop(e, c.id)} onDragEnd={handleDragEnd} style={{ ...(paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}), ...(dragOverId === c.id && dragId !== c.id ? { borderColor: 'var(--orange)', boxShadow: '0 0 0 2px rgba(255,152,0,0.3)' } : {}), opacity: dragId === c.id ? 0.5 : 1, cursor: 'grab', transition: 'opacity 0.15s, box-shadow 0.15s' }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
@@ -3216,6 +3251,31 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       ]);
       if (Array.isArray(freshShipments)) setLocalShipments(freshShipments);
       if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
+      // Discord notification when shipment is collected
+      if (shipmentForm.status === "collected") {
+        const clientWebhook = client.discord_webhook || webhookUrl;
+        if (clientWebhook) {
+          const units = parseInt(shipmentForm.units_prepped) || 0;
+          const boxes = parseInt(shipmentForm.box_count) || 0;
+          const unitCost = parseFloat(shipmentForm.unit_cost) || 0;
+          const boxCost = parseFloat(shipmentForm.box_cost) || 0;
+          const otherFees = parseFloat(shipmentForm.other_fees) || 0;
+          const subtotal = (units * unitCost) + (boxes * boxCost) + otherFees;
+          const vat = subtotal * 0.20;
+          const total = subtotal + vat;
+          await sendDiscordNotification(clientWebhook, null, {
+            title: "🚚 SHIPMENT COLLECTED",
+            color: 0x22c55e,
+            fields: [
+              { name: "Shipment ID", value: shipmentForm.shipment_id || "—", inline: true },
+              { name: "Units", value: `${units}`, inline: true },
+              { name: "Boxes", value: `${boxes}`, inline: true },
+              { name: "Total (inc. VAT)", value: `£${total.toFixed(2)}`, inline: true }
+            ],
+            footer: { text: "Your shipment is on its way to Amazon" }
+          });
+        }
+      }
       showToast(editingShipment ? "Updated!" : "Shipment created!");
       resetShipmentForm(); setShowShipmentForm(false); onRefresh();
     } catch(e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
