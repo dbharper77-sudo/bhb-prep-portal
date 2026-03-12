@@ -2489,11 +2489,15 @@ function AdminPortal() {
 // Admin - All Clients List
 function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
-  const [clientOrder, setClientOrder] = useState(() => {
-    try { const saved = sessionStorage.getItem("bhb_client_order"); return saved ? JSON.parse(saved) : []; } catch { return []; }
-  });
+  const [clientOrder, setClientOrder] = useState([]);
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+
+  // Load order from profiles sort_order on mount
+  useEffect(() => {
+    const sorted = [...clients].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+    setClientOrder(sorted.map(c => c.id));
+  }, [clients]);
 
   const sortedClients = React.useMemo(() => {
     if (!clientOrder.length) return [...clients];
@@ -2526,7 +2530,14 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     newOrder.splice(fromIdx, 1);
     newOrder.splice(toIdx, 0, dragId);
     setClientOrder(newOrder);
-    try { sessionStorage.setItem("bhb_client_order", JSON.stringify(newOrder)); } catch {}
+    // Save sort_order to Supabase for each client
+    newOrder.forEach((id, index) => {
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sort_order: index })
+      });
+    });
     setDragId(null); setDragOverId(null);
   };
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
