@@ -319,8 +319,41 @@ function LoginPage() {
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   if (showSignup) return <SignupPage onBack={() => setShowSignup(false)} />;
+
   const handleLogin = async () => { setError(""); setLoading(true); try { await signIn(email, password); } catch (e) { setError(e.message); } setLoading(false); };
+
+  const handleForgot = async () => {
+    if (!forgotEmail) return;
+    setForgotLoading(true);
+    await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email: forgotEmail })
+    });
+    setForgotSent(true);
+    setForgotLoading(false);
+  };
+
+  if (showForgot) return (
+    <div className="auth-wrapper"><div className="auth-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">BHB</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>BHB PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
+      <div className="auth-title">Reset Password</div>
+      <div className="auth-sub">Enter your email and we'll send you a reset link</div>
+      {forgotSent ? <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>Check your email for a reset link!</div>
+      : <>
+        <div className="input-group" style={{ marginTop: 16 }}><label className="input-label">Email</label><input className="input" type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleForgot()} /></div>
+        <button className="btn btn-primary auth-btn" onClick={handleForgot} disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send Reset Link"}</button>
+      </>}
+      <div className="auth-footer"><span className="auth-link" onClick={() => setShowForgot(false)}>← Back to Sign In</span></div>
+    </div></div>
+  );
+
   return (
     <div className="auth-wrapper"><div className="auth-card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">BHB</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>BHB PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
@@ -329,6 +362,7 @@ function LoginPage() {
       <div className="input-group"><label className="input-label">Email</label><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
       <div className="input-group"><label className="input-label">Password</label><input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
       <button className="btn btn-primary auth-btn" onClick={handleLogin} disabled={loading}>{loading ? "Signing in..." : "Sign In"}</button>
+      <div style={{ textAlign: "center", marginTop: 8 }}><span className="auth-link" style={{ fontSize: 13 }} onClick={() => setShowForgot(true)}>Forgot password?</span></div>
       <div className="auth-footer">Don't have an account? <span className="auth-link" onClick={() => setShowSignup(true)}>Sign Up</span></div>
     </div></div>
   );
