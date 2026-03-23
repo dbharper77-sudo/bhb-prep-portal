@@ -3362,11 +3362,13 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const saveEdit = async () => {
     const oldItem = localParcels.find(p => p.id === editingId);
-    // If changing to prepped and qty_received > 1, show partial prep modal
-    const qtyAvailable = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
-    if (editData.status === "prepped" && oldItem?.status !== "prepped" && qtyAvailable > 1) {
-      setPartialPrepItem({ ...oldItem, quantity: qtyAvailable, qty_received: qtyAvailable });
-      setPartialPrepQty(String(qtyAvailable));
+    // If changing to prepped, always show partial prep modal so admin can confirm qty
+    // qtyReceived = how many are physically here; totalExpected = original order qty
+    const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
+    const totalExpected = parseInt(oldItem?.quantity) || 1;
+    if (editData.status === "prepped" && oldItem?.status !== "prepped") {
+      setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
+      setPartialPrepQty(String(qtyReceived));
       return;
     }
     // Auto-detect partial delivery: if marking delivered but qty_received < quantity, use partial_delivery status
@@ -3581,31 +3583,55 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       )}
       {/* Partial Prep Modal */}
       {partialPrepItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-        <div className="card" style={{ width: 400, maxWidth: "95vw", padding: 28 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Partial Prep</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{partialPrepItem.product_name}</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Total qty: <strong style={{ color: "var(--text-primary)" }}>{partialPrepItem.quantity || 1}</strong></div>
+        <div className="card" style={{ width: 420, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Log Prep</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>{partialPrepItem.product_name}</div>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+            <div style={{ flex: 1, padding: 12, background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>RECEIVED</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{partialPrepItem.qty_received || partialPrepItem.quantity}</div>
+            </div>
+            <div style={{ flex: 1, padding: 12, background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>TOTAL ORDERED</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{partialPrepItem.quantity}</div>
+            </div>
+          </div>
           <div><label className="input-label">How many are you prepping now?</label>
-          <input className="input" type="number" min="1" max={partialPrepItem.quantity || 1} value={partialPrepQty} onChange={e => setPartialPrepQty(e.target.value)} /></div>
-          {parseInt(partialPrepQty) < (partialPrepItem.quantity || 1) && parseInt(partialPrepQty) > 0 &&
-            <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 8 }}>⚠ {(partialPrepItem.quantity || 1) - parseInt(partialPrepQty)} units will remain in delivered status</div>}
+          <input className="input" type="number" min="1" max={partialPrepItem.qty_received || partialPrepItem.quantity} value={partialPrepQty} onChange={e => setPartialPrepQty(e.target.value)} /></div>
+          {(() => {
+            const prepping = parseInt(partialPrepQty) || 0;
+            const received = parseInt(partialPrepItem.qty_received) || parseInt(partialPrepItem.quantity) || 0;
+            const totalOrdered = parseInt(partialPrepItem.quantity) || 0;
+            const remainingToPrep = received - prepping;
+            const stillInTransit = totalOrdered - received;
+            return prepping > 0 && (remainingToPrep > 0 || stillInTransit > 0) ? (
+              <div style={{ marginTop: 10, padding: 10, background: "rgba(255,171,0,0.08)", border: "1px solid rgba(255,171,0,0.2)", borderRadius: 8, fontSize: 12 }}>
+                {remainingToPrep > 0 && <div style={{ color: "var(--amber)" }}>⚠ {remainingToPrep} units received but not prepped — will stay as Delivered</div>}
+                {stillInTransit > 0 && <div style={{ color: "var(--purple)", marginTop: remainingToPrep > 0 ? 4 : 0 }}>📦 {stillInTransit} units still In Transit — new row will be created</div>}
+              </div>
+            ) : null;
+          })()}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
             <button className="btn btn-secondary" onClick={() => { setPartialPrepItem(null); setSaving(false); }}>Cancel</button>
             <button className="btn btn-primary" style={{ background: "var(--green)", color: "#000" }} onClick={async () => {
-              const qtyPrepping = parseInt(partialPrepQty) || (partialPrepItem.quantity || 1);
-              const totalQty = partialPrepItem.quantity || 1;
-              const remaining = totalQty - qtyPrepping;
-              if (remaining > 0) {
-                // Update original row with prepped qty
-                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${partialPrepItem.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" }) });
-                setLocalParcels(prev => prev.map(p => p.id === partialPrepItem.id ? { ...p, ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" } : p));
-                // Create new row for remainder
-                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: partialPrepItem.product_name, asin: partialPrepItem.asin, sku: partialPrepItem.sku, supplier: partialPrepItem.supplier, quantity: remaining, status: "delivered", user_id: client.id, date_added: partialPrepItem.date_added, tracking_number: partialPrepItem.tracking_number }) });
-              } else {
-                await doSaveEdit({ ...editData, status: "prepped" });
+              const qtyPrepping = parseInt(partialPrepQty) || 1;
+              const qtyReceived = parseInt(partialPrepItem.qty_received) || parseInt(partialPrepItem.quantity) || 1;
+              const totalOrdered = parseInt(partialPrepItem.quantity) || 1;
+              const remainingReceived = qtyReceived - qtyPrepping;
+              const stillInTransit = totalOrdered - qtyReceived;
+              // Update original row as prepped with the prepping qty
+              await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${partialPrepItem.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" }) });
+              setLocalParcels(prev => prev.map(p => p.id === partialPrepItem.id ? { ...p, ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" } : p));
+              // If some received units not being prepped yet, create a delivered row
+              if (remainingReceived > 0) {
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: partialPrepItem.product_name, asin: partialPrepItem.asin, sku: partialPrepItem.sku, supplier: partialPrepItem.supplier, quantity: remainingReceived, qty_received: remainingReceived, status: "delivered", user_id: client.id, date_added: partialPrepItem.date_added, tracking_number: partialPrepItem.tracking_number }) });
+              }
+              // If some units still in transit, create an in_transit row
+              if (stillInTransit > 0) {
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: partialPrepItem.product_name, asin: partialPrepItem.asin, sku: partialPrepItem.sku, supplier: partialPrepItem.supplier, quantity: stillInTransit, status: "in_transit", user_id: client.id, date_added: partialPrepItem.date_added, tracking_number: partialPrepItem.tracking_number }) });
               }
               const clientWebhook = client.discord_webhook || webhookUrl;
-              if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: partialPrepItem.product_name, inline: true }, { name: "Units Prepped", value: `${qtyPrepping}`, inline: true }, ...(remaining > 0 ? [{ name: "Still To Prep", value: `${remaining}`, inline: true }] : [])], footer: { text: client.full_name || client.email } });
+              if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: partialPrepItem.product_name, inline: true }, { name: "Units Prepped", value: `${qtyPrepping}`, inline: true }, ...(remainingReceived > 0 ? [{ name: "Still To Prep", value: `${remainingReceived}`, inline: true }] : []), ...(stillInTransit > 0 ? [{ name: "Still In Transit", value: `${stillInTransit}`, inline: true }] : [])], footer: { text: client.full_name || client.email } });
               showToast("Saved!"); setPartialPrepItem(null); setEditingId(null); setSaving(false); onRefresh();
             }}>Confirm</button>
           </div>
