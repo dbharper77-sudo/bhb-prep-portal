@@ -196,6 +196,24 @@ function getDailyData(items, field, days = 7) {
   }
   return result;
 }
+function getMonthlyData(items, field, months = 12) {
+  const result = [];
+  const now = new Date();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear(), month = d.getMonth();
+    const monthItems = items.filter(x => {
+      if (!x[field]) return false;
+      const fd = new Date(x[field]);
+      return fd.getFullYear() === year && fd.getMonth() === month;
+    });
+    const totalSales = monthItems.reduce((sum, x) => sum + (parseFloat(x.sale_price) || 0), 0);
+    const totalPayout = monthItems.reduce((sum, x) => sum + (parseFloat(x.payout) || 0), 0);
+    result.push({ label: d.toLocaleDateString("en-GB", { month: "short" }), fullLabel: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), count: monthItems.length, totalSales, totalPayout });
+  }
+  return result;
+}
+
 function sortByStatus(items, completed = ["collected", "prepped"]) {
   return [...items].sort((a, b) => {
     const ac = completed.includes(a.status), bc = completed.includes(b.status);
@@ -311,6 +329,35 @@ function AsinWithImage({ asin }) {
 function MiniChart({ data, color }) {
   const max = Math.max(...data.map(d => d.count), 1);
   return <div><div className="chart-container">{data.map((d, i) => <div key={i} className={`chart-bar ${color}`} style={{ height: `${(d.count / max) * 100}%` }} />)}</div><div className="chart-labels">{data.map((d, i) => <span key={i}>{d.label}</span>)}</div></div>;
+}
+
+function LiquidationMonthlyChart({ data }) {
+  const [tooltip, setTooltip] = useState(null);
+  const maxSales = Math.max(...data.map(d => d.totalSales), 1);
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 120, padding: "0 4px" }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end", position: "relative" }}
+            onMouseEnter={e => setTooltip({ i, x: e.currentTarget.getBoundingClientRect().left, d })}
+            onMouseLeave={() => setTooltip(null)}>
+            <div style={{ width: "100%", background: d.totalSales > 0 ? "var(--orange)" : "var(--border)", borderRadius: "4px 4px 0 0", height: `${Math.max((d.totalSales / maxSales) * 100, d.totalSales > 0 ? 4 : 2)}%`, transition: "opacity 0.15s", opacity: tooltip?.i === i ? 0.8 : 1, cursor: "pointer" }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 6, padding: "0 4px" }}>
+        {data.map((d, i) => <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--text-muted)", overflow: "hidden" }}>{d.label}</div>)}
+      </div>
+      {tooltip && (
+        <div style={{ position: "fixed", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", fontSize: 12, zIndex: 999, pointerEvents: "none", left: Math.min(tooltip.x, window.innerWidth - 180), top: "auto", transform: "translateY(-140px)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", minWidth: 160 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--text-primary)" }}>{tooltip.d.fullLabel}</div>
+          <div style={{ color: "var(--text-muted)" }}>Sales: <span style={{ color: "var(--orange)", fontWeight: 600 }}>{tooltip.d.count}</span></div>
+          <div style={{ color: "var(--text-muted)" }}>Revenue: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>£{tooltip.d.totalSales.toFixed(2)}</span></div>
+          <div style={{ color: "var(--text-muted)" }}>Payout: <span style={{ color: "var(--green)", fontWeight: 600 }}>£{tooltip.d.totalPayout.toFixed(2)}</span></div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Auth
@@ -681,7 +728,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
   const paidTotal = sales.filter(s => s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
   const unpaidSales = sales.filter(s => !s.paid && s.payout_date).sort((a, b) => new Date(a.payout_date) - new Date(b.payout_date));
   const nextSale = unpaidSales[0];
-  const daily = getDailyData(sales.filter(s => s.date_sold), "date_sold");
+  const monthly = getMonthlyData(sales.filter(s => s.date_sold), "date_sold", 12);
 
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Dashboard</div><div className="page-subtitle">Overview of your liquidation activity</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
@@ -694,7 +741,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
       </div>
       {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card"><div className="card-title">Sales (7 Days)</div><MiniChart data={daily} color="orange" /></div>
+        <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
         <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{stockItem?.product_name || "—"}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
@@ -3261,6 +3308,8 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [partialPrepItem, setPartialPrepItem] = useState(null);
+  const [partialPrepQty, setPartialPrepQty] = useState("");
 
   useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
   useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
@@ -3290,20 +3339,31 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"" });
   };
 
-  const saveEdit = async () => {
+  const doSaveEdit = async (overrideData) => {
     setSaving(true);
     const oldItem = localParcels.find(p => p.id === editingId);
-    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
-    // Immediately update UI
-    setLocalParcels(prev => prev.map(p => p.id === editingId ? { ...p, ...editData } : p));
+    const dataToSave = overrideData || editData;
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    setLocalParcels(prev => prev.map(p => p.id === editingId ? { ...p, ...dataToSave } : p));
     const clientWebhook = client.discord_webhook || webhookUrl;
     if (clientWebhook) {
-      if (editData.status === "delivered" && oldItem?.status !== "delivered") await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
-      if (editData.status === "prepped" && oldItem?.status !== "prepped") await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
-      if (editData.status === "collected" && oldItem?.status !== "collected") await sendDiscordNotification(clientWebhook, null, { title: "📦 COLLECTED", color: 0x22c55e, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
-      if (editData.needs_attention && !oldItem?.needs_attention) await sendDiscordNotification(clientWebhook, null, { title: "⚠️ NEEDS ATTENTION", color: 0xef4444, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Issue", value: editData.attention_reason||"Unknown", inline: true }], description: editData.admin_notes||null, footer: { text: client.full_name||client.email } });
+      if (dataToSave.status === "delivered" && oldItem?.status !== "delivered") await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${dataToSave.qty_received||oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (dataToSave.status === "prepped" && oldItem?.status !== "prepped") await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${dataToSave.qty_received||oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (dataToSave.status === "collected" && oldItem?.status !== "collected") await sendDiscordNotification(clientWebhook, null, { title: "📦 COLLECTED", color: 0x22c55e, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${dataToSave.qty_received||oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (dataToSave.needs_attention && !oldItem?.needs_attention) await sendDiscordNotification(clientWebhook, null, { title: "⚠️ NEEDS ATTENTION", color: 0xef4444, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Issue", value: dataToSave.attention_reason||"Unknown", inline: true }], description: dataToSave.admin_notes||null, footer: { text: client.full_name||client.email } });
     }
     showToast("Saved!"); setEditingId(null); setSaving(false); onRefresh();
+  };
+
+  const saveEdit = async () => {
+    const oldItem = localParcels.find(p => p.id === editingId);
+    // If changing to prepped and qty > 1, show partial prep modal
+    if (editData.status === "prepped" && oldItem?.status !== "prepped" && (oldItem?.quantity || 1) > 1) {
+      setPartialPrepItem(oldItem);
+      setPartialPrepQty(String(oldItem?.quantity || 1));
+      return;
+    }
+    await doSaveEdit(null);
   };
 
   const deleteParcel = async id => {
@@ -3508,6 +3568,39 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
           </table></div>
         </div>
       )}
+    <>
+      {/* Partial Prep Modal */}
+      {partialPrepItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 400, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Partial Prep</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{partialPrepItem.product_name}</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Total qty: <strong style={{ color: "var(--text-primary)" }}>{partialPrepItem.quantity || 1}</strong></div>
+          <div><label className="input-label">How many are you prepping now?</label>
+          <input className="input" type="number" min="1" max={partialPrepItem.quantity || 1} value={partialPrepQty} onChange={e => setPartialPrepQty(e.target.value)} /></div>
+          {parseInt(partialPrepQty) < (partialPrepItem.quantity || 1) && parseInt(partialPrepQty) > 0 &&
+            <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 8 }}>⚠ {(partialPrepItem.quantity || 1) - parseInt(partialPrepQty)} units will remain in delivered status</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+            <button className="btn btn-secondary" onClick={() => { setPartialPrepItem(null); setSaving(false); }}>Cancel</button>
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#000" }} onClick={async () => {
+              const qtyPrepping = parseInt(partialPrepQty) || (partialPrepItem.quantity || 1);
+              const totalQty = partialPrepItem.quantity || 1;
+              const remaining = totalQty - qtyPrepping;
+              if (remaining > 0) {
+                // Update original row with prepped qty
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${partialPrepItem.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" }) });
+                setLocalParcels(prev => prev.map(p => p.id === partialPrepItem.id ? { ...p, ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" } : p));
+                // Create new row for remainder
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: partialPrepItem.product_name, asin: partialPrepItem.asin, sku: partialPrepItem.sku, supplier: partialPrepItem.supplier, quantity: remaining, status: "delivered", user_id: client.id, date_added: partialPrepItem.date_added, tracking_number: partialPrepItem.tracking_number }) });
+              } else {
+                await doSaveEdit({ ...editData, status: "prepped" });
+              }
+              const clientWebhook = client.discord_webhook || webhookUrl;
+              if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: partialPrepItem.product_name, inline: true }, { name: "Units Prepped", value: `${qtyPrepping}`, inline: true }, ...(remaining > 0 ? [{ name: "Still To Prep", value: `${remaining}`, inline: true }] : [])], footer: { text: client.full_name || client.email } });
+              showToast("Saved!"); setPartialPrepItem(null); setEditingId(null); setSaving(false); onRefresh();
+            }}>Confirm</button>
+          </div>
+        </div>
+      </div>}
     </>
   );
 }
