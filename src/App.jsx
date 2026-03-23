@@ -3314,6 +3314,8 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [webhookUrl, setWebhookUrl] = useState("");
   const [partialPrepItem, setPartialPrepItem] = useState(null);
   const [partialPrepQty, setPartialPrepQty] = useState("");
+  const [showAddParcel, setShowAddParcel] = useState(false);
+  const [addParcelForm, setAddParcelForm] = useState({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" });
 
   useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
   useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
@@ -3482,7 +3484,33 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
+          <button className="btn btn-primary btn-sm" onClick={() => { setShowAddParcel(true); setAddParcelForm({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" }); }}><Icons.Plus /> Add Parcel</button>
         </div>
+        {showAddParcel && (
+          <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+              <div><label className="input-label">Product *</label><input className="input" placeholder="Product name" value={addParcelForm.product_name} onChange={e => setAddParcelForm({...addParcelForm, product_name: e.target.value})} /></div>
+              <div><label className="input-label">ASIN</label><input className="input" placeholder="B0..." value={addParcelForm.asin} onChange={e => setAddParcelForm({...addParcelForm, asin: e.target.value})} /></div>
+              <div><label className="input-label">SKU</label><input className="input" value={addParcelForm.sku} onChange={e => setAddParcelForm({...addParcelForm, sku: e.target.value})} /></div>
+              <div><label className="input-label">Supplier</label><input className="input" value={addParcelForm.supplier} onChange={e => setAddParcelForm({...addParcelForm, supplier: e.target.value})} /></div>
+              <div><label className="input-label">Expected Qty *</label><input className="input" type="number" value={addParcelForm.quantity} onChange={e => setAddParcelForm({...addParcelForm, quantity: e.target.value})} /></div>
+              <div><label className="input-label">Received</label><input className="input" type="number" value={addParcelForm.qty_received} onChange={e => setAddParcelForm({...addParcelForm, qty_received: e.target.value})} /></div>
+              <div><label className="input-label">Status</label><select className="input" value={addParcelForm.status} onChange={e => setAddParcelForm({...addParcelForm, status: e.target.value})}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g," ")}</option>)}</select></div>
+            </div>
+            <div><label className="input-label">Tracking</label><input className="input" style={{maxWidth:240}} placeholder="Tracking number" value={addParcelForm.tracking_number} onChange={e => setAddParcelForm({...addParcelForm, tracking_number: e.target.value})} /></div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddParcel(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" disabled={saving || !addParcelForm.product_name || !addParcelForm.quantity} onClick={async () => {
+                setSaving(true);
+                const body = { product_name: addParcelForm.product_name, asin: addParcelForm.asin||null, sku: addParcelForm.sku||null, supplier: addParcelForm.supplier||null, quantity: parseInt(addParcelForm.quantity), qty_received: addParcelForm.qty_received ? parseInt(addParcelForm.qty_received) : null, tracking_number: addParcelForm.tracking_number||null, status: addParcelForm.status, user_id: client.id, date_added: new Date().toISOString().split('T')[0] };
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(body) });
+                const newP = await res.json();
+                if (Array.isArray(newP)) setLocalParcels(prev => [...prev, ...newP]);
+                setSaving(false); setShowAddParcel(false); showToast("Parcel added!"); onRefresh();
+              }}>{saving ? "Saving..." : "Add Parcel"}</button>
+            </div>
+          </div>
+        )}
         {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
