@@ -2518,31 +2518,16 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const cl = liquidation.filter(l => l.user_id === c.id);
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
-          const today = new Date(); today.setHours(0,0,0,0);
-          const paymentDue = c.next_payment_date ? new Date(c.next_payment_date) <= today : false;
-          const renewalSubject = encodeURIComponent("BHB Deals — Subscription Renewal Due");
-          const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour BHB Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nBHB Prep`);
-          const renewalMailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(c.email)}&su=${renewalSubject}&body=${renewalBody}`;
           return (
-            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)} style={paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}}>
+            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
-                    {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)" }}>⚠ PAYMENT DUE</span>}
-                  </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
                 <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
               </div>
-              {paymentDue && (
-                <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
-                  <a href={renewalMailto} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(255,82,82,0.12)", color: "var(--red)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                    <Icons.Send /> Send Renewal Email
-                  </a>
-                </div>
-              )}
               <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
                 <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{inbound}</div>
@@ -2585,7 +2570,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
   const [dealsStartDate, setDealsStartDate] = useState(client.deals_start_date || '');
   const [dealsLastPayment, setDealsLastPayment] = useState(client.deals_last_payment || '');
-  const [nextPaymentDate, setNextPaymentDate] = useState(client.next_payment_date || '');
   const [savingDeals, setSavingDeals] = useState(false);
 
   // Payment overdue check
@@ -2616,7 +2600,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
     setDealsLastPayment(client.deals_last_payment || '');
-    setNextPaymentDate(client.next_payment_date || '');
     setPricing({
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
@@ -2798,7 +2781,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 {savingDeals ? "Saving..." : dealsAccess ? "✓ ACTIVE" : "✗ INACTIVE"}
               </button>
             </div>
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>
+            {dealsAccess && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
                     <label className="input-label">Access Start Date</label>
@@ -2822,17 +2806,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                       }} />
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Auto-deactivates after 1 month</div>
                   </div>
-                  <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
-                    <label className="input-label">Next Payment Due</label>
-                    <input type="date" className="input" style={{ colorScheme: 'dark' }} value={nextPaymentDate}
-                      onChange={async (e) => {
-                        const newDate = e.target.value;
-                        setNextPaymentDate(newDate);
-                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ next_payment_date: newDate }) });
-                        showToast("Next payment date saved!"); onRefresh();
-                      }} />
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Shows alert on client card when overdue</div>
-                  </div>
                 </div>
                 {isPaymentOverdue && (
                   <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,82,82,0.1)', border: '1px solid rgba(255,82,82,0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2851,6 +2824,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                   </div>
                 )}
               </div>
+            )}
           </div>
           <AdminClientDeals client={client} token={token} />
         </>
