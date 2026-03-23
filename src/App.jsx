@@ -1,7 +1,7 @@
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback } from "react";
 
 const SUPABASE_URL = "https://cccsreyspmpwnfbmegwz.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_hKQDmZHXC-OhF1A8de7vLw_jVcAGhkT";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjY3NyZXlzcG1wd25mYm1lZ3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMDk4MzQsImV4cCI6MjA4NTg4NTgzNH0.dk5dPqk7EXBxHZHOX6_mxNxpheNuHD4SAKGDorCuSa8";
 const ADMIN_EMAIL = "dbharper77@gmail.com";
 
 const supabase = {
@@ -196,6 +196,24 @@ function getDailyData(items, field, days = 7) {
   }
   return result;
 }
+function getMonthlyData(items, field, months = 12) {
+  const result = [];
+  const now = new Date();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear(), month = d.getMonth();
+    const monthItems = items.filter(x => {
+      if (!x[field]) return false;
+      const fd = new Date(x[field]);
+      return fd.getFullYear() === year && fd.getMonth() === month;
+    });
+    const totalSales = monthItems.reduce((sum, x) => sum + (parseFloat(x.sale_price) || 0), 0);
+    const totalPayout = monthItems.reduce((sum, x) => sum + (parseFloat(x.payout) || 0), 0);
+    result.push({ label: d.toLocaleDateString("en-GB", { month: "short" }), fullLabel: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), count: monthItems.length, totalSales, totalPayout });
+  }
+  return result;
+}
+
 function sortByStatus(items, completed = ["collected", "prepped"]) {
   return [...items].sort((a, b) => {
     const ac = completed.includes(a.status), bc = completed.includes(b.status);
@@ -313,14 +331,76 @@ function MiniChart({ data, color }) {
   return <div><div className="chart-container">{data.map((d, i) => <div key={i} className={`chart-bar ${color}`} style={{ height: `${(d.count / max) * 100}%` }} />)}</div><div className="chart-labels">{data.map((d, i) => <span key={i}>{d.label}</span>)}</div></div>;
 }
 
+function LiquidationMonthlyChart({ data }) {
+  const [tooltip, setTooltip] = useState(null);
+  const maxSales = Math.max(...data.map(d => d.totalSales), 1);
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 120, padding: "0 4px" }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end", position: "relative" }}
+            onMouseEnter={e => setTooltip({ i, x: e.currentTarget.getBoundingClientRect().left, d })}
+            onMouseLeave={() => setTooltip(null)}>
+            <div style={{ width: "100%", background: d.totalSales > 0 ? "var(--orange)" : "var(--border)", borderRadius: "4px 4px 0 0", height: `${Math.max((d.totalSales / maxSales) * 100, d.totalSales > 0 ? 4 : 2)}%`, transition: "opacity 0.15s", opacity: tooltip?.i === i ? 0.8 : 1, cursor: "pointer" }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 6, padding: "0 4px" }}>
+        {data.map((d, i) => <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--text-muted)", overflow: "hidden" }}>{d.label}</div>)}
+      </div>
+      {tooltip && (
+        <div style={{ position: "fixed", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", fontSize: 12, zIndex: 999, pointerEvents: "none", left: Math.min(tooltip.x, window.innerWidth - 180), top: "auto", transform: "translateY(-140px)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", minWidth: 160 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--text-primary)" }}>{tooltip.d.fullLabel}</div>
+          <div style={{ color: "var(--text-muted)" }}>Sales: <span style={{ color: "var(--orange)", fontWeight: 600 }}>{tooltip.d.count}</span></div>
+          <div style={{ color: "var(--text-muted)" }}>Revenue: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>£{tooltip.d.totalSales.toFixed(2)}</span></div>
+          <div style={{ color: "var(--text-muted)" }}>Payout: <span style={{ color: "var(--green)", fontWeight: 600 }}>£{tooltip.d.totalPayout.toFixed(2)}</span></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Auth
 function LoginPage() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   if (showSignup) return <SignupPage onBack={() => setShowSignup(false)} />;
+
   const handleLogin = async () => { setError(""); setLoading(true); try { await signIn(email, password); } catch (e) { setError(e.message); } setLoading(false); };
+
+  const handleForgot = async () => {
+    if (!forgotEmail) return;
+    setForgotLoading(true);
+    await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email: forgotEmail })
+    });
+    setForgotSent(true);
+    setForgotLoading(false);
+  };
+
+  if (showForgot) return (
+    <div className="auth-wrapper"><div className="auth-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">BHB</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>BHB PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
+      <div className="auth-title">Reset Password</div>
+      <div className="auth-sub">Enter your email and we'll send you a reset link</div>
+      {forgotSent ? <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>Check your email for a reset link!</div>
+      : <>
+        <div className="input-group" style={{ marginTop: 16 }}><label className="input-label">Email</label><input className="input" type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleForgot()} /></div>
+        <button className="btn btn-primary auth-btn" onClick={handleForgot} disabled={forgotLoading}>{forgotLoading ? "Sending..." : "Send Reset Link"}</button>
+      </>}
+      <div className="auth-footer"><span className="auth-link" onClick={() => setShowForgot(false)}>← Back to Sign In</span></div>
+    </div></div>
+  );
+
   return (
     <div className="auth-wrapper"><div className="auth-card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">BHB</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>BHB PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
@@ -329,6 +409,7 @@ function LoginPage() {
       <div className="input-group"><label className="input-label">Email</label><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
       <div className="input-group"><label className="input-label">Password</label><input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
       <button className="btn btn-primary auth-btn" onClick={handleLogin} disabled={loading}>{loading ? "Signing in..." : "Sign In"}</button>
+      <div style={{ textAlign: "center", marginTop: 8 }}><span className="auth-link" style={{ fontSize: 13 }} onClick={() => setShowForgot(true)}>Forgot password?</span></div>
       <div className="auth-footer">Don't have an account? <span className="auth-link" onClick={() => setShowSignup(true)}>Sign Up</span></div>
     </div></div>
   );
@@ -379,7 +460,7 @@ function PrepDashboard({ parcels, billingPeriods, shipments = [], onNavigate }) 
   });
   const thisMonthTotal = thisMonthShipments.reduce((sum, s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return sum + units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+    return sum + units + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees) || 0);
   }, 0);
   const thisMonthUnits = thisMonthShipments.reduce((sum, s) => sum + (parseInt(s.units_prepped) || 0), 0);
   
@@ -504,7 +585,7 @@ function PrepInventoryPage({ parcels, token, onRefresh, showToast }) {
             <td>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : <ProductWithImage name={p.product_name} asin={p.asin} />}</td>
             <td className="mono">{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.sku} onChange={e => setEditData({ ...editData, sku: e.target.value })} /> : (p.sku || "—")}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : <AsinWithImage asin={p.asin} />}</td>
-            <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} /> : p.quantity}</td>
+            <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 50 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : p.quantity}</td>
             <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.tracking_number} onChange={e => setEditData({ ...editData, tracking_number: e.target.value })} /> : (p.tracking_number || "—")}</td>
             <td>{p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
             <td>
@@ -548,7 +629,7 @@ function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token 
   
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -639,26 +720,29 @@ function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token 
 }
 
 // ============ CLIENT LIQUIDATION PAGES ============
-function LiquidationDashboard({ liquidationStock }) {
-  const daily = getDailyData(liquidationStock.filter(s => s.date_sold), "date_sold");
-  const pending = liquidationStock.filter(s => s.sale_price && !s.paid).reduce((sum, s) => sum + calculatePayout(s).payout, 0);
-  const paidTotal = liquidationStock.filter(s => s.paid).reduce((sum, s) => sum + calculatePayout(s).payout, 0);
-  const sold = liquidationStock.filter(s => s.sale_price).length;
-  const unpaid = liquidationStock.filter(s => s.sale_price && s.date_sold && !s.paid);
-  const next = unpaid.sort((a, b) => new Date(a.date_sold) - new Date(b.date_sold))[0];
-  const nextDate = next ? getPayoutDate(next.date_sold) : null;
+function LiquidationDashboard({ liquidationStock, liquidationSales }) {
+  const sales = liquidationSales || [];
+  const transitItems = liquidationStock.filter(i => !i.received);
+  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const pendingPayout = sales.filter(s => !s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const paidTotal = sales.filter(s => s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const unpaidSales = sales.filter(s => !s.paid && s.payout_date).sort((a, b) => new Date(a.payout_date) - new Date(b.payout_date));
+  const nextSale = unpaidSales[0];
+  const monthly = getMonthlyData(sales.filter(s => s.date_sold), "date_sold", 12);
+
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Dashboard</div><div className="page-subtitle">Overview of your liquidation activity</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
     <div className="page-body">
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{pending.toFixed(2)}</div></div>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Items Sold</div><div className="stat-value" style={{ color: "var(--orange)" }}>{sold}</div></div>
       </div>
-      {nextDate && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(nextDate)}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>35 days after sale</div></div>}
+      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card"><div className="card-title">Sales (7 Days)</div><MiniChart data={daily} color="orange" /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaid.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaid.map(s => { const c = calculatePayout(s); const pd = getPayoutDate(s.date_sold); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{s.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{pd ? formatDate(pd) : "—"}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{c.payout.toFixed(2)}</div></div>; })}</div>}</div>
+        <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
+        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{stockItem?.product_name || "—"}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
   );
@@ -671,7 +755,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   const update = f => e => setForm({ ...form, [f]: e.target.value });
   const handleSubmit = async () => {
     if (!form.product_name) return; setSaving(true);
-    await supabase.from("liquidation_stock", token).insert({ ...form, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
+    await supabase.from("liquidation_stock", token).insert({ ...form, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
     showToast("Stock submitted!"); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "" }); onRefresh(); setSaving(false);
   };
   return (
@@ -680,44 +764,93 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
       <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">SKU</label><input className="input" value={form.sku} onChange={update("sku")} /></div></div>
-      <div className="input-group"><label className="input-label">Purchase Price (£)</label><input className="input" type="number" step="0.01" placeholder="What you paid" value={form.purchase_price} onChange={update("purchase_price")} /></div>
+      <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
       <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
     </div></div></>
   );
 }
 
-function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast }) {
-  const [filter, setFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState({});
-  const [saving, setSaving] = useState(false);
-  const filtered = liquidationStock.filter(s => { if (filter === "all") return true; if (filter === "pending") return !s.sale_price; if (filter === "sold") return s.sale_price && !s.paid; if (filter === "paid") return s.paid; return true; });
-  const startEdit = item => { setEditingId(item.id); setEditData({ removal_order_id: item.removal_order_id || "", product_name: item.product_name || "", asin: item.asin || "", sku: item.sku || "", purchase_price: item.purchase_price || "" }); };
-  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), Prefer: "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.purchase_price ? parseFloat(editData.purchase_price) : null }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
-  const deleteItem = async id => { if (!confirm("Delete?")) return; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); showToast("Deleted!"); onRefresh(); };
+function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onRefresh, showToast }) {
+  const [activeTab, setActiveTab] = useState("transit");
+  const sales = liquidationSales || [];
+  const transitItems = liquidationStock.filter(i => !i.received);
+  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const totalPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
+
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
     <div className="page-body">
-      <div style={{ marginBottom: 20 }}><select className="input" style={{ width: "auto", minWidth: 160 }} value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All Items</option><option value="pending">Pending Sale</option><option value="sold">Sold - Awaiting Payout</option><option value="paid">Paid</option></select></div>
-      {filtered.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items found.</p></div> :
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Cost</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
-        <tbody>{filtered.map(s => {
-          const c = calculatePayout(s), pd = getPayoutDate(s.date_sold), isEdit = editingId === s.id, data = isEdit ? editData : s;
-          return <tr key={s.id} className={isEdit ? "edit-row" : ""}>
-            <td style={{ fontSize: 12 }}>{formatShortDate(s.date_added)}</td>
-            <td style={{ fontWeight: 600 }}>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : s.product_name}</td>
-            <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : (s.asin || "—")}</td>
-            <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
-            <td className="mono">{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.purchase_price} onChange={e => setEditData({ ...editData, purchase_price: e.target.value })} /> : (s.purchase_price ? `£${parseFloat(s.purchase_price).toFixed(2)}` : "—")}</td>
-            <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
-            <td className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{s.sale_price ? `£${c.totalFees.toFixed(2)}` : "—"}</td>
-            <td className="mono" style={{ fontWeight: 700, color: s.sale_price ? "var(--green)" : "var(--text-muted)" }}>{s.sale_price ? `£${c.payout.toFixed(2)}` : "—"}</td>
-            <td style={{ fontSize: 12 }}>{s.paid ? <span style={{ color: "var(--green)" }}>Paid</span> : pd ? formatDate(pd) : "—"}</td>
-            <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteItem(s.id)}><Icons.Trash /></button></div>}</td>
-          </tr>;
-        })}</tbody>
-      </table></div></div>}
+      {/* Stats */}
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
+        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Total Payouts</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalPayout.toFixed(2)}</div></div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
+          <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
+        )}
+      </div>
+
+      {/* In Transit */}
+      {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th></tr></thead>
+          <tbody>{transitItems.map(s => <tr key={s.id}>
+            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+            <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+            <td className="mono">{s.quantity || 1}</td>
+            <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
+          </tr>)}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Listed */}
+      {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th></tr></thead>
+          <tbody>{listedItems.map(s => {
+            const remaining = (s.quantity || 1) - (s.qty_sold || 0);
+            return <tr key={s.id}>
+              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
+              <td className="mono">{s.quantity || 1}</td>
+              <td className="mono" style={{ color: "var(--green)" }}>{s.qty_sold || 0}</td>
+              <td className="mono" style={{ fontWeight: 700, color: remaining <= 0 ? "var(--red)" : "var(--text-primary)" }}>{remaining}</td>
+              <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Sales */}
+      {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales yet.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
+          <tbody>{sales.map(s => {
+            const stockItem = liquidationStock.find(l => l.id === s.stock_id);
+            return <tr key={s.id}>
+              <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
+              <td className="mono">{s.qty_sold}</td>
+              <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
+              <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
+              <td className="mono">{s.dbh_pct}%</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.dbh_fee).toFixed(2)}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
+              <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
+              <td style={{ textAlign: "center" }}>{s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <span style={{ color: "var(--amber)", fontSize: 12 }}>Pending</span>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
     </div></>
   );
 }
@@ -1427,6 +1560,7 @@ function DealsInvoiceDetailsPage({ token, dbProfile, onRefresh, showToast }) {
 
 // Admin Deals Management Page
 function AdminDealsPage({ token, showToast }) {
+  const fmtRoi = (val) => { const n = parseFloat(val || 0); return n > 0 && n < 3 ? (n*100).toFixed(0) : n.toFixed(0); };
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1632,6 +1766,7 @@ function AdminDealsPage({ token, showToast }) {
                   <th>ROI</th>
                   <th>SPM</th>
                   <th>Code</th>
+                  <th>Notes</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -1650,9 +1785,10 @@ function AdminDealsPage({ token, showToast }) {
                     <td className="mono">{formatCurrency(deal.cost_price)}</td>
                     <td className="mono">{formatCurrency(deal.sale_price)}</td>
                     <td className="mono" style={{ color: '#00e676', fontWeight: 600 }}>{formatCurrency(deal.profit)}</td>
-                    <td className="mono" style={{ color: 'var(--cyan)' }}>{deal.roi}%</td>
+                    <td className="mono" style={{ color: 'var(--cyan)' }}>{fmtRoi(deal.roi)}%</td>
                     <td>{deal.spm || '—'}</td>
                     <td className="mono" style={{ color: 'var(--purple)' }}>{deal.code || '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 200 }}>{deal.notes || '—'}</td>
                     <td>{deal.is_published ? <span className="deals-badge">Published</span> : <span className="badge badge-pending">Draft</span>}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -1821,13 +1957,13 @@ function AdminLiquidationPage({ token, showToast }) {
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", fee_prep: item.fee_prep || false, fee_bundle: item.fee_bundle || false, fee_oversize: item.fee_oversize || false, paid: item.paid || false });
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", fee_prep: item.fee_prep || false, fee_bundle: item.fee_bundle || false, fee_oversize: item.fee_oversize || false, paid: item.paid || false, quantity: item.quantity || 1 });
   };
 
   const saveEdit = async () => {
     setSaving(true);
     const oldItem = items.find(i => i.id === editingId);
-    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null, date_sold: editData.date_sold || null };
+    const dataToSave = { ...editData, sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, shipping: editData.shipping ? parseFloat(editData.shipping) : null, date_sold: editData.date_sold || null, quantity: parseInt(editData.quantity) || 1 };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
@@ -1861,8 +1997,9 @@ function AdminLiquidationPage({ token, showToast }) {
     <div className="page-body">
       {!selectedClient && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16, marginBottom: 24 }}>{clients.map(c => { const ci = items.filter(i => i.user_id === c.id); const pending = ci.filter(i => !i.sale_price).length; return <div key={c.id} className="client-card" onClick={() => setSelectedClient(c)}><div style={{ fontWeight: 700 }}>{c.full_name || "No Name"}</div><div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div><div style={{ marginTop: 8, fontSize: 13 }}>Pending: <span style={{ fontWeight: 700, color: "var(--orange)" }}>{pending}</span> • Total: {ci.length}</div></div>; })}</div>}
       {clientItems.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items.</p></div> :
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table style={{ minWidth: 1100 }}>
-        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Payout Date</th><th>Paid</th><th></th></tr></thead>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+        <colgroup><col style={{width:"22%"}}/><col style={{width:"8%"}}/><col style={{width:"5%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/><col style={{width:"9%"}}/><col style={{width:"10%"}}/><col style={{width:"9%"}}/><col style={{width:"6%"}}/><col style={{width:"8%"}}/></colgroup>
+        <thead><tr>{!selectedClient && <th>Client</th>}<th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
         <tbody>{clientItems.map(item => {
           const client = clients.find(c => c.id === item.user_id);
           const isEdit = editingId === item.id, data = isEdit ? editData : item;
@@ -1872,13 +2009,13 @@ function AdminLiquidationPage({ token, showToast }) {
             {!selectedClient && <td style={{ fontSize: 13 }}>{client?.full_name || "—"}</td>}
             <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
             <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
+            <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
             <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
             <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
-            <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
+            <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 100, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
             <td>{isEdit ? <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11 }}><input type="number" step="0.01" className="inline-input" style={{ width: 60 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 60 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
             <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
-            <td style={{ fontSize: 12 }}>{pd ? formatDate(pd) : "—"}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
             <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>}</td>
           </tr>;
@@ -1927,7 +2064,7 @@ function AdminShipmentsPage({ token, showToast }) {
 
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -2122,7 +2259,7 @@ function ProfilePage({ dbProfile }) {
 function ClientShipmentsPage({ shipments }) {
   const calcTotal = (s) => {
     const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
+    const boxes = (parseFloat(s.box_count)||0) * (parseFloat(s.box_cost)||0);
     const other = parseFloat(s.other_fees) || 0;
     return units + boxes + other;
   };
@@ -2171,22 +2308,26 @@ function ClientPortal() {
   const [toast, setToast] = useState(null);
   const showToast = useCallback(msg => setToast(msg), []);
 
+  const [liquidationSales, setLiquidationSales] = useState([]);
+
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, i, b, l, s, prof] = await Promise.all([
+      const [p, i, b, l, s, prof, ls] = await Promise.all([
         supabase.from("parcels", token).select(),
         supabase.from("invoices", token).select(),
         supabase.from("billing_periods", token).select(),
         supabase.from("liquidation_stock", token).select(),
         supabase.from("shipments", token).select(),
-        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json())
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${user.id}&order=date_sold.desc`, { headers: supabase.headers(token) }).then(r => r.json())
       ]);
       if (Array.isArray(p)) setParcels(p);
       if (Array.isArray(i)) setInvoices(i);
       if (Array.isArray(b)) setBillingPeriods(b);
       if (Array.isArray(l)) setLiquidationStock(l);
       if (Array.isArray(s)) setShipments(s);
+      if (Array.isArray(ls)) setLiquidationSales(ls);
       if (Array.isArray(prof) && prof[0]) {
         setDbProfile(prof[0]);
         // Auto-deactivate if payment is overdue (1 calendar month past last payment)
@@ -2208,6 +2349,7 @@ function ClientPortal() {
   }, [token]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { const interval = setInterval(() => { loadData(); }, 30000); return () => clearInterval(interval); }, [loadData]);
   useEffect(() => { setPage(service === "deals" ? "deals" : "dashboard"); }, [service]);
 
   const prepNav = [
@@ -2253,12 +2395,12 @@ function ClientPortal() {
       return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
     }
     if (service === "liquidation") {
-      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} />;
+      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} />;
       if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} token={token} onRefresh={loadData} showToast={showToast} />;
+      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <LiquidationFeesPage />;
       if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} />;
-      return <LiquidationDashboard liquidationStock={liquidationStock} />;
+      return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} />;
     }
   };
 
@@ -2483,12 +2625,58 @@ function AdminPortal() {
 // Admin - All Clients List
 function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
-  
-  const filteredClients = clients.filter(c => 
+  const [clientOrder, setClientOrder] = useState([]);
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+
+  // Load order from profiles sort_order on mount
+  useEffect(() => {
+    const sorted = [...clients].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+    setClientOrder(sorted.map(c => c.id));
+  }, [clients]);
+
+  const sortedClients = React.useMemo(() => {
+    if (!clientOrder.length) return [...clients];
+    const ordered = [...clients].sort((a, b) => {
+      const ai = clientOrder.indexOf(a.id), bi = clientOrder.indexOf(b.id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return ordered;
+  }, [clients, clientOrder]);
+
+  const filteredClients = sortedClients.filter(c => 
     c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     c.email?.toLowerCase().includes(search.toLowerCase()) ||
     c.company_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
+  const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const currentOrder = clientOrder.length ? [...clientOrder] : sortedClients.map(c => c.id);
+    const fromIdx = currentOrder.indexOf(dragId);
+    const toIdx = currentOrder.indexOf(targetId);
+    const newOrder = [...currentOrder];
+    if (fromIdx === -1 || toIdx === -1) { setDragId(null); setDragOverId(null); return; }
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, dragId);
+    setClientOrder(newOrder);
+    // Save sort_order to Supabase for each client
+    newOrder.forEach((id, index) => {
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sort_order: index })
+      });
+    });
+    setDragId(null); setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   const deleteClient = async (e, clientId) => {
     e.stopPropagation();
@@ -2518,16 +2706,35 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const cl = liquidation.filter(l => l.user_id === c.id);
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
+          const today = new Date(); today.setHours(0,0,0,0);
+          const paymentDue = (() => {
+            if (c.next_payment_date) return new Date(c.next_payment_date) <= today;
+            if (c.deals_last_payment) { const paid = new Date(c.deals_last_payment); const due = new Date(paid.getFullYear(), paid.getMonth() + 1, paid.getDate()); return due <= today; }
+            return false;
+          })();
+          const renewalSubject = encodeURIComponent("BHB Deals — Subscription Renewal Due");
+          const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour BHB Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nBHB Prep`);
+          const renewalMailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(c.email)}&su=${renewalSubject}&body=${renewalBody}`;
           return (
-            <div key={c.id} className="client-card" onClick={() => onSelectClient(c)}>
+            <div key={c.id} className="client-card" draggable onClick={() => onSelectClient(c)} onDragStart={e => handleDragStart(e, c.id)} onDragOver={e => handleDragOver(e, c.id)} onDrop={e => handleDrop(e, c.id)} onDragEnd={handleDragEnd} style={{ ...(paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}), ...(dragOverId === c.id && dragId !== c.id ? { borderColor: 'var(--orange)', boxShadow: '0 0 0 2px rgba(255,152,0,0.3)' } : {}), opacity: dragId === c.id ? 0.5 : 1, cursor: 'grab', transition: 'opacity 0.15s, box-shadow 0.15s' }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
+                    {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)" }}>⚠ PAYMENT DUE</span>}
+                  </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
                 <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
               </div>
+              {paymentDue && (
+                <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                  <a href={renewalMailto} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(255,82,82,0.12)", color: "var(--red)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                    <Icons.Send /> Send Renewal Email
+                  </a>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
                 <div style={{ flex: 1, padding: "10px", background: "var(--bg-primary)", borderRadius: 8, textAlign: "center" }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cyan)" }}>{inbound}</div>
@@ -2558,6 +2765,9 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState("");
   const [editingInvoice, setEditingInvoice] = useState(null);
+  const [manualMonth, setManualMonth] = useState(new Date().getMonth());
+  const [manualYear, setManualYear] = useState(new Date().getFullYear());
+  const [manualAmount, setManualAmount] = useState("");
   
   // Custom pricing
   const [pricing, setPricing] = useState({
@@ -2570,6 +2780,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
   const [dealsStartDate, setDealsStartDate] = useState(client.deals_start_date || '');
   const [dealsLastPayment, setDealsLastPayment] = useState(client.deals_last_payment || '');
+  const [nextPaymentDate, setNextPaymentDate] = useState(client.next_payment_date || '');
   const [savingDeals, setSavingDeals] = useState(false);
 
   // Payment overdue check
@@ -2600,6 +2811,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
     setDealsLastPayment(client.deals_last_payment || '');
+    setNextPaymentDate(client.next_payment_date || '');
     setPricing({
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
@@ -2654,39 +2866,41 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     shipments.forEach(s => {
       const d = new Date(s.date_shipped || s.created_at);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const cost = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0) + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
+      const cost = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees) || 0);
       totals[key] = (totals[key] || 0) + cost;
     });
     return totals;
   };
 
-  const generateInvoice = async (month, year, manualAmount = null) => {
+  const generateInvoice = async (month, year, manualAmt = null) => {
     const totals = getMonthlyTotals();
     const key = `${year}-${month}`;
-    const amount = manualAmount !== null ? manualAmount : (totals[key] || 0);
+    const amount = manualAmt !== null ? manualAmt : (totals[key] || 0);
     
     const res = await fetch(`${SUPABASE_URL}/rest/v1/invoices`, { 
       method: "POST", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
-      body: JSON.stringify({ user_id: client.id, period_month: month + 1, period_year: year, amount, status: "pending" }) 
+      body: JSON.stringify({ user_id: client.id, period_month: month + 1, period_year: year, amount, status: "pending", invoice_number: `INV-${year}${String(month + 1).padStart(2,'0')}-${Date.now().toString().slice(-4)}` }) 
     });
     if (res.ok) {
       showToast("Invoice created!");
-      // Reload invoices
+      setManualAmount("");
       const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
       setInvoices(Array.isArray(inv) ? inv : []);
     } else {
-      showToast("Error creating invoice");
+      const errText = await res.text();
+      console.error("Invoice create error:", res.status, errText);
+      showToast("Error: " + (JSON.parse(errText)?.message || res.status));
     }
   };
 
-  const updateInvoice = async (id, updates) => {
+  const updateInvoice = async (id, updates, silent = false) => {
     await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, { 
       method: "PATCH", 
       headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, 
       body: JSON.stringify(updates) 
     });
-    showToast("Invoice updated!");
+    if (!silent) showToast("Invoice updated!");
     const inv = await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${client.id}&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json());
     setInvoices(Array.isArray(inv) ? inv : []);
     setEditingInvoice(null);
@@ -2781,8 +2995,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 {savingDeals ? "Saving..." : dealsAccess ? "✓ ACTIVE" : "✗ INACTIVE"}
               </button>
             </div>
-            {dealsAccess && (
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
                     <label className="input-label">Access Start Date</label>
@@ -2806,6 +3019,17 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                       }} />
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Auto-deactivates after 1 month</div>
                   </div>
+                  <div className="input-group" style={{ margin: 0, maxWidth: 220 }}>
+                    <label className="input-label">Next Payment Due</label>
+                    <input type="date" className="input" style={{ colorScheme: 'dark' }} value={nextPaymentDate}
+                      onChange={async (e) => {
+                        const newDate = e.target.value;
+                        setNextPaymentDate(newDate);
+                        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ next_payment_date: newDate }) });
+                        showToast("Next payment date saved!"); onRefresh();
+                      }} />
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Shows alert on client card when overdue</div>
+                  </div>
                 </div>
                 {isPaymentOverdue && (
                   <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,82,82,0.1)', border: '1px solid rgba(255,82,82,0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2824,7 +3048,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                   </div>
                 )}
               </div>
-            )}
           </div>
           <AdminClientDeals client={client} token={token} />
         </>
@@ -2880,43 +3103,50 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div className="card-title" style={{ margin: 0 }}>Generate Invoice</div>
-            </div>
-            {getUninvoicedMonths().length === 0 ? (
-              <div style={{ color: "var(--text-muted)", marginBottom: 12 }}>No past months to invoice</div>
-            ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {getUninvoicedMonths().map(({ month, year, amount }) => (
-                  <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin" onClick={() => generateInvoice(month, year)}>
-                    {monthNames[month]} {year} — £{amount.toFixed(2)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Or create manual invoice:</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div className="card-title">Generate Invoice</div>
+            {(() => {
+              const totals = getMonthlyTotals();
+              const now = new Date();
+              // Build last 6 months
+              const months = [];
+              for (let i = 1; i <= 6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const m = d.getMonth(), y = d.getFullYear();
+                const key = `${y}-${m}`;
+                months.push({ month: m, year: y, amount: totals[key] || 0 });
+              }
+              return (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                  {months.map(({ month, year, amount }) => (
+                    <button key={`${year}-${month}`} className="btn btn-primary btn-sm admin"
+                      onClick={() => { setManualMonth(month); setManualYear(year); setManualAmount(amount.toFixed(2)); }}>
+                      {monthNames[month]} {year} — £{amount.toFixed(2)}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>Click a month above to pre-fill, or enter manually:</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Month</label>
-                  <select className="input" id="manualMonth" defaultValue={new Date().getMonth()}>
+                  <select className="input" value={manualMonth} onChange={e => setManualMonth(parseInt(e.target.value))}>
                     {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
                   </select>
                 </div>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Year</label>
-                  <input className="input" type="number" id="manualYear" defaultValue={new Date().getFullYear()} style={{ width: 80 }} />
+                  <input className="input" type="number" value={manualYear} onChange={e => setManualYear(parseInt(e.target.value))} style={{ width: 80 }} />
                 </div>
                 <div className="input-group" style={{ margin: 0 }}>
                   <label className="input-label">Amount (£)</label>
-                  <input className="input" type="number" step="0.01" id="manualAmount" placeholder="0.00" style={{ width: 100 }} />
+                  <input className="input" type="number" step="0.01" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="0.00" style={{ width: 110 }} />
                 </div>
-                <button className="btn btn-sm admin" onClick={() => {
-                  const month = parseInt(document.getElementById("manualMonth").value);
-                  const year = parseInt(document.getElementById("manualYear").value);
-                  const amount = parseFloat(document.getElementById("manualAmount").value) || 0;
-                  if (amount > 0) generateInvoice(month, year, amount);
-                }}>Create</button>
+                <button className="btn btn-primary admin" onClick={() => {
+                  const amt = parseFloat(manualAmount) || 0;
+                  if (amt > 0) generateInvoice(manualMonth, manualYear, amt);
+                }} disabled={!manualAmount || parseFloat(manualAmount) <= 0}>Create Invoice</button>
               </div>
             </div>
           </div>
@@ -2926,33 +3156,66 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
             {loadingInvoices ? <div style={{ color: "var(--text-muted)" }}>Loading...</div> :
              invoices.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No invoices yet</div> :
              <div className="table-wrap"><table>
-              <thead><tr><th>Period</th><th>Amount</th><th>Status</th><th>Invoice URL</th><th></th></tr></thead>
+              <thead><tr><th>Period</th><th>Ref</th><th>Amount</th><th>Status</th><th>PDF Invoice</th><th></th></tr></thead>
               <tbody>{invoices.map(inv => (
                 <tr key={inv.id}>
                   <td style={{ fontWeight: 600 }}>{monthNames[inv.period_month - 1]} {inv.period_year}</td>
+                  <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{inv.invoice_number}</td>
                   <td style={{ fontWeight: 700, color: "var(--amber)" }}>£{parseFloat(inv.amount).toFixed(2)}</td>
                   <td>
-                    <select 
-                      className="inline-select" 
-                      value={inv.status} 
-                      onChange={e => updateInvoice(inv.id, { status: e.target.value, paid_at: e.target.value === "paid" ? new Date().toISOString() : null })}
-                    >
+                    <select className="inline-select" value={inv.status}
+                      onChange={e => updateInvoice(inv.id, { status: e.target.value, paid_at: e.target.value === "paid" ? new Date().toISOString() : null })}>
                       <option value="pending">Pending</option>
                       <option value="paid">Paid</option>
                       <option value="overdue">Overdue</option>
                     </select>
                   </td>
                   <td>
-                    {editingInvoice === inv.id ? (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <input className="inline-input" placeholder="https://..." value={invoiceUrl} onChange={e => setInvoiceUrl(e.target.value)} style={{ width: 200 }} />
-                        <button className="btn-icon" onClick={() => updateInvoice(inv.id, { invoice_url: invoiceUrl })}><Icons.Save /></button>
-                        <button className="btn-icon btn-danger" onClick={() => { setEditingInvoice(null); setInvoiceUrl(""); }}><Icons.X /></button>
+                    {inv.invoice_url ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
+                        <label style={{ cursor: "pointer", fontSize: 12, color: "var(--text-muted)", textDecoration: "underline" }}>
+                          Replace
+                          <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const path = `${client.id}/${inv.invoice_number}.pdf`;
+                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                              body: file
+                            });
+                            if (uploadRes.ok) {
+                              const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
+                                method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                                body: JSON.stringify({ expiresIn: 31536000 })
+                              });
+                              const signData = await signRes.json();
+                              console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
+                              console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
+                            } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
+                          }} />
+                        </label>
                       </div>
-                    ) : inv.invoice_url ? (
-                      <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>View Invoice</a>
                     ) : (
-                      <button className="btn btn-sm" onClick={() => { setEditingInvoice(inv.id); setInvoiceUrl(inv.invoice_url || ""); }}>Add URL</button>
+                      <label style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+                        📎 Upload PDF
+                        <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                          const file = e.target.files[0]; if (!file) return;
+                          const path = `${client.id}/${inv.invoice_number}.pdf`;
+                          const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
+                            method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                            body: file
+                          });
+                          if (uploadRes.ok) {
+                            const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({ expiresIn: 31536000 })
+                            });
+                            const signData = await signRes.json();
+                            console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
+                            console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
+                          } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
+                        }} />
+                      </label>
                     )}
                   </td>
                   <td>
@@ -3039,103 +3302,93 @@ function AdminClientDeals({ client, token }) {
   );
 }
 
-function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefresh }) {
+function AdminClientPrep({ client, parcels: initialParcels, shipments: initialShipments, token, showToast, onRefresh }) {
+  const [localParcels, setLocalParcels] = useState(initialParcels);
+  const [localShipments, setLocalShipments] = useState(initialShipments);
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [showShipmentForm, setShowShipmentForm] = useState(false);
-  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "" });
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [partialPrepItem, setPartialPrepItem] = useState(null);
+  const [partialPrepQty, setPartialPrepQty] = useState("");
 
-  useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
+  useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
+  useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) })
+      .then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); });
+  }, []);
 
-  const sorted = sortByStatus(parcels);
-  const inbound = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status)).length;
+  const activeParcels = localParcels.filter(p => p.status !== "collected");
+  const completedParcels = localParcels.filter(p => p.status === "collected");
+  const preppedParcels = localParcels.filter(p => p.status === "prepped");
+  const sorted = sortByStatus(activeParcels);
+
+  const inboundUnits = localParcels.filter(p => ["in_transit","partial_delivery"].includes(p.status)).reduce((s,p)=>s+(parseInt(p.quantity)||0),0);
+  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const preppedUnits = preppedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const collectedUnits = completedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+
+  const now = new Date();
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const calcShipmentCost = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0)+(parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0)+(parseFloat(s.other_fees)||0);
+  const thisMonthTotal = localShipments.filter(s=>{ const d=new Date(s.date_shipped||s.created_at); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); }).reduce((s,x)=>s+calcShipmentCost(x),0);
+  const totalCharges = localShipments.reduce((s,x)=>s+calcShipmentCost(x),0);
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ status: item.status || "in_transit", admin_notes: item.admin_notes || "", needs_attention: item.needs_attention || false, attention_reason: item.attention_reason || "", qty_received: item.qty_received || "" });
+    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"" });
+  };
+
+  const doSaveEdit = async (overrideData) => {
+    setSaving(true);
+    const oldItem = localParcels.find(p => p.id === editingId);
+    const dataToSave = overrideData || editData;
+    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    setLocalParcels(prev => prev.map(p => p.id === editingId ? { ...p, ...dataToSave } : p));
+    const clientWebhook = client.discord_webhook || webhookUrl;
+    if (clientWebhook) {
+      if (dataToSave.status === "delivered" && oldItem?.status !== "delivered") await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units Received", value: `${dataToSave.qty_received||oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (dataToSave.status === "partial_delivery" && !["delivered","partial_delivery"].includes(oldItem?.status)) { const qtyIn = parseInt(dataToSave.qty_received)||0; const remaining = (parseInt(oldItem?.quantity)||0) - qtyIn; await sendDiscordNotification(clientWebhook, null, { title: "📬 PARTIAL DELIVERY TO WAREHOUSE", color: 0xffab00, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units Received", value: `${qtyIn}`, inline: true }, { name: "Still In Transit", value: `${remaining}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } }); }
+      if (dataToSave.status === "prepped" && oldItem?.status !== "prepped") { const unitsPrepped = parseInt(dataToSave.qty_received) || parseInt(dataToSave.quantity) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 0; await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units Prepped", value: `${unitsPrepped}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } }); }
+      if (dataToSave.status === "collected" && oldItem?.status !== "collected") await sendDiscordNotification(clientWebhook, null, { title: "📦 COLLECTED", color: 0x22c55e, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Units", value: `${dataToSave.qty_received||oldItem?.quantity||0}`, inline: true }, { name: "SKU", value: oldItem?.sku||"—", inline: true }], footer: { text: client.full_name||client.email } });
+      if (dataToSave.needs_attention && !oldItem?.needs_attention) await sendDiscordNotification(clientWebhook, null, { title: "⚠️ NEEDS ATTENTION", color: 0xef4444, fields: [{ name: "Product", value: oldItem?.product_name||"Unknown", inline: true }, { name: "Issue", value: dataToSave.attention_reason||"Unknown", inline: true }], description: dataToSave.admin_notes||null, footer: { text: client.full_name||client.email } });
+    }
+    showToast("Saved!"); setEditingId(null); setSaving(false); onRefresh();
   };
 
   const saveEdit = async () => {
-    setSaving(true);
-    const oldItem = parcels.find(p => p.id === editingId);
-    await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(editData) });
-    
-    const clientWebhook = client.discord_webhook || webhookUrl;
-    if (clientWebhook) {
-      if (editData.status === "delivered" && oldItem?.status !== "delivered") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "📬 DELIVERED TO WAREHOUSE",
-          color: 0x00e5ff,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "✅ PREPPED & READY",
-          color: 0x00c853,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.status === "collected" && oldItem?.status !== "collected") {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "📦 COLLECTED",
-          color: 0x22c55e,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Units", value: `${oldItem?.quantity || 0}`, inline: true },
-            { name: "SKU", value: oldItem?.sku || "—", inline: true }
-          ],
-          footer: { text: client.full_name || client.email }
-        });
-      }
-      if (editData.needs_attention && !oldItem?.needs_attention) {
-        await sendDiscordNotification(clientWebhook, null, {
-          title: "⚠️ NEEDS ATTENTION",
-          color: 0xef4444,
-          fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
-            { name: "Issue", value: editData.attention_reason || "Unknown", inline: true }
-          ],
-          description: editData.admin_notes || null,
-          footer: { text: client.full_name || client.email }
-        });
-      }
+    const oldItem = localParcels.find(p => p.id === editingId);
+    // If changing to prepped and qty_received > 1, show partial prep modal
+    const qtyAvailable = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
+    if (editData.status === "prepped" && oldItem?.status !== "prepped" && qtyAvailable > 1) {
+      setPartialPrepItem({ ...oldItem, quantity: qtyAvailable, qty_received: qtyAvailable });
+      setPartialPrepQty(String(qtyAvailable));
+      return;
     }
-    showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
+    // Auto-detect partial delivery: if marking delivered but qty_received < quantity, use partial_delivery status
+    let finalData = { ...editData };
+    if (editData.status === "delivered" && editData.qty_received && parseInt(editData.qty_received) < (oldItem?.quantity || 0)) {
+      finalData.status = "partial_delivery";
+    }
+    await doSaveEdit(finalData);
   };
 
-  const deleteParcel = async (id) => {
+  const deleteParcel = async id => {
     if (!confirm("Delete this parcel?")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    setLocalParcels(prev => prev.filter(p => p.id !== id));
     showToast("Deleted!"); onRefresh();
-  };
-
-  const calcShipmentTotal = (s) => {
-    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    const boxes = parseFloat(s.box_cost) || 0;
-    const other = parseFloat(s.other_fees) || 0;
-    return units + boxes + other;
   };
 
   const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
-  const startEditShipment = (s) => {
+  const startEditShipment = s => {
     setEditingShipment(s.id);
-    const linkedParcels = parcels.filter(p => p.shipment_id === s.id).map(p => p.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped || "", unit_cost: s.unit_cost || "0.45", box_count: s.box_count || "", box_cost: s.box_cost || "", other_fees: s.other_fees || "", notes: s.notes || "", date_shipped: s.date_shipped || "", status: s.status || "ready_for_collection", selected_parcels: linkedParcels });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
     setShowShipmentForm(true);
   };
 
@@ -3143,75 +3396,69 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped) || 0, unit_cost: parseFloat(shipmentForm.unit_cost) || 0, box_count: parseInt(shipmentForm.box_count) || 0, box_cost: parseFloat(shipmentForm.box_cost) || 0, other_fees: parseFloat(shipmentForm.other_fees) || 0, notes: shipmentForm.notes || "", date_shipped: shipmentForm.date_shipped || today, status: shipmentForm.status || "ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
         await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${editingShipment}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(baseData) });
         shipId = editingShipment;
+        await fetch(`${SUPABASE_URL}/rest/v1/parcels?shipment_id=eq.${shipId}&user_id=eq.${client.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: null, status: "prepped" }) });
       } else {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/shipments`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ ...baseData, user_id: client.id }) });
-        const data = await res.json();
-        shipId = data?.[0]?.id;
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch(e) { data = []; }
+        shipId = Array.isArray(data) ? data?.[0]?.id : data?.id;
       }
-      // Unlink any previously linked parcels
-      if (editingShipment) {
-        await fetch(`${SUPABASE_URL}/rest/v1/parcels?shipment_id=eq.${shipId}&user_id=eq.${client.id}`, { 
-          method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, 
-          body: JSON.stringify({ shipment_id: null, status: "prepped" }) 
-        });
-      }
-      // Link selected parcels to shipment and set status to collected
-      if (shipmentForm.selected_parcels.length > 0 && shipId) {
+      if (shipmentForm.selected_parcels?.length > 0 && shipId) {
         const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
         for (const pid of shipmentForm.selected_parcels) {
-          await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, {
-            method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" },
-            body: JSON.stringify({ shipment_id: shipId, status: parcelStatus })
+          await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: shipId, status: parcelStatus }) });
+        }
+      }
+      // Refresh local state immediately so UI updates without waiting for parent
+      const [freshShipments, freshParcels] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/shipments?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json())
+      ]);
+      if (Array.isArray(freshShipments)) setLocalShipments(freshShipments);
+      if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
+      // Discord notification when shipment is collected
+      if (shipmentForm.status === "collected") {
+        const clientWebhook = client.discord_webhook || webhookUrl;
+        if (clientWebhook) {
+          const units = parseInt(shipmentForm.units_prepped) || 0;
+          const boxes = parseInt(shipmentForm.box_count) || 0;
+          const unitCost = parseFloat(shipmentForm.unit_cost) || 0;
+          const boxCost = parseFloat(shipmentForm.box_cost) || 0;
+          const otherFees = parseFloat(shipmentForm.other_fees) || 0;
+          const subtotal = (units * unitCost) + (boxes * boxCost) + otherFees;
+          const vat = subtotal * 0.20;
+          const total = subtotal + vat;
+          await sendDiscordNotification(clientWebhook, null, {
+            title: "🚚 SHIPMENT COLLECTED",
+            color: 0x22c55e,
+            fields: [
+              { name: "Shipment ID", value: shipmentForm.shipment_id || "—", inline: true },
+              { name: "Units", value: `${units}`, inline: true },
+              { name: "Boxes", value: `${boxes}`, inline: true },
+              { name: "Total (inc. VAT)", value: `£${total.toFixed(2)}`, inline: true }
+            ],
+            footer: { text: "Your shipment is on its way to Amazon" }
           });
         }
       }
-      showToast(editingShipment ? "Updated!" : "Shipment created!"); resetShipmentForm(); setShowShipmentForm(false); onRefresh();
-    } catch (e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
+      showToast(editingShipment ? "Updated!" : "Shipment created!");
+      resetShipmentForm(); setShowShipmentForm(false); onRefresh();
+    } catch(e) { console.error("Shipment error:", e); showToast("Error saving shipment"); }
     setSaving(false);
   };
 
-  const deleteShipment = async (id) => {
+  const deleteShipment = async id => {
     if (!confirm("Delete shipment?")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/shipments?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) });
+    setLocalShipments(prev => prev.filter(s => s.id !== id));
     showToast("Deleted!"); onRefresh();
   };
-
-  // Calculate monthly charges from shipments
-  const now = new Date();
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  
-  const calcShipmentCost = (s) => {
-    const units = (parseFloat(s.units_prepped) || 0) * (parseFloat(s.unit_cost) || 0);
-    return units + (parseFloat(s.box_cost) || 0) + (parseFloat(s.other_fees) || 0);
-  };
-  
-  const thisMonthShipments = shipments.filter(s => {
-    const d = new Date(s.date_shipped || s.created_at);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  });
-  const thisMonthTotal = thisMonthShipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
-  
-  const totalCharges = shipments.reduce((sum, s) => sum + calcShipmentCost(s), 0);
-
-  // Calculate unit counts
-  const activeParcels = parcels.filter(p => p.status !== "collected");
-  const completedParcels = parcels.filter(p => p.status === "collected");
-  const inboundParcels = parcels.filter(p => ["in_transit", "partial_delivery"].includes(p.status));
-  const inboundUnits = inboundParcels.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
-  const inWarehouseParcels = parcels.filter(p => p.status === "delivered");
-  const inWarehouseUnits = inWarehouseParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const preppedParcels = parcels.filter(p => p.status === "prepped");
-  const preppedUnits = preppedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const collectedUnits = completedParcels.reduce((sum, p) => sum + (parseInt(p.qty_received) || parseInt(p.quantity) || 0), 0);
-  const sortedActive = sortByStatus(activeParcels);
 
   return (
     <>
@@ -3220,7 +3467,7 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         <div className="card stat-card"><div className="card-title">In Warehouse</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{inWarehouseUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">Prepped</div><div className="stat-value" style={{ color: "var(--green)" }}>{preppedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
         <div className="card stat-card"><div className="card-title">Collected</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>{collectedUnits}</div><div style={{ fontSize: 11, color: "var(--text-muted)" }}>units</div></div>
-        <div className="card stat-card"><div className="card-title">{monthNames[currentMonth]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
+        <div className="card stat-card"><div className="card-title">{monthNames[now.getMonth()]} Total</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{thisMonthTotal.toFixed(2)}</div></div>
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
@@ -3228,10 +3475,10 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
         </div>
-        {sortedActive.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
+        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
-          <tbody>{sortedActive.map(p => {
+          <tbody>{sorted.map(p => {
             const isEdit = editingId === p.id, data = isEdit ? editData : p;
             return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
@@ -3260,49 +3507,30 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
         {showShipmentForm && (
           <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label>
-                <input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Status</label>
-                <select className="input" value={shipmentForm.status || "ready_for_collection"} onChange={e => setShipmentForm({ ...shipmentForm, status: e.target.value })}>
-                  <option value="ready_for_collection">Ready for Collection</option>
-                  <option value="collected">Collected</option>
-                </select></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label>
-                <input className="input" type="date" value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label>
-                <input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label>
-                <input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes Used</label>
-                <input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label>
-                <input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Shipment ID *</label><input className="input" placeholder="FBA17ABC123" value={shipmentForm.shipment_id} onChange={e => setShipmentForm({ ...shipmentForm, shipment_id: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Status</label><select className="input" value={shipmentForm.status} onChange={e => setShipmentForm({ ...shipmentForm, status: e.target.value })}><option value="ready_for_collection">Ready for Collection</option><option value="collected">Collected</option></select></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Date</label><input className="input" type="date" style={{ colorScheme: "dark" }} value={shipmentForm.date_shipped} onChange={e => setShipmentForm({ ...shipmentForm, date_shipped: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Units</label><input className="input" type="number" value={shipmentForm.units_prepped} onChange={e => setShipmentForm({ ...shipmentForm, units_prepped: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label><input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes</label><input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label><input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
             </div>
-            {/* Parcel selector */}
             {preppedParcels.length > 0 && (
-              <div style={{ marginBottom: 16, marginTop: 16 }}>
-                <label className="input-label">Link Prepped Parcels to Shipment</label>
+              <div style={{ marginBottom: 16 }}>
+                <label className="input-label">Link Prepped Parcels</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, maxHeight: 200, overflowY: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
                   {preppedParcels.map(p => (
                     <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, background: shipmentForm.selected_parcels?.includes(p.id) ? 'rgba(0,230,118,0.08)' : 'transparent', border: shipmentForm.selected_parcels?.includes(p.id) ? '1px solid rgba(0,230,118,0.2)' : '1px solid transparent' }}>
-                      <input type="checkbox" checked={shipmentForm.selected_parcels?.includes(p.id) || false} onChange={e => {
-                        const sel = shipmentForm.selected_parcels || [];
-                        setShipmentForm({ ...shipmentForm, selected_parcels: e.target.checked ? [...sel, p.id] : sel.filter(id => id !== p.id) });
-                      }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.product_name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.qty_received || p.quantity} units · {p.asin || '—'}</div>
-                      </div>
+                      <input type="checkbox" checked={shipmentForm.selected_parcels?.includes(p.id) || false} onChange={e => { const sel = shipmentForm.selected_parcels || []; setShipmentForm({ ...shipmentForm, selected_parcels: e.target.checked ? [...sel, p.id] : sel.filter(id => id !== p.id) }); }} />
+                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{p.product_name}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.qty_received || p.quantity} units · {p.asin || '—'}</div></div>
                     </label>
                   ))}
                 </div>
-                {shipmentForm.selected_parcels?.length > 0 && (
-                  <div style={{ fontSize: 12, color: '#00e676', marginTop: 6, fontWeight: 600 }}>{shipmentForm.selected_parcels.length} parcel{shipmentForm.selected_parcels.length !== 1 ? 's' : ''} selected — {shipmentForm.selected_parcels.reduce((sum, id) => { const p = preppedParcels.find(pp => pp.id === id); return sum + (parseInt(p?.qty_received || p?.quantity) || 0); }, 0)} units</div>
-                )}
+                {shipmentForm.selected_parcels?.length > 0 && <div style={{ fontSize: 12, color: '#00e676', marginTop: 6, fontWeight: 600 }}>{shipmentForm.selected_parcels.length} parcel(s) selected</div>}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentTotal(shipmentForm).toFixed(2)}</span></div>
+              <div style={{ fontWeight: 700 }}>Total: <span style={{ color: "var(--green)" }}>£{calcShipmentCost(shipmentForm).toFixed(2)}</span></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setShowShipmentForm(false); resetShipmentForm(); }}>Cancel</button>
                 <button className="btn btn-primary btn-sm" onClick={saveShipment} disabled={saving || !shipmentForm.shipment_id}>{saving ? "Saving..." : editingShipment ? "Update" : "Create"}</button>
@@ -3311,29 +3539,27 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
           </div>
         )}
 
-        {shipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
+        {localShipments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No shipments yet.</div> :
         <div className="table-wrap"><table>
           <thead><tr><th>Shipment ID</th><th>Parcels</th><th>Units</th><th>Boxes</th><th>Total</th><th>Date</th><th>Status</th><th></th></tr></thead>
-          <tbody>{shipments.map(s => {
-            const linkedParcels = parcels.filter(p => p.shipment_id === s.id);
-            return (
-            <tr key={s.id}>
+          <tbody>{localShipments.map(s => {
+            const linked = localParcels.filter(p => p.shipment_id === s.id);
+            return <tr key={s.id}>
               <td className="mono" style={{ fontWeight: 600 }}>{s.shipment_id}</td>
-              <td>{linkedParcels.length > 0 ? <div style={{ fontSize: 11 }}>{linkedParcels.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
+              <td>{linked.length > 0 ? <div style={{ fontSize: 11 }}>{linked.map(p => <div key={p.id} style={{ color: 'var(--text-secondary)' }}>{p.product_name}</div>)}</div> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}</td>
               <td className="mono">{s.units_prepped || 0}</td>
               <td className="mono">{s.box_count || 0}</td>
-              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentTotal(s).toFixed(2)}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{calcShipmentCost(s).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.date_shipped ? formatShortDate(s.date_shipped) : "—"}</td>
               <td><span className={`badge badge-${s.status === "paid" ? "paid" : s.status === "collected" ? "collected" : "pending"}`}>{s.status === "ready_for_collection" ? "Ready" : s.status}</span></td>
               <td><div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEditShipment(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteShipment(s.id)}><Icons.Trash /></button></div></td>
-            </tr>
-          );})}</tbody>
+            </tr>;
+          })}</tbody>
         </table></div>}
       </div>
 
-      {/* Completed Section */}
       {completedParcels.length > 0 && (
-        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(0,230,118,0.15)', background: 'rgba(0,230,118,0.02)' }}>
+        <div className="card" style={{ marginTop: 24, borderColor: 'rgba(0,230,118,0.15)', background: 'rgba(0,230,118,0.02)' }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div className="card-title" style={{ margin: 0, color: '#00e676' }}>✓ Completed ({completedParcels.length})</div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{collectedUnits} units collected</div>
@@ -3341,23 +3567,54 @@ function AdminClientPrep({ client, parcels, shipments, token, showToast, onRefre
           <div className="table-wrap"><table>
             <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>Units</th><th>Shipment</th></tr></thead>
             <tbody>{completedParcels.map(p => {
-              const linkedShipment = shipments.find(s => s.id === p.shipment_id);
-              return (
-                <tr key={p.id} style={{ opacity: 0.7 }}>
-                  <td style={{ fontSize: 12 }}>{formatShortDate(p.created_at)}</td>
-                  <td style={{ fontWeight: 600 }}>{p.product_name}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{p.asin || '—'}</td>
-                  <td className="mono">{p.qty_received || p.quantity}</td>
-                  <td className="mono" style={{ fontSize: 12, color: 'var(--cyan)' }}>{linkedShipment?.shipment_id || '—'}</td>
-                </tr>
-              );
+              const linked = localShipments.find(s => s.id === p.shipment_id);
+              return <tr key={p.id} style={{ opacity: 0.7 }}>
+                <td style={{ fontSize: 12 }}>{formatShortDate(p.created_at)}</td>
+                <td style={{ fontWeight: 600 }}>{p.product_name}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{p.asin || '—'}</td>
+                <td className="mono">{p.qty_received || p.quantity}</td>
+                <td className="mono" style={{ fontSize: 12, color: 'var(--cyan)' }}>{linked?.shipment_id || '—'}</td>
+              </tr>;
             })}</tbody>
           </table></div>
         </div>
       )}
+      {/* Partial Prep Modal */}
+      {partialPrepItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 400, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Partial Prep</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{partialPrepItem.product_name}</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Total qty: <strong style={{ color: "var(--text-primary)" }}>{partialPrepItem.quantity || 1}</strong></div>
+          <div><label className="input-label">How many are you prepping now?</label>
+          <input className="input" type="number" min="1" max={partialPrepItem.quantity || 1} value={partialPrepQty} onChange={e => setPartialPrepQty(e.target.value)} /></div>
+          {parseInt(partialPrepQty) < (partialPrepItem.quantity || 1) && parseInt(partialPrepQty) > 0 &&
+            <div style={{ fontSize: 12, color: "var(--amber)", marginTop: 8 }}>⚠ {(partialPrepItem.quantity || 1) - parseInt(partialPrepQty)} units will remain in delivered status</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+            <button className="btn btn-secondary" onClick={() => { setPartialPrepItem(null); setSaving(false); }}>Cancel</button>
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#000" }} onClick={async () => {
+              const qtyPrepping = parseInt(partialPrepQty) || (partialPrepItem.quantity || 1);
+              const totalQty = partialPrepItem.quantity || 1;
+              const remaining = totalQty - qtyPrepping;
+              if (remaining > 0) {
+                // Update original row with prepped qty
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${partialPrepItem.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" }) });
+                setLocalParcels(prev => prev.map(p => p.id === partialPrepItem.id ? { ...p, ...editData, quantity: qtyPrepping, qty_received: qtyPrepping, status: "prepped" } : p));
+                // Create new row for remainder
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: partialPrepItem.product_name, asin: partialPrepItem.asin, sku: partialPrepItem.sku, supplier: partialPrepItem.supplier, quantity: remaining, status: "delivered", user_id: client.id, date_added: partialPrepItem.date_added, tracking_number: partialPrepItem.tracking_number }) });
+              } else {
+                await doSaveEdit({ ...editData, status: "prepped" });
+              }
+              const clientWebhook = client.discord_webhook || webhookUrl;
+              if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "✅ PREPPED & READY", color: 0x00c853, fields: [{ name: "Product", value: partialPrepItem.product_name, inline: true }, { name: "Units Prepped", value: `${qtyPrepping}`, inline: true }, ...(remaining > 0 ? [{ name: "Still To Prep", value: `${remaining}`, inline: true }] : [])], footer: { text: client.full_name || client.email } });
+              showToast("Saved!"); setPartialPrepItem(null); setEditingId(null); setSaving(false); onRefresh();
+            }}>Confirm</button>
+          </div>
+        </div>
+      </div>}
     </>
   );
 }
+
 
 // Admin - Client Liquidation Tab
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
@@ -3365,8 +3622,69 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [activeTab, setActiveTab] = useState("transit");
+  const [sales, setSales] = useState([]);
+  const [logSaleItem, setLogSaleItem] = useState(null);
+  const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40" });
+  const [saleSaving, setSaleSaving] = useState(false);
+  const [receiveItem, setReceiveItem] = useState(null);
+  const [receiveQty, setReceiveQty] = useState("");
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
+  useEffect(() => { loadSales(); }, [client.id]);
+
+  const loadSales = async () => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&order=date_sold.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+    const data = await res.json();
+    if (Array.isArray(data)) setSales(data);
+  };
+
+  const calcSale = (form) => {
+    const sale = parseFloat(form.sale_price) || 0;
+    const ebay = parseFloat(form.ebay_fees) || 0;
+    const ship = parseFloat(form.shipping) || 0;
+    const fixed = parseFloat(form.fixed_fee) || 0.40;
+    const net = sale - ebay - ship;
+    const pct = net >= 200 ? 0.10 : 0.15;
+    const fee = net * pct;
+    const payout = net - fee - fixed;
+    return { net, pct, fee, fixed, payout };
+  };
+
+  const openLogSale = (item) => {
+    setLogSaleItem(item);
+    const today = new Date().toISOString().split('T')[0];
+    setSaleForm({ date_sold: today, qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40" });
+  };
+
+  const submitSale = async () => {
+    if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
+    setSaleSaving(true);
+    const c = calcSale(saleForm);
+    const payoutDate = new Date(saleForm.date_sold);
+    payoutDate.setDate(payoutDate.getDate() + 35);
+    const payload = {
+      stock_id: logSaleItem.id, user_id: client.id, date_sold: saleForm.date_sold,
+      qty_sold: parseInt(saleForm.qty_sold) || 1, sale_price: parseFloat(saleForm.sale_price),
+      ebay_fees: parseFloat(saleForm.ebay_fees) || 0, shipping: parseFloat(saleForm.shipping) || 0,
+      net_sale: parseFloat(c.net.toFixed(2)), dbh_pct: parseFloat((c.pct * 100).toFixed(2)),
+      dbh_fee: parseFloat(c.fee.toFixed(2)), fixed_fee: parseFloat(saleForm.fixed_fee) || 0.40,
+      payout: parseFloat(c.payout.toFixed(2)), payout_date: payoutDate.toISOString().split('T')[0], paid: false
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
+      method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+      body: JSON.stringify(payload)
+    });
+    const newQtySold = (logSaleItem.qty_sold || 0) + (parseInt(saleForm.qty_sold) || 1);
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${logSaleItem.id}`, {
+      method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ qty_sold: newQtySold })
+    });
+    const hw = client.discord_webhook || webhookUrl;
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
+    showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
+    await loadSales(); onRefresh();
+  };
 
   const pending = liquidation.filter(l => !l.sale_price).length;
   const sold = liquidation.filter(l => l.sale_price).length;
@@ -3374,7 +3692,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false });
+    setEditData({ lpn_number: item.lpn_number || "", condition: item.condition || "", listed: item.listed || false, sale_price: item.sale_price || "", date_sold: item.date_sold || "", ebay_fees: item.ebay_fees || "", shipping: item.shipping || "", paid: item.paid || false, quantity: item.quantity || 1, cog: item.cog || "", received: item.received || false });
   };
 
   const saveEdit = async () => {
@@ -3385,10 +3703,13 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       sale_price: editData.sale_price ? parseFloat(editData.sale_price) : null, 
       ebay_fees: editData.ebay_fees ? parseFloat(editData.ebay_fees) : null, 
       shipping: editData.shipping ? parseFloat(editData.shipping) : null,
-      date_sold: editData.date_sold || null
+      date_sold: editData.date_sold || null,
+      quantity: parseInt(editData.quantity) || 1,
+      cog: editData.cog ? parseFloat(editData.cog) : null,
+      received: editData.received || false
     };
     if (dataToSave.sale_price && !dataToSave.date_sold) dataToSave.date_sold = new Date().toISOString().split('T')[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(dataToSave) });
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(dataToSave) });
     if (dataToSave.date_sold && !oldItem?.date_sold) {
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
@@ -3410,38 +3731,179 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
   };
 
+  const transitItems = liquidation.filter(i => !i.received);
+  const listedItems = liquidation.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const totalSalesPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
+  const sf = saleForm, sc = calcSale(sf);
+
   return (
     <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24 }}>
-        <div className="card stat-card liquidation"><div className="card-title">Pending</div><div className="stat-value" style={{ color: "var(--amber)" }}>{pending}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Sold</div><div className="stat-value" style={{ color: "var(--green)" }}>{sold}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Total Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalPayout.toFixed(2)}</div></div>
+      {/* Stats */}
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
+        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Total Payouts</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalSalesPayout.toFixed(2)}</div></div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        {liquidation.length === 0 ? <div className="empty-state"><Icons.Box /><p>No liquidation items.</p></div> :
-        <div className="table-wrap"><table style={{ minWidth: 1000 }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Condition</th><th>Listed</th><th>Sale £</th><th>Sold Date</th><th>Payout Date</th><th>Fees</th><th>Payout</th><th>Paid</th><th></th></tr></thead>
-          <tbody>{liquidation.map(item => {
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
+          <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
+        )}
+      </div>
+
+      {/* In Transit Tab */}
+      {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
+          <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
-            const calc = calculatePayout(isEdit ? { ...item, ...editData } : item);
-            const pd = getPayoutDate(data.date_sold);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
               <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
-              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
-              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
-              <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
-              <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 130, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
-              <td style={{ fontSize: 12 }}>{pd ? formatDate(pd) : "—"}</td>
-              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="eBay" value={data.ebay_fees} onChange={e => setEditData({ ...editData, ebay_fees: e.target.value })} /><input type="number" step="0.01" className="inline-input" style={{ width: 50 }} placeholder="Ship" value={data.shipping} onChange={e => setEditData({ ...editData, shipping: e.target.value })} /></div> : <span className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{item.sale_price ? `£${calc.totalFees.toFixed(2)}` : "—"}</span>}</td>
-              <td><span className="mono" style={{ fontWeight: 700, color: calc.payout > 0 ? "var(--green)" : "var(--text-muted)" }}>{calc.payout > 0 ? `£${calc.payout.toFixed(2)}` : "—"}</span></td>
-              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.paid} onChange={e => setEditData({ ...editData, paid: e.target.checked })} /> : (item.paid ? <span style={{ color: "var(--green)" }}>✓</span> : "—")}</td>
-              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>}</td>
+              <td><span className="mono">{item.quantity || 1}</span></td>
+              <td>{item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—"}</td>
+              <td><span style={{ fontSize: 12 }}>{item.condition || "—"}</span></td>
+              <td>
+                {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
+                : <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
+                    <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => { setReceiveItem(item); setReceiveQty(String(item.quantity || 1)); }}>✓ Received</button>
+                  </div>}
+              </td>
             </tr>;
           })}</tbody>
         </table></div>}
-      </div>
+      </div>}
+
+      {/* Listed Tab */}
+      {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
+          <tbody>{listedItems.map(item => {
+            const isEdit = editingId === item.id, data = isEdit ? editData : item;
+            const remaining = (item.quantity || 1) - (item.qty_sold || 0);
+            return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
+              <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
+              <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
+              <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
+              <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
+              <td><span className="mono" style={{ color: remaining <= 0 ? "var(--red)" : "var(--text-primary)", fontWeight: 700 }}>{remaining}</span></td>
+              <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? <span style={{ color: "var(--green)" }}>Yes</span> : "No")}</td>
+              <td>
+                {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
+                : <div style={{ display: "flex", gap: 4 }}>
+                    <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
+                    {remaining > 0 && <button style={{ padding: "4px 10px", background: "var(--orange)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => openLogSale(item)}>+ Sale</button>}
+                  </div>}
+              </td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Sales Tab */}
+      {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales recorded yet.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
+          <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
+          <tbody>{sales.map(s => {
+            const stockItem = liquidation.find(l => l.id === s.stock_id);
+            return <tr key={s.id}>
+              <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
+              <td className="mono">{s.qty_sold}</td>
+              <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.ebay_fees).toFixed(2)}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.shipping).toFixed(2)}</td>
+              <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
+              <td className="mono">{s.dbh_pct}%</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.dbh_fee).toFixed(2)}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
+              <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
+              <td style={{ textAlign: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+                  {s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--green)", color: "var(--green)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) }); loadSales(); showToast("Marked paid!"); }}>Mark Paid</button>}
+                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: stockItem?.product_name || "Unknown", inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
+                </div>
+              </td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Partial Receive Modal */}
+      {receiveItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 400, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Mark Received</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{receiveItem.product_name}</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Total qty in transit: <strong style={{ color: "var(--text-primary)" }}>{receiveItem.quantity || 1}</strong></div>
+          <div><label className="input-label">Qty Received</label>
+          <input className="input" type="number" min="1" max={receiveItem.quantity || 1} value={receiveQty} onChange={e => setReceiveQty(e.target.value)} /></div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+            {parseInt(receiveQty) < (receiveItem.quantity || 1) && parseInt(receiveQty) > 0 && 
+              <span style={{ color: "var(--amber)" }}>⚠ {(receiveItem.quantity || 1) - parseInt(receiveQty)} units will remain in transit</span>}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+            <button className="btn btn-secondary" onClick={() => setReceiveItem(null)}>Cancel</button>
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#000" }} onClick={async () => {
+              const qtyReceived = parseInt(receiveQty) || (receiveItem.quantity || 1);
+              const totalQty = receiveItem.quantity || 1;
+              const remaining = totalQty - qtyReceived;
+              if (remaining > 0) {
+                // Partial receive — update existing item with received qty, create new row for remainder
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true, quantity: qtyReceived }) });
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
+              } else {
+                // Full receive
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) });
+              }
+              const hw = client.discord_webhook || webhookUrl;
+              if (hw) await sendDiscordNotification(hw, null, { title: "📦 STOCK RECEIVED", color: 0x00b8d4, fields: [{ name: "Product", value: receiveItem.product_name, inline: true }, { name: "Qty Received", value: `${qtyReceived}`, inline: true }, ...(remaining > 0 ? [{ name: "Still In Transit", value: `${remaining}`, inline: true }] : [])], footer: { text: "Your stock has arrived and is ready to list" } });
+              showToast("Marked received!"); setReceiveItem(null); onRefresh();
+            }}>Confirm</button>
+          </div>
+        </div>
+      </div>}
+
+      {/* Log Sale Modal */}
+      {logSaleItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 480, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Log Sale</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{logSaleItem.product_name}</div>
+          
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><label className="input-label">Date Sold</label><input className="input" type="date" style={{ colorScheme: "dark" }} value={sf.date_sold} onChange={e => setSaleForm({ ...sf, date_sold: e.target.value })} /></div>
+            <div><label className="input-label">Qty Sold (max {(logSaleItem.quantity||1)-(logSaleItem.qty_sold||0)})</label><input className="input" type="number" min="1" max={(logSaleItem.quantity||1)-(logSaleItem.qty_sold||0)} value={sf.qty_sold} onChange={e => setSaleForm({ ...sf, qty_sold: e.target.value })} /></div>
+            <div><label className="input-label">Sale Price (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={sf.sale_price} onChange={e => setSaleForm({ ...sf, sale_price: e.target.value })} /></div>
+            <div><label className="input-label">eBay Fees (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={sf.ebay_fees} onChange={e => setSaleForm({ ...sf, ebay_fees: e.target.value })} /></div>
+            <div><label className="input-label">Shipping (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={sf.shipping} onChange={e => setSaleForm({ ...sf, shipping: e.target.value })} /></div>
+            <div><label className="input-label">Fixed Fee (£)</label><input className="input" type="number" step="0.01" value={sf.fixed_fee} onChange={e => setSaleForm({ ...sf, fixed_fee: e.target.value })} /></div>
+          </div>
+
+          {sf.sale_price && <div style={{ background: "rgba(0,230,118,0.05)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 13 }}>
+              <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Net Sale</div><div className="mono" style={{ fontWeight: 600 }}>£{sc.net.toFixed(2)}</div></div>
+              <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH %</div><div className="mono" style={{ fontWeight: 600, color: "var(--orange)" }}>{(sc.pct*100).toFixed(0)}%</div></div>
+              <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH £</div><div className="mono" style={{ fontWeight: 600, color: "var(--orange)" }}>£{sc.fee.toFixed(2)}</div></div>
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Payout Date: {sf.date_sold ? (() => { const d = new Date(sf.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : "—"}</div>
+              <div style={{ fontWeight: 800, fontSize: 20, color: "var(--green)" }}>£{sc.payout.toFixed(2)}</div>
+            </div>
+          </div>}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn btn-secondary" onClick={() => setLogSaleItem(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitSale} disabled={saleSaving} style={{ background: "var(--orange)", color: "#000" }}>{saleSaving ? "Saving..." : "Log Sale"}</button>
+          </div>
+        </div>
+      </div>}
     </>
   );
 }
