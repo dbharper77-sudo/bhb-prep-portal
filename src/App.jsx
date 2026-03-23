@@ -673,26 +673,29 @@ function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token 
 }
 
 // ============ CLIENT LIQUIDATION PAGES ============
-function LiquidationDashboard({ liquidationStock }) {
-  const daily = getDailyData(liquidationStock.filter(s => s.date_sold), "date_sold");
-  const pending = liquidationStock.filter(s => s.sale_price && !s.paid).reduce((sum, s) => sum + calculatePayout(s).payout, 0);
-  const paidTotal = liquidationStock.filter(s => s.paid).reduce((sum, s) => sum + calculatePayout(s).payout, 0);
-  const sold = liquidationStock.filter(s => s.sale_price).length;
-  const unpaid = liquidationStock.filter(s => s.sale_price && s.date_sold && !s.paid);
-  const next = unpaid.sort((a, b) => new Date(a.date_sold) - new Date(b.date_sold))[0];
-  const nextDate = next ? getPayoutDate(next.date_sold) : null;
+function LiquidationDashboard({ liquidationStock, liquidationSales }) {
+  const sales = liquidationSales || [];
+  const transitItems = liquidationStock.filter(i => !i.received);
+  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const pendingPayout = sales.filter(s => !s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const paidTotal = sales.filter(s => s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const unpaidSales = sales.filter(s => !s.paid && s.payout_date).sort((a, b) => new Date(a.payout_date) - new Date(b.payout_date));
+  const nextSale = unpaidSales[0];
+  const daily = getDailyData(sales.filter(s => s.date_sold), "date_sold");
+
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Dashboard</div><div className="page-subtitle">Overview of your liquidation activity</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
     <div className="page-body">
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--amber)" }}>£{pending.toFixed(2)}</div></div>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Items Sold</div><div className="stat-value" style={{ color: "var(--orange)" }}>{sold}</div></div>
       </div>
-      {nextDate && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(nextDate)}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>35 days after sale</div></div>}
+      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (7 Days)</div><MiniChart data={daily} color="orange" /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaid.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaid.map(s => { const c = calculatePayout(s); const pd = getPayoutDate(s.date_sold); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{s.product_name}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{pd ? formatDate(pd) : "—"}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{c.payout.toFixed(2)}</div></div>; })}</div>}</div>
+        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{stockItem?.product_name || "—"}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
   );
@@ -2345,12 +2348,12 @@ function ClientPortal() {
       return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
     }
     if (service === "liquidation") {
-      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} />;
+      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} />;
       if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <LiquidationFeesPage />;
       if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} />;
-      return <LiquidationDashboard liquidationStock={liquidationStock} />;
+      return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} />;
     }
   };
 
