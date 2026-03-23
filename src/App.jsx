@@ -3503,10 +3503,9 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
               <button className="btn btn-primary btn-sm" disabled={saving || !addParcelForm.product_name || !addParcelForm.quantity} onClick={async () => {
                 setSaving(true);
                 const body = { product_name: addParcelForm.product_name, asin: addParcelForm.asin||null, sku: addParcelForm.sku||null, supplier: addParcelForm.supplier||null, quantity: parseInt(addParcelForm.quantity), qty_received: addParcelForm.qty_received ? parseInt(addParcelForm.qty_received) : null, tracking_number: addParcelForm.tracking_number||null, status: addParcelForm.status, user_id: client.id, date_added: new Date().toISOString().split('T')[0] };
-                const res = await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(body) });
-                const newP = await res.json();
-                if (Array.isArray(newP) && newP.length) setLocalParcels(prev => [...prev, ...newP]);
-                else if (newP && !Array.isArray(newP) && newP.id) setLocalParcels(prev => [...prev, newP]);
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(body) });
+                const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+                if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
                 setSaving(false); setShowAddParcel(false); showToast("Parcel added!"); onRefresh();
               }}>{saving ? "Saving..." : "Add Parcel"}</button>
             </div>
