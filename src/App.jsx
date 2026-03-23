@@ -3367,6 +3367,12 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
     const totalExpected = parseInt(oldItem?.quantity) || 1;
     if (editData.status === "prepped" && oldItem?.status !== "prepped") {
+      // If coming from partial_delivery, the row is already split — just mark prepped, no modal needed
+      if (oldItem?.status === "partial_delivery") {
+        await doSaveEdit({ ...editData, status: "prepped" });
+        return;
+      }
+      // Otherwise show modal to handle split
       setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
       setPartialPrepQty(String(qtyReceived));
       return;
