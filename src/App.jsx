@@ -720,40 +720,87 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   );
 }
 
-function LiquidationMyStockPage({ liquidationStock, token, onRefresh, showToast }) {
-  const [filter, setFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState({});
-  const [saving, setSaving] = useState(false);
-  const filtered = liquidationStock.filter(s => { if (filter === "all") return true; if (filter === "pending") return !s.sale_price; if (filter === "sold") return s.sale_price && !s.paid; if (filter === "paid") return s.paid; return true; });
-  const startEdit = item => { setEditingId(item.id); setEditData({ removal_order_id: item.removal_order_id || "", product_name: item.product_name || "", asin: item.asin || "", sku: item.sku || "", purchase_price: item.purchase_price || "", quantity: item.quantity || 1, cog: item.cog || item.purchase_price || "" }); };
-  const saveEdit = async () => { setSaving(true); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${editingId}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ ...editData, purchase_price: editData.cog ? parseFloat(editData.cog) : null, cog: editData.cog ? parseFloat(editData.cog) : null, quantity: parseInt(editData.quantity) || 1 }) }); showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false); };
-  const deleteItem = async id => { if (!confirm("Delete?")) return; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, { method: "DELETE", headers: supabase.headers(token) }); showToast("Deleted!"); onRefresh(); };
+function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onRefresh, showToast }) {
+  const [activeTab, setActiveTab] = useState("transit");
+  const sales = liquidationSales || [];
+  const transitItems = liquidationStock.filter(i => !i.received);
+  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const totalPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
+
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
     <div className="page-body">
-      <div style={{ marginBottom: 20 }}><select className="input" style={{ width: "auto", minWidth: 160 }} value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All Items</option><option value="pending">Pending Sale</option><option value="sold">Sold - Awaiting Payout</option><option value="paid">Paid</option></select></div>
-      {filtered.length === 0 ? <div className="card empty-state"><Icons.Box /><p>No items found.</p></div> :
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}><div className="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty</th><th>What You Paid</th><th>Sale</th><th>Fees</th><th>Payout</th><th>Est. Payout Date</th><th></th></tr></thead>
-        <tbody>{filtered.map(s => {
-          const c = calculatePayout(s), pd = getPayoutDate(s.date_sold), isEdit = editingId === s.id, data = isEdit ? editData : s;
-          return <tr key={s.id} className={isEdit ? "edit-row" : ""}>
-            <td style={{ fontSize: 12 }}>{formatShortDate(s.date_added)}</td>
-            <td style={{ fontWeight: 600 }}>{isEdit ? <input className="inline-input" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /> : s.product_name}</td>
-            <td className="mono" style={{ fontSize: 12 }}>{isEdit ? <input className="inline-input" style={{ width: 100 }} value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /> : (s.asin || "—")}</td>
-            <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
-            <td className="mono">{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span>{s.quantity || 1}</span>}</td>
-            <td className="mono">{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} placeholder="0.00" value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—")}</td>
+      {/* Stats */}
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
+        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
+        <div className="card stat-card liquidation"><div className="card-title">Total Payouts</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalPayout.toFixed(2)}</div></div>
+      </div>
 
-            <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
-            <td className="mono" style={{ fontSize: 12, color: "var(--red)" }}>{s.sale_price ? `£${c.totalFees.toFixed(2)}` : "—"}</td>
-            <td className="mono" style={{ fontWeight: 700, color: s.sale_price ? "var(--green)" : "var(--text-muted)" }}>{s.sale_price ? `£${c.payout.toFixed(2)}` : "—"}</td>
-            <td style={{ fontSize: 12 }}>{s.paid ? <span style={{ color: "var(--green)" }}>Paid</span> : pd ? formatDate(pd) : "—"}</td>
-            <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(s)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteItem(s.id)}><Icons.Trash /></button></div>}</td>
-          </tr>;
-        })}</tbody>
-      </table></div></div>}
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
+          <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
+        )}
+      </div>
+
+      {/* In Transit */}
+      {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th></tr></thead>
+          <tbody>{transitItems.map(s => <tr key={s.id}>
+            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+            <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+            <td className="mono">{s.quantity || 1}</td>
+            <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
+          </tr>)}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Listed */}
+      {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th></tr></thead>
+          <tbody>{listedItems.map(s => {
+            const remaining = (s.quantity || 1) - (s.qty_sold || 0);
+            return <tr key={s.id}>
+              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
+              <td className="mono">{s.quantity || 1}</td>
+              <td className="mono" style={{ color: "var(--green)" }}>{s.qty_sold || 0}</td>
+              <td className="mono" style={{ fontWeight: 700, color: remaining <= 0 ? "var(--red)" : "var(--text-primary)" }}>{remaining}</td>
+              <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
+
+      {/* Sales */}
+      {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales yet.</p></div> :
+        <div className="table-wrap"><table style={{ width: "100%" }}>
+          <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
+          <tbody>{sales.map(s => {
+            const stockItem = liquidationStock.find(l => l.id === s.stock_id);
+            return <tr key={s.id}>
+              <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
+              <td className="mono">{s.qty_sold}</td>
+              <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
+              <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
+              <td className="mono">{s.dbh_pct}%</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.dbh_fee).toFixed(2)}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
+              <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
+              <td style={{ textAlign: "center" }}>{s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <span style={{ color: "var(--amber)", fontSize: 12 }}>Pending</span>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+      </div>}
     </div></>
   );
 }
@@ -2211,22 +2258,26 @@ function ClientPortal() {
   const [toast, setToast] = useState(null);
   const showToast = useCallback(msg => setToast(msg), []);
 
+  const [liquidationSales, setLiquidationSales] = useState([]);
+
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, i, b, l, s, prof] = await Promise.all([
+      const [p, i, b, l, s, prof, ls] = await Promise.all([
         supabase.from("parcels", token).select(),
         supabase.from("invoices", token).select(),
         supabase.from("billing_periods", token).select(),
         supabase.from("liquidation_stock", token).select(),
         supabase.from("shipments", token).select(),
-        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json())
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${user.id}&order=date_sold.desc`, { headers: supabase.headers(token) }).then(r => r.json())
       ]);
       if (Array.isArray(p)) setParcels(p);
       if (Array.isArray(i)) setInvoices(i);
       if (Array.isArray(b)) setBillingPeriods(b);
       if (Array.isArray(l)) setLiquidationStock(l);
       if (Array.isArray(s)) setShipments(s);
+      if (Array.isArray(ls)) setLiquidationSales(ls);
       if (Array.isArray(prof) && prof[0]) {
         setDbProfile(prof[0]);
         // Auto-deactivate if payment is overdue (1 calendar month past last payment)
@@ -2248,6 +2299,7 @@ function ClientPortal() {
   }, [token]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { const interval = setInterval(() => { loadData(); }, 30000); return () => clearInterval(interval); }, [loadData]);
   useEffect(() => { setPage(service === "deals" ? "deals" : "dashboard"); }, [service]);
 
   const prepNav = [
@@ -2295,7 +2347,7 @@ function ClientPortal() {
     if (service === "liquidation") {
       if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} />;
       if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} token={token} onRefresh={loadData} showToast={showToast} />;
+      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <LiquidationFeesPage />;
       if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} />;
       return <LiquidationDashboard liquidationStock={liquidationStock} />;
@@ -3572,7 +3624,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   };
 
   const transitItems = liquidation.filter(i => !i.received);
-  const listedItems = liquidation.filter(i => i.received);
+  const listedItems = liquidation.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
   const totalSalesPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
   const sf = saleForm, sc = calcSale(sf);
 
