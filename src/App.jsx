@@ -2628,6 +2628,32 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const [clientOrder, setClientOrder] = useState([]);
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [archivedIds, setArchivedIds] = useState([]);
+  const [activeTab, setActiveTab] = useState("active");
+
+  // Load archived IDs from settings
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { headers: supabase.headers(token) })
+      .then(r => r.json()).then(d => {
+        if (d?.[0]?.value) { try { setArchivedIds(JSON.parse(d[0].value)); } catch(e) {} }
+      });
+  }, [token]);
+
+  const saveArchivedIds = async (ids) => {
+    const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { headers: supabase.headers(token) }).then(r => r.json());
+    if (existing?.length) {
+      await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ value: JSON.stringify(ids) }) });
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/settings`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ key: "archived_clients", value: JSON.stringify(ids) }) });
+    }
+  };
+
+  const toggleArchive = async (e, clientId) => {
+    e.stopPropagation();
+    const newIds = archivedIds.includes(clientId) ? archivedIds.filter(id => id !== clientId) : [...archivedIds, clientId];
+    setArchivedIds(newIds);
+    await saveArchivedIds(newIds);
+  };
 
   // Load order from profiles sort_order on mount
   useEffect(() => {
@@ -2691,16 +2717,24 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     onRefresh();
   };
 
+  const activeClients = filteredClients.filter(c => !archivedIds.includes(c.id));
+  const archivedClients = filteredClients.filter(c => archivedIds.includes(c.id));
+  const displayClients = activeTab === "active" ? activeClients : archivedClients;
+
   if (loading) return <div className="loader"><div className="spinner" /></div>;
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
-      <div style={{ marginBottom: 20 }}>
-        <div className="search-bar"><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
+        <div className="search-bar" style={{ flex: 1 }}><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button onClick={() => setActiveTab("active")} className={`btn ${activeTab === "active" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Active ({activeClients.length})</button>
+          <button onClick={() => setActiveTab("archived")} className={`btn ${activeTab === "archived" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13, opacity: archivedClients.length === 0 ? 0.5 : 1 }}>Archived ({archivedClients.length})</button>
+        </div>
       </div>
-      {filteredClients.length === 0 ? <div className="card empty-state"><Icons.Users /><p>{search ? "No clients match your search." : "No clients yet."}</p></div> :
+      {displayClients.length === 0 ? <div className="card empty-state"><Icons.Users /><p>{search ? "No clients match your search." : activeTab === "archived" ? "No archived clients." : "No clients yet."}</p></div> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-        {filteredClients.map(c => {
+        {displayClients.map(c => {
           const cp = parcels.filter(p => p.user_id === c.id);
           const cs = shipments.filter(s => s.user_id === c.id);
           const cl = liquidation.filter(l => l.user_id === c.id);
@@ -2726,7 +2760,10 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
-                <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button className="btn-icon" onClick={(e) => toggleArchive(e, c.id)} title={archivedIds.includes(c.id) ? "Unarchive client" : "Archive client"} style={{ color: archivedIds.includes(c.id) ? "var(--cyan)" : "var(--text-muted)", fontSize: 14 }}>{archivedIds.includes(c.id) ? "↩" : "🗂"}</button>
+                  <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
+                </div>
               </div>
               {paymentDue && (
                 <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
