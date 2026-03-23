@@ -3521,6 +3521,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [logSaleItem, setLogSaleItem] = useState(null);
   const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40" });
   const [saleSaving, setSaleSaving] = useState(false);
+  const [receiveItem, setReceiveItem] = useState(null);
+  const [receiveQty, setReceiveQty] = useState("");
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
   useEffect(() => { loadSales(); }, [client.id]);
@@ -3661,7 +3663,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
-                    <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "📦 STOCK RECEIVED", color: 0x00b8d4, fields: [{ name: "Product", value: item.product_name, inline: true }, { name: "Qty", value: `${item.quantity || 1}`, inline: true }], footer: { text: "Your stock has arrived and is ready to list" } }); showToast("Marked received!"); onRefresh(); }}>✓ Received</button>
+                    <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => { setReceiveItem(item); setReceiveQty(String(item.quantity || 1)); }}>✓ Received</button>
                   </div>}
               </td>
             </tr>;
@@ -3727,6 +3729,40 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             </tr>;
           })}</tbody>
         </table></div>}
+      </div>}
+
+      {/* Partial Receive Modal */}
+      {receiveItem && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 400, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Mark Received</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>{receiveItem.product_name}</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Total qty in transit: <strong style={{ color: "var(--text-primary)" }}>{receiveItem.quantity || 1}</strong></div>
+          <div><label className="input-label">Qty Received</label>
+          <input className="input" type="number" min="1" max={receiveItem.quantity || 1} value={receiveQty} onChange={e => setReceiveQty(e.target.value)} /></div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+            {parseInt(receiveQty) < (receiveItem.quantity || 1) && parseInt(receiveQty) > 0 && 
+              <span style={{ color: "var(--amber)" }}>⚠ {(receiveItem.quantity || 1) - parseInt(receiveQty)} units will remain in transit</span>}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+            <button className="btn btn-secondary" onClick={() => setReceiveItem(null)}>Cancel</button>
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#000" }} onClick={async () => {
+              const qtyReceived = parseInt(receiveQty) || (receiveItem.quantity || 1);
+              const totalQty = receiveItem.quantity || 1;
+              const remaining = totalQty - qtyReceived;
+              if (remaining > 0) {
+                // Partial receive — update existing item with received qty, create new row for remainder
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true, quantity: qtyReceived }) });
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
+              } else {
+                // Full receive
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) });
+              }
+              const hw = client.discord_webhook || webhookUrl;
+              if (hw) await sendDiscordNotification(hw, null, { title: "📦 STOCK RECEIVED", color: 0x00b8d4, fields: [{ name: "Product", value: receiveItem.product_name, inline: true }, { name: "Qty Received", value: `${qtyReceived}`, inline: true }, ...(remaining > 0 ? [{ name: "Still In Transit", value: `${remaining}`, inline: true }] : [])], footer: { text: "Your stock has arrived and is ready to list" } });
+              showToast("Marked received!"); setReceiveItem(null); onRefresh();
+            }}>Confirm</button>
+          </div>
+        </div>
       </div>}
 
       {/* Log Sale Modal */}
