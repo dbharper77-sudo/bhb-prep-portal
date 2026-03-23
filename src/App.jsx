@@ -2631,34 +2631,40 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
 
-  // Load archived IDs from settings
-  useEffect(() => {
-    fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { headers: supabase.headers(token) })
-      .then(r => r.json()).then(d => {
-        if (d?.[0]?.value) { try { setArchivedIds(JSON.parse(d[0].value)); } catch(e) {} }
-      });
-  }, [token]);
-
-  const saveArchivedIds = async (ids) => {
-    const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { headers: supabase.headers(token) }).then(r => r.json());
-    if (existing?.length) {
-      await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.archived_clients`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ value: JSON.stringify(ids) }) });
+  const saveSetting = async (key, value) => {
+    const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { headers: supabase.headers(token) }).then(r => r.json());
+    if (Array.isArray(existing) && existing.length) {
+      await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" }, body: JSON.stringify({ value: JSON.stringify(value) }) });
     } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/settings`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ key: "archived_clients", value: JSON.stringify(ids) }) });
+      await fetch(`${SUPABASE_URL}/rest/v1/settings`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" }, body: JSON.stringify({ key, value: JSON.stringify(value) }) });
     }
   };
+
+  // Load archived IDs and client order from settings
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/settings?key=in.(archived_clients,client_order)`, { headers: supabase.headers(token) })
+      .then(r => r.json()).then(d => {
+        if (!Array.isArray(d)) return;
+        const archived = d.find(x => x.key === "archived_clients");
+        const order = d.find(x => x.key === "client_order");
+        if (archived?.value) { try { setArchivedIds(JSON.parse(archived.value)); } catch(e) {} }
+        if (order?.value) { try { setClientOrder(JSON.parse(order.value)); } catch(e) {} }
+      });
+  }, [token]);
 
   const toggleArchive = async (e, clientId) => {
     e.stopPropagation();
     const newIds = archivedIds.includes(clientId) ? archivedIds.filter(id => id !== clientId) : [...archivedIds, clientId];
     setArchivedIds(newIds);
-    await saveArchivedIds(newIds);
+    await saveSetting("archived_clients", newIds);
   };
 
-  // Load order from profiles sort_order on mount
+  // Load order from settings on mount (fallback to sort_order on profiles)
   useEffect(() => {
-    const sorted = [...clients].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
-    setClientOrder(sorted.map(c => c.id));
+    if (clientOrder.length === 0) {
+      const sorted = [...clients].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+      setClientOrder(sorted.map(c => c.id));
+    }
   }, [clients]);
 
   const sortedClients = React.useMemo(() => {
@@ -2692,14 +2698,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     newOrder.splice(fromIdx, 1);
     newOrder.splice(toIdx, 0, dragId);
     setClientOrder(newOrder);
-    // Save sort_order to Supabase for each client
-    newOrder.forEach((id, index) => {
-      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, {
-        method: "PATCH",
-        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ sort_order: index })
-      });
-    });
+    saveSetting("client_order", newOrder);
     setDragId(null); setDragOverId(null);
   };
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
