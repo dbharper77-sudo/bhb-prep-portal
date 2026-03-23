@@ -2640,17 +2640,32 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     }
   };
 
-  // Load archived IDs and client order from settings
+  // Load archived IDs and client order from settings once clients are available
   useEffect(() => {
+    if (!clients.length) return;
     fetch(`${SUPABASE_URL}/rest/v1/settings?key=in.(archived_clients,client_order)`, { headers: supabase.headers(token) })
       .then(r => r.json()).then(d => {
-        if (!Array.isArray(d)) return;
+        if (!Array.isArray(d)) {
+          // Settings failed, fall back to default order
+          setClientOrder(clients.map(c => c.id));
+          return;
+        }
         const archived = d.find(x => x.key === "archived_clients");
         const order = d.find(x => x.key === "client_order");
         if (archived?.value) { try { setArchivedIds(JSON.parse(archived.value)); } catch(e) {} }
-        if (order?.value) { try { setClientOrder(JSON.parse(order.value)); } catch(e) {} }
+        // Always set order — either from settings or default
+        if (order?.value) {
+          try {
+            const saved = JSON.parse(order.value);
+            // Merge: saved order first, then any new clients not in saved order
+            const newClients = clients.filter(c => !saved.includes(c.id)).map(c => c.id);
+            setClientOrder([...saved, ...newClients]);
+          } catch(e) { setClientOrder(clients.map(c => c.id)); }
+        } else {
+          setClientOrder(clients.map(c => c.id));
+        }
       });
-  }, [token]);
+  }, [clients.length]);
 
   const toggleArchive = async (e, clientId) => {
     e.stopPropagation();
@@ -2658,14 +2673,6 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     setArchivedIds(newIds);
     await saveSetting("archived_clients", newIds);
   };
-
-  // Load order from settings on mount (fallback to sort_order on profiles)
-  useEffect(() => {
-    if (clientOrder.length === 0) {
-      const sorted = [...clients].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
-      setClientOrder(sorted.map(c => c.id));
-    }
-  }, [clients]);
 
   const sortedClients = React.useMemo(() => {
     if (!clientOrder.length) return [...clients];
