@@ -2564,33 +2564,27 @@ function AdminTrackerPage() {
   const [view, setView] = useState("overview");
   const [period, setPeriod] = useState("monthly");
   const [selStream, setSelStream] = useState(null);
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
   const [autoData, setAutoData] = useState({ prepRevenue: 0, liqRevenue: 0, loading: true });
 
   useEffect(() => {
     async function fetchAuto() {
       try {
         const headers = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
-        const now = new Date();
-        const curYear = now.getFullYear();
-        const curMonth = now.getMonth() + 1;
-        const curWeekKey = getWeekKey(now.toISOString().slice(0,10));
+        const [selYear, selMon] = selectedMonth.split("-").map(Number);
+        const curWeekKey = getWeekKey(new Date().toISOString().slice(0,10));
 
-        // Fetch ALL paid invoices
         const invRes = await fetch(`${SUPABASE_URL}/rest/v1/invoices?select=amount,period_year,period_month,status&status=eq.paid`, { headers });
         const invoices = await invRes.json();
-        console.log("Invoices fetched:", invoices);
 
-        // Fetch all sold liquidation stock
         const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&sale_price=not.is.null`, { headers });
         const liqStock = await liqRes.json();
-        console.log("Liq stock fetched:", liqStock);
 
-        // Prep monthly
         const prepMonthly = Array.isArray(invoices)
-          ? invoices.filter(i => Number(i.period_year) === curYear && Number(i.period_month) === curMonth).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
+          ? invoices.filter(i => Number(i.period_year) === selYear && Number(i.period_month) === selMon).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
           : 0;
 
-        // Prep weekly  
         const prepWeekly = Array.isArray(invoices)
           ? invoices.filter(i => {
               const d = `${i.period_year}-${String(i.period_month).padStart(2,'0')}-01`;
@@ -2598,15 +2592,10 @@ function AdminTrackerPage() {
             }).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
           : 0;
 
-        // Liq monthly
         const liqItems = Array.isArray(liqStock) ? liqStock : [];
-        const curMonthKey = `${curYear}-${String(curMonth).padStart(2,'0')}`;
-        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === curMonthKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
-
-        // Liq weekly
+        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === selectedMonth).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
         const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
 
-        console.log("Prep monthly:", prepMonthly, "Liq monthly:", liqMonthly);
         setAutoData({ prepMonthly, prepWeekly, liqMonthly, liqWeekly, loading: false });
       } catch(e) {
         console.error("Tracker fetch error:", e);
@@ -2614,14 +2603,14 @@ function AdminTrackerPage() {
       }
     }
     if (token) fetchAuto();
-  }, [token]);
+  }, [token, selectedMonth]);
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"revenue", category:"", amount:"", note:"" });
   const [timeForm, setTimeForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", hours:"", note:"" });
 
   useEffect(() => { localStorage.setItem(TKEY, JSON.stringify(data)); }, [data]);
 
-  const periodKey = period === "weekly" ? getWeekKey(new Date().toISOString().slice(0,10)) : getMonthKey(new Date().toISOString().slice(0,10));
-  const periodLabel = period === "weekly" ? `Week of ${periodKey}` : new Date(periodKey+"-01").toLocaleString("default",{month:"long",year:"numeric"});
+  const periodKey = period === "weekly" ? getWeekKey(new Date().toISOString().slice(0,10)) : selectedMonth;
+  const periodLabel = period === "weekly" ? `Week of ${periodKey}` : new Date(selectedMonth+"-01").toLocaleString("default",{month:"long",year:"numeric"});
 
   const filtE = data.entries.filter(e => (period==="weekly"?getWeekKey(e.date):getMonthKey(e.date)) === periodKey);
   const filtT = data.timeEntries.filter(e => (period==="weekly"?getWeekKey(e.date):getMonthKey(e.date)) === periodKey);
@@ -2667,7 +2656,16 @@ function AdminTrackerPage() {
           <div className="page-title" style={{color:"var(--orange)"}}>📊 Income Tracker</div>
           <div className="page-subtitle">Track profits across all your income streams</div>
         </div>
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {period === "monthly" && (
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="form-input"
+              style={{fontSize:13,padding:"6px 12px",width:"auto"}}
+            />
+          )}
           {["weekly","monthly"].map(p => (
             <button key={p} className={`btn ${period===p?"btn-primary admin":""}`} style={{fontSize:13,padding:"6px 16px",background:period!==p?"var(--bg-card)":undefined,color:period!==p?"var(--text-muted)":undefined}} onClick={()=>setPeriod(p)}>
               {p.charAt(0).toUpperCase()+p.slice(1)}
