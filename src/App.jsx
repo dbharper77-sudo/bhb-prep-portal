@@ -2569,33 +2569,47 @@ function AdminTrackerPage() {
   useEffect(() => {
     async function fetchAuto() {
       try {
-        const [invoices, liqStock] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/invoices?select=amount,period_year,period_month,status&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
-          fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&date_sold=not.is.null`, { headers: supabase.headers(token) }).then(r => r.json()),
-        ]);
+        const headers = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
         const curWeekKey = getWeekKey(now.toISOString().slice(0,10));
 
-        // Prep: sum paid invoices for current period
+        // Fetch ALL paid invoices
+        const invRes = await fetch(`${SUPABASE_URL}/rest/v1/invoices?select=amount,period_year,period_month,status&status=eq.paid`, { headers });
+        const invoices = await invRes.json();
+        console.log("Invoices fetched:", invoices);
+
+        // Fetch all sold liquidation stock
+        const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&sale_price=not.is.null`, { headers });
+        const liqStock = await liqRes.json();
+        console.log("Liq stock fetched:", liqStock);
+
+        // Prep monthly
         const prepMonthly = Array.isArray(invoices)
-          ? invoices.filter(i => i.status === "paid" && Number(i.period_year) === curYear && Number(i.period_month) === curMonth).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
-          : 0;
-        const prepWeekly = Array.isArray(invoices)
-          ? invoices.filter(i => i.status === "paid").reduce((a, i) => {
-              const d = `${i.period_year}-${String(i.period_month).padStart(2,'0')}-01`;
-              return getWeekKey(d) === curWeekKey ? a + (parseFloat(i.amount) || 0) : a;
-            }, 0)
+          ? invoices.filter(i => Number(i.period_year) === curYear && Number(i.period_month) === curMonth).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
           : 0;
 
-        // Liq: sum client payouts for current period
+        // Prep weekly  
+        const prepWeekly = Array.isArray(invoices)
+          ? invoices.filter(i => {
+              const d = `${i.period_year}-${String(i.period_month).padStart(2,'0')}-01`;
+              return getWeekKey(d) === curWeekKey;
+            }).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
+          : 0;
+
+        // Liq monthly
         const liqItems = Array.isArray(liqStock) ? liqStock : [];
-        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === `${curYear}-${String(curMonth).padStart(2,'0')}`).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+        const curMonthKey = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === curMonthKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+
+        // Liq weekly
         const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
 
+        console.log("Prep monthly:", prepMonthly, "Liq monthly:", liqMonthly);
         setAutoData({ prepMonthly, prepWeekly, liqMonthly, liqWeekly, loading: false });
       } catch(e) {
+        console.error("Tracker fetch error:", e);
         setAutoData(d => ({ ...d, loading: false }));
       }
     }
