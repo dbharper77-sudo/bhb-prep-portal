@@ -2572,31 +2572,28 @@ function AdminTrackerPage() {
     async function fetchAuto() {
       try {
         const headers = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
-        const [selYear, selMon] = selectedMonth.split("-").map(Number);
         const curWeekKey = getWeekKey(new Date().toISOString().slice(0,10));
 
-        const invRes = await fetch(`${SUPABASE_URL}/rest/v1/invoices?select=amount,period_year,period_month,status&status=eq.paid`, { headers });
-        const invoices = await invRes.json();
+        const shipRes = await fetch(`${SUPABASE_URL}/rest/v1/shipments?select=units_prepped,unit_cost,box_count,box_cost,other_fees,date_shipped,created_at`, { headers });
+        const shipments = await shipRes.json();
 
         const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&sale_price=not.is.null`, { headers });
         const liqStock = await liqRes.json();
 
-        const prepMonthly = Array.isArray(invoices)
-          ? invoices.filter(i => Number(i.period_year) === selYear && Number(i.period_month) === selMon).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
-          : 0;
+        const calcShip = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees)||0);
 
-        const prepWeekly = Array.isArray(invoices)
-          ? invoices.filter(i => {
-              const d = `${i.period_year}-${String(i.period_month).padStart(2,'0')}-01`;
-              return getWeekKey(d) === curWeekKey;
-            }).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
-          : 0;
-
+        const ships = Array.isArray(shipments) ? shipments : [];
         const liqItems = Array.isArray(liqStock) ? liqStock : [];
+
+        const prepMonthly = ships.filter(s => (s.date_shipped || s.created_at || "").slice(0,7) === selectedMonth).reduce((a, s) => a + calcShip(s), 0);
+        const prepAllTime = ships.reduce((a, s) => a + calcShip(s), 0);
+        const prepWeekly = ships.filter(s => getWeekKey((s.date_shipped || s.created_at || "").slice(0,10)) === curWeekKey).reduce((a, s) => a + calcShip(s), 0);
+
         const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === selectedMonth).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+        const liqAllTime = liqItems.reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
         const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
 
-        setAutoData({ prepMonthly, prepWeekly, liqMonthly, liqWeekly, loading: false });
+        setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, loading: false });
       } catch(e) {
         console.error("Tracker fetch error:", e);
         setAutoData(d => ({ ...d, loading: false }));
@@ -2617,17 +2614,23 @@ function AdminTrackerPage() {
 
   const stats = INCOME_STREAMS.map(s => {
     const ents = filtE.filter(e => e.stream === s.id);
-    const rev = ents.filter(e => e.type==="revenue").reduce((a,e) => a+Number(e.amount),0);
+    const manualRev = ents.filter(e => e.type==="revenue").reduce((a,e) => a+Number(e.amount),0);
     const exp = ents.filter(e => e.type==="expense").reduce((a,e) => a+Number(e.amount),0);
     const hrs = filtT.filter(e => e.stream===s.id).reduce((a,e) => a+Number(e.hours),0);
-    return { ...s, rev, exp, profit: rev-exp, hrs, rate: hrs>0?(rev-exp)/hrs:0 };
+    let autoRev = 0;
+    if (s.id === "prep" && !autoData.loading) autoRev = period === "weekly" ? (autoData.prepWeekly||0) : (autoData.prepMonthly||0);
+    if (s.id === "liquidation" && !autoData.loading) autoRev = period === "weekly" ? (autoData.liqWeekly||0) : (autoData.liqMonthly||0);
+    const rev = autoRev + manualRev;
+    return { ...s, rev, exp, profit: rev-exp, hrs, rate: hrs>0?(rev-exp)/hrs:0, isAuto: autoRev > 0 };
   });
+
+  const manualCumProfit = data.entries.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);
+  const autoCumProfit = (autoData.prepAllTime||0) + (autoData.liqAllTime||0);
 
   const totals = {
     rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0),
     profit: stats.reduce((a,s)=>a+s.profit,0), hrs: stats.reduce((a,s)=>a+s.hrs,0),
-    cumProfit: data.entries.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0) -
-               data.entries.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0)
+    cumProfit: autoCumProfit + manualCumProfit
   };
 
   const maxP = Math.max(...stats.map(s=>Math.abs(s.profit)),1);
@@ -2706,7 +2709,7 @@ function AdminTrackerPage() {
           {stats.map(s => (
             <div key={s.id} className="card" onClick={()=>setSelStream(selStream===s.id?null:s.id)} style={{cursor:"pointer",borderColor:selStream===s.id?s.color:"var(--border)",transition:"border-color 0.15s"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:15,color:s.color}}>{s.icon} {s.label}</div>
+                <div style={{fontWeight:700,fontSize:15,color:s.color,display:"flex",alignItems:"center",gap:6}}>{s.icon} {s.label}{s.isAuto&&<span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span>}{autoData.loading&&(s.id==="prep"||s.id==="liquidation")&&<span style={{fontSize:10,color:"var(--text-muted)"}}>...</span>}</div>
               </div>
               <div style={{fontSize:24,fontWeight:700,color:s.profit>=0?"var(--green)":"var(--red)",fontFamily:"'Outfit',sans-serif"}}>£{s.profit.toFixed(2)}</div>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text-muted)",marginTop:6}}>
@@ -2833,12 +2836,14 @@ function AdminTrackerPage() {
         <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>All Time</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:24}}>
           {INCOME_STREAMS.map(s => {
-            const rev=data.entries.filter(e=>e.stream===s.id&&e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);
+            const manualRev=data.entries.filter(e=>e.stream===s.id&&e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);
             const exp=data.entries.filter(e=>e.stream===s.id&&e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);
             const hrs=data.timeEntries.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);
+            const autoRev = s.id==="prep"?(autoData.prepAllTime||0):s.id==="liquidation"?(autoData.liqAllTime||0):0;
+            const rev = autoRev + manualRev;
             const profit=rev-exp;
             return <div key={s.id} className="card">
-              <div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8}}>{s.icon} {s.label}</div>
+              <div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>{s.icon} {s.label}{autoRev>0&&<span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span>}</div>
               <div style={{fontSize:24,fontWeight:700,fontFamily:"'Outfit',sans-serif",color:profit>=0?"var(--green)":"var(--red)"}}>£{profit.toFixed(2)}</div>
               <div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Rev £{rev.toFixed(2)} · Exp £{exp.toFixed(2)}</div>
               <div style={{fontSize:12,color:"var(--text-muted)",marginTop:4}}>{hrs.toFixed(1)}h · {hrs>0?`£${(profit/hrs).toFixed(2)}/hr`:"—"}</div>
