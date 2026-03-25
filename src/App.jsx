@@ -2577,21 +2577,21 @@ function AdminTrackerPage() {
         const shipRes = await fetch(`${SUPABASE_URL}/rest/v1/shipments?select=units_prepped,unit_cost,box_count,box_cost,other_fees,date_shipped,created_at`, { headers });
         const shipments = await shipRes.json();
 
-        const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&sale_price=not.is.null`, { headers });
-        const liqStock = await liqRes.json();
+        const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=dbh_fee,date_sold`, { headers });
+        const liqSales = await liqRes.json();
 
         const calcShip = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees)||0);
 
         const ships = Array.isArray(shipments) ? shipments : [];
-        const liqItems = Array.isArray(liqStock) ? liqStock : [];
+        const liqItems = Array.isArray(liqSales) ? liqSales : [];
 
         const prepMonthly = ships.filter(s => (s.date_shipped || s.created_at || "").slice(0,7) === selectedMonth).reduce((a, s) => a + calcShip(s), 0);
         const prepAllTime = ships.reduce((a, s) => a + calcShip(s), 0);
         const prepWeekly = ships.filter(s => getWeekKey((s.date_shipped || s.created_at || "").slice(0,10)) === curWeekKey).reduce((a, s) => a + calcShip(s), 0);
 
-        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === selectedMonth).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
-        const liqAllTime = liqItems.reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
-        const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === selectedMonth).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
+        const liqAllTime = liqItems.reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
+        const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
 
         setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, loading: false });
       } catch(e) {
