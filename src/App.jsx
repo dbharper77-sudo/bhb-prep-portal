@@ -2557,12 +2557,50 @@ function getWeekKey(date) {
 function getMonthKey(date) { return date.slice(0,7); }
 
 function AdminTrackerPage() {
+  const { token } = useAuth();
   const TKEY = "dbh_income_tracker";
   const load = () => { try { const r = localStorage.getItem(TKEY); return r ? JSON.parse(r) : { entries:[], timeEntries:[] }; } catch { return { entries:[], timeEntries:[] }; } };
   const [data, setData] = useState(load);
   const [view, setView] = useState("overview");
   const [period, setPeriod] = useState("monthly");
   const [selStream, setSelStream] = useState(null);
+  const [autoData, setAutoData] = useState({ prepRevenue: 0, liqRevenue: 0, loading: true });
+
+  useEffect(() => {
+    async function fetchAuto() {
+      try {
+        const [invoices, liqStock] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/invoices?select=amount,period_year,period_month,status&order=period_year.desc,period_month.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+          fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=sale_price,date_sold,ebay_fees,shipping,fee_prep,fee_bundle,fee_oversize,paid,quantity&date_sold=not.is.null`, { headers: supabase.headers(token) }).then(r => r.json()),
+        ]);
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const curWeekKey = getWeekKey(now.toISOString().slice(0,10));
+
+        // Prep: sum paid invoices for current period
+        const prepMonthly = Array.isArray(invoices)
+          ? invoices.filter(i => i.status === "paid" && Number(i.period_year) === curYear && Number(i.period_month) === curMonth).reduce((a, i) => a + (parseFloat(i.amount) || 0), 0)
+          : 0;
+        const prepWeekly = Array.isArray(invoices)
+          ? invoices.filter(i => i.status === "paid").reduce((a, i) => {
+              const d = `${i.period_year}-${String(i.period_month).padStart(2,'0')}-01`;
+              return getWeekKey(d) === curWeekKey ? a + (parseFloat(i.amount) || 0) : a;
+            }, 0)
+          : 0;
+
+        // Liq: sum client payouts for current period
+        const liqItems = Array.isArray(liqStock) ? liqStock : [];
+        const liqMonthly = liqItems.filter(s => s.date_sold && getMonthKey(s.date_sold) === `${curYear}-${String(curMonth).padStart(2,'0')}`).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+        const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (calculatePayout(s).payout || 0), 0);
+
+        setAutoData({ prepMonthly, prepWeekly, liqMonthly, liqWeekly, loading: false });
+      } catch(e) {
+        setAutoData(d => ({ ...d, loading: false }));
+      }
+    }
+    if (token) fetchAuto();
+  }, [token]);
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"revenue", category:"", amount:"", note:"" });
   const [timeForm, setTimeForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", hours:"", note:"" });
 
@@ -2845,7 +2883,7 @@ function AdminTrackerPage() {
   const periodLabel=period==="weekly"?`Week of ${periodKey}`:new Date(periodKey+"-01").toLocaleString("default",{month:"long",year:"numeric"});
   const filtE=data.entries.filter(e=>(period==="weekly"?getWeekKey(e.date):getMonthKey(e.date))===periodKey);
   const filtT=data.timeEntries.filter(e=>(period==="weekly"?getWeekKey(e.date):getMonthKey(e.date))===periodKey);
-  const stats=INCOME_STREAMS.map(s=>{const ents=filtE.filter(e=>e.stream===s.id);const rev=ents.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);const exp=ents.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);const hrs=filtT.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);return{...s,rev,exp,profit:rev-exp,hrs,rate:hrs>0?(rev-exp)/hrs:0};});
+  const stats=INCOME_STREAMS.map(s=>{const ents=filtE.filter(e=>e.stream===s.id);const manualRev=ents.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);const exp=ents.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);const hrs=filtT.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);let autoRev=0;if(s.id==="prep"&&!autoData.loading)autoRev=period==="weekly"?(autoData.prepWeekly||0):(autoData.prepMonthly||0);if(s.id==="liquidation"&&!autoData.loading)autoRev=period==="weekly"?(autoData.liqWeekly||0):(autoData.liqMonthly||0);const rev=autoRev>0?autoRev+manualRev:manualRev;return{...s,rev,exp,profit:rev-exp,hrs,rate:hrs>0?(rev-exp)/hrs:0,isAuto:autoRev>0};});
   const totals={rev:stats.reduce((a,s)=>a+s.rev,0),exp:stats.reduce((a,s)=>a+s.exp,0),profit:stats.reduce((a,s)=>a+s.profit,0),hrs:stats.reduce((a,s)=>a+s.hrs,0),cumProfit:data.entries.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0)-data.entries.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0)};
   const maxP=Math.max(...stats.map(s=>Math.abs(s.profit)),1);
   function addEntry(){if(!form.amount)return;setData(d=>({...d,entries:[...d.entries,{id:Date.now(),...form}]}));setForm(f=>({...f,amount:"",note:"",category:""}));}
@@ -2869,7 +2907,7 @@ function AdminTrackerPage() {
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:24}}>
           {stats.map(s=><div key={s.id} className="card" onClick={()=>setSelStream(selStream===s.id?null:s.id)} style={{cursor:"pointer",borderColor:selStream===s.id?s.color:"var(--border)",transition:"border-color 0.15s"}}>
-            <div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8}}>{s.icon} {s.label}</div>
+            <div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>{s.icon} {s.label}{s.isAuto&&<span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span>}{autoData.loading&&(s.id==="prep"||s.id==="liquidation")&&<span style={{fontSize:10,color:"var(--text-muted)"}}>...</span>}</div>
             <div style={{fontSize:24,fontWeight:700,color:s.profit>=0?"var(--green)":"var(--red)"}}>£{s.profit.toFixed(2)}</div>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text-muted)",marginTop:6}}><span>Rev: £{s.rev.toFixed(2)}</span><span>Exp: £{s.exp.toFixed(2)}</span></div>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text-muted)",marginTop:4}}><span>{s.hrs.toFixed(1)}h</span><span>{s.hrs>0?`£${s.rate.toFixed(2)}/hr`:"—"}</span></div>
