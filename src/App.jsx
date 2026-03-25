@@ -104,6 +104,7 @@ const Icons = {
   Settings: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
   List: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+  BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
 };
 
 const css = `
@@ -2819,6 +2820,125 @@ function AdminTrackerPage() {
   );
 }
 
+// ============ INCOME TRACKER ============
+const INCOME_STREAMS = [
+  { id: "prep",        label: "Prep",        icon: "📦", color: "var(--cyan)" },
+  { id: "liquidation", label: "Liquidation", icon: "🔄", color: "var(--orange)" },
+  { id: "dealsheet",   label: "Deal Sheet",  icon: "📋", color: "#a78bfa" },
+  { id: "fba",         label: "FBA",         icon: "🛒", color: "var(--green)" },
+  { id: "evri",        label: "Evri Job",    icon: "🚚", color: "#f97316" },
+];
+const EXPENSE_CATS = ["Cost of Goods","Software/Subs","Packaging","Fuel/Travel","Other"];
+function getWeekKey(date) { const d=new Date(date);const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const mon=new Date(d.setDate(diff));return mon.toISOString().slice(0,10); }
+function getMonthKey(date) { return date.slice(0,7); }
+function AdminTrackerPage() {
+  const TKEY="dbh_income_tracker";
+  const load=()=>{try{const r=localStorage.getItem(TKEY);return r?JSON.parse(r):{entries:[],timeEntries:[]};}catch{return{entries:[],timeEntries:[]};}};
+  const [data,setData]=useState(load);
+  const [view,setView]=useState("overview");
+  const [period,setPeriod]=useState("monthly");
+  const [selStream,setSelStream]=useState(null);
+  const [form,setForm]=useState({date:new Date().toISOString().slice(0,10),stream:"prep",type:"revenue",category:"",amount:"",note:""});
+  const [timeForm,setTimeForm]=useState({date:new Date().toISOString().slice(0,10),stream:"prep",hours:"",note:""});
+  useEffect(()=>{localStorage.setItem(TKEY,JSON.stringify(data));},[data]);
+  const periodKey=period==="weekly"?getWeekKey(new Date().toISOString().slice(0,10)):getMonthKey(new Date().toISOString().slice(0,10));
+  const periodLabel=period==="weekly"?`Week of ${periodKey}`:new Date(periodKey+"-01").toLocaleString("default",{month:"long",year:"numeric"});
+  const filtE=data.entries.filter(e=>(period==="weekly"?getWeekKey(e.date):getMonthKey(e.date))===periodKey);
+  const filtT=data.timeEntries.filter(e=>(period==="weekly"?getWeekKey(e.date):getMonthKey(e.date))===periodKey);
+  const stats=INCOME_STREAMS.map(s=>{const ents=filtE.filter(e=>e.stream===s.id);const rev=ents.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);const exp=ents.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);const hrs=filtT.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);return{...s,rev,exp,profit:rev-exp,hrs,rate:hrs>0?(rev-exp)/hrs:0};});
+  const totals={rev:stats.reduce((a,s)=>a+s.rev,0),exp:stats.reduce((a,s)=>a+s.exp,0),profit:stats.reduce((a,s)=>a+s.profit,0),hrs:stats.reduce((a,s)=>a+s.hrs,0),cumProfit:data.entries.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0)-data.entries.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0)};
+  const maxP=Math.max(...stats.map(s=>Math.abs(s.profit)),1);
+  function addEntry(){if(!form.amount)return;setData(d=>({...d,entries:[...d.entries,{id:Date.now(),...form}]}));setForm(f=>({...f,amount:"",note:"",category:""}));}
+  function addTime(){if(!timeForm.hours)return;setData(d=>({...d,timeEntries:[...d.timeEntries,{id:Date.now(),...timeForm}]}));setTimeForm(f=>({...f,hours:"",note:""}));}
+  function delEntry(id){setData(d=>({...d,entries:d.entries.filter(e=>e.id!==id)}));}
+  function delTime(id){setData(d=>({...d,timeEntries:d.timeEntries.filter(e=>e.id!==id)}));}
+  const dispEntries=selStream?filtE.filter(e=>e.stream===selStream):filtE;
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title" style={{color:"var(--orange)"}}>📊 Income Tracker</div><div className="page-subtitle">Track profits across all income streams</div></div>
+        <div style={{display:"flex",gap:8}}>{["weekly","monthly"].map(p=><button key={p} className={`btn${period===p?" btn-primary admin":""}`} style={{fontSize:13,padding:"6px 16px",background:period!==p?"var(--bg-card)":undefined,color:period!==p?"var(--text-muted)":undefined}} onClick={()=>setPeriod(p)}>{p.charAt(0).toUpperCase()+p.slice(1)}</button>)}</div>
+      </div>
+      <div style={{display:"flex",gap:4,marginBottom:24,borderBottom:"1px solid var(--border)"}}>
+        {["overview","add entry","time","history"].map(v=><button key={v} onClick={()=>setView(v)} style={{padding:"8px 18px",border:"none",background:"transparent",color:view===v?"var(--orange)":"var(--text-muted)",fontFamily:"inherit",fontSize:14,cursor:"pointer",borderBottom:view===v?"2px solid var(--orange)":"2px solid transparent",marginBottom:-1,transition:"all 0.15s"}}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>)}
+      </div>
+      {view==="overview"&&<>
+        <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>{periodLabel}</div>
+        <div className="stats-grid" style={{gridTemplateColumns:"repeat(5,1fr)",marginBottom:24}}>
+          {[{label:"Revenue",value:`£${totals.rev.toFixed(2)}`,color:"var(--cyan)"},{label:"Expenses",value:`£${totals.exp.toFixed(2)}`,color:"var(--red)"},{label:"Net Profit",value:`£${totals.profit.toFixed(2)}`,color:totals.profit>=0?"var(--green)":"var(--red)"},{label:"Hours",value:`${totals.hrs.toFixed(1)}h`,color:"var(--purple)"},{label:"All-Time Profit",value:`£${totals.cumProfit.toFixed(2)}`,color:"var(--orange)"}].map(s=><div key={s.label} className="card stat-card"><div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>{s.label}</div><div style={{fontSize:24,fontWeight:700,color:s.color}}>{s.value}</div></div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:24}}>
+          {stats.map(s=><div key={s.id} className="card" onClick={()=>setSelStream(selStream===s.id?null:s.id)} style={{cursor:"pointer",borderColor:selStream===s.id?s.color:"var(--border)",transition:"border-color 0.15s"}}>
+            <div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8}}>{s.icon} {s.label}</div>
+            <div style={{fontSize:24,fontWeight:700,color:s.profit>=0?"var(--green)":"var(--red)"}}>£{s.profit.toFixed(2)}</div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text-muted)",marginTop:6}}><span>Rev: £{s.rev.toFixed(2)}</span><span>Exp: £{s.exp.toFixed(2)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text-muted)",marginTop:4}}><span>{s.hrs.toFixed(1)}h</span><span>{s.hrs>0?`£${s.rate.toFixed(2)}/hr`:"—"}</span></div>
+            <div style={{height:3,background:"var(--bg-card)",borderRadius:2,marginTop:10}}><div style={{height:"100%",borderRadius:2,background:s.color,width:`${Math.abs(s.profit)/maxP*100}%`,transition:"width 0.4s"}}/></div>
+          </div>)}
+        </div>
+        <div className="card" style={{overflowX:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div className="card-title">{selStream?INCOME_STREAMS.find(s=>s.id===selStream)?.label:"All"} Entries — {periodLabel}</div>
+            {selStream&&<button className="btn" style={{fontSize:12,padding:"4px 12px"}} onClick={()=>setSelStream(null)}>Clear filter</button>}
+          </div>
+          {dispEntries.length===0?<div style={{textAlign:"center",color:"var(--text-muted)",padding:32}}>No entries yet — add some in "Add Entry"</div>:
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["Date","Stream","Type","Category","Amount","Note",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
+            <tbody>{[...dispEntries].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>{const s=INCOME_STREAMS.find(s=>s.id===e.stream);return<tr key={e.id} style={{borderBottom:"1px solid var(--border)"}}><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.date}</td><td style={{padding:"8px 12px"}}><span className="badge" style={{background:s?.color+"22",color:s?.color}}>{s?.icon} {s?.label}</span></td><td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="revenue"?"rgba(0,230,118,0.15)":"rgba(255,82,82,0.15)",color:e.type==="revenue"?"var(--green)":"var(--red)"}}>{e.type}</span></td><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.category||"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:e.type==="revenue"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.note||"—"}</td><td style={{padding:"8px 12px"}}><button className="btn" style={{fontSize:11,padding:"3px 8px",color:"var(--red)",border:"1px solid var(--red)",background:"transparent"}} onClick={()=>delEntry(e.id)}>✕</button></td></tr>;})}
+            </tbody>
+          </table>}
+        </div>
+      </>}
+      {view==="add entry"&&<>
+        <div className="card" style={{marginBottom:20}}>
+          <div className="card-title" style={{color:"var(--orange)",marginBottom:16}}>Add Revenue / Expense</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
+            {[{label:"Date",el:<input className="form-input" type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>},{label:"Stream",el:<select className="form-input" value={form.stream} onChange={e=>setForm(f=>({...f,stream:e.target.value}))}>{INCOME_STREAMS.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select>},{label:"Type",el:<select className="form-input" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}><option value="revenue">Revenue</option><option value="expense">Expense</option></select>},{label:"Category",el:<select className="form-input" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}><option value="">General</option>{EXPENSE_CATS.map(c=><option key={c} value={c}>{c}</option>)}</select>},{label:"Amount (£)",el:<input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))}/>},{label:"Note",el:<input className="form-input" type="text" placeholder="Optional" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>}].map(({label,el})=><div key={label}><div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:5}}>{label}</div>{el}</div>)}
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:16}}><button className="btn btn-primary admin" onClick={addEntry}>Add Entry</button><button className="btn" onClick={()=>setForm(f=>({...f,amount:"",note:"",category:""}))}>Clear</button></div>
+        </div>
+        <div className="card">
+          <div className="card-title" style={{color:"var(--orange)",marginBottom:16}}>Log Time</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
+            {[{label:"Date",el:<input className="form-input" type="date" value={timeForm.date} onChange={e=>setTimeForm(f=>({...f,date:e.target.value}))}/>},{label:"Stream",el:<select className="form-input" value={timeForm.stream} onChange={e=>setTimeForm(f=>({...f,stream:e.target.value}))}>{INCOME_STREAMS.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select>},{label:"Hours",el:<input className="form-input" type="number" step="0.5" placeholder="e.g. 2.5" value={timeForm.hours} onChange={e=>setTimeForm(f=>({...f,hours:e.target.value}))}/>},{label:"Note",el:<input className="form-input" type="text" placeholder="Optional" value={timeForm.note} onChange={e=>setTimeForm(f=>({...f,note:e.target.value}))}/>}].map(({label,el})=><div key={label}><div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:5}}>{label}</div>{el}</div>)}
+          </div>
+          <div style={{marginTop:16}}><button className="btn btn-primary admin" onClick={addTime}>Log Time</button></div>
+        </div>
+      </>}
+      {view==="time"&&<>
+        <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>{periodLabel} — Hourly Rates</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:24}}>
+          {stats.map(s=><div key={s.id} className="card"><div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8}}>{s.icon} {s.label}</div><div style={{fontSize:26,fontWeight:700}}>{s.hrs.toFixed(1)}<span style={{fontSize:14,color:"var(--text-muted)",marginLeft:4}}>hrs</span></div><div style={{fontSize:13,marginTop:4,color:s.hrs>0?(s.rate>=15?"var(--green)":s.rate>=8?"var(--amber)":"var(--red)"):"var(--text-muted)"}}>{s.hrs>0?`£${s.rate.toFixed(2)}/hr`:"No time logged"}</div><div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Profit: £{s.profit.toFixed(2)}</div></div>)}
+        </div>
+        <div className="card" style={{overflowX:"auto"}}>
+          <div className="card-title" style={{marginBottom:16}}>Time Log — {periodLabel}</div>
+          {filtT.length===0?<div style={{textAlign:"center",color:"var(--text-muted)",padding:32}}>No time logged yet</div>:
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["Date","Stream","Hours","Note",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"var(--text-muted)",letterSpacing:1,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
+            <tbody>{[...filtT].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>{const s=INCOME_STREAMS.find(s=>s.id===e.stream);return<tr key={e.id} style={{borderBottom:"1px solid var(--border)"}}><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.date}</td><td style={{padding:"8px 12px"}}><span className="badge" style={{background:s?.color+"22",color:s?.color}}>{s?.icon} {s?.label}</span></td><td style={{padding:"8px 12px",fontWeight:600}}>{Number(e.hours).toFixed(1)}h</td><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.note||"—"}</td><td style={{padding:"8px 12px"}}><button className="btn" style={{fontSize:11,padding:"3px 8px",color:"var(--red)",border:"1px solid var(--red)",background:"transparent"}} onClick={()=>delTime(e.id)}>✕</button></td></tr>;})}
+            </tbody>
+          </table>}
+        </div>
+      </>}
+      {view==="history"&&<>
+        <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>All Time</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:24}}>
+          {INCOME_STREAMS.map(s=>{const rev=data.entries.filter(e=>e.stream===s.id&&e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);const exp=data.entries.filter(e=>e.stream===s.id&&e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);const hrs=data.timeEntries.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);const profit=rev-exp;return<div key={s.id} className="card"><div style={{fontWeight:700,fontSize:15,color:s.color,marginBottom:8}}>{s.icon} {s.label}</div><div style={{fontSize:24,fontWeight:700,color:profit>=0?"var(--green)":"var(--red)"}}>£{profit.toFixed(2)}</div><div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Rev £{rev.toFixed(2)} · Exp £{exp.toFixed(2)}</div><div style={{fontSize:12,color:"var(--text-muted)",marginTop:4}}>{hrs.toFixed(1)}h · {hrs>0?`£${(profit/hrs).toFixed(2)}/hr`:"—"}</div></div>;})}
+        </div>
+        <div className="card" style={{overflowX:"auto"}}>
+          <div className="card-title" style={{marginBottom:16}}>All Entries</div>
+          {data.entries.length===0?<div style={{textAlign:"center",color:"var(--text-muted)",padding:32}}>No entries yet</div>:
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["Date","Stream","Type","Category","Amount","Note",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"var(--text-muted)",letterSpacing:1,borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
+            <tbody>{[...data.entries].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>{const s=INCOME_STREAMS.find(s=>s.id===e.stream);return<tr key={e.id} style={{borderBottom:"1px solid var(--border)"}}><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.date}</td><td style={{padding:"8px 12px"}}><span className="badge" style={{background:s?.color+"22",color:s?.color}}>{s?.icon} {s?.label}</span></td><td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="revenue"?"rgba(0,230,118,0.15)":"rgba(255,82,82,0.15)",color:e.type==="revenue"?"var(--green)":"var(--red)"}}>{e.type}</span></td><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.category||"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:e.type==="revenue"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td><td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.note||"—"}</td><td style={{padding:"8px 12px"}}><button className="btn" style={{fontSize:11,padding:"3px 8px",color:"var(--red)",border:"1px solid var(--red)",background:"transparent"}} onClick={()=>delEntry(e.id)}>✕</button></td></tr>;})}
+            </tbody>
+          </table>}
+        </div>
+      </>}
+    </div>
+  );
+}
+
 function AdminPortal() {
   const { user, token, signOut } = useAuth();
   const [page, setPage] = useState("clients");
@@ -2863,6 +2983,7 @@ function AdminPortal() {
   const renderPage = () => {
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
     if (page === "deals") return <AdminDealsPage token={token} showToast={showToast} />;
+    if (page === "tracker") return <AdminTrackerPage />;
     if (page === "tracker") return <AdminTrackerPage />;
     if (page === "client" && selectedClient) {
       return <AdminClientPage 
