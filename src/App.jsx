@@ -2636,8 +2636,9 @@ function AdminTrackerPage() {
     return { ...s, rev, exp, profit: rev-exp, hrs, rate: hrs>0?(rev-exp)/hrs:0, isAuto: autoRev > 0 };
   });
 
-  const manualCumProfit = data.entries.filter(e=>e.type==="profit").reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="cost").reduce((a,e)=>a+Number(e.amount),0);
-  const autoCumProfit = (autoData.prepAllTime||0) + (autoData.liqAllTime||0);
+  const ytdYear = new Date().getFullYear();
+  const manualCumProfit = data.entries.filter(e=>e.type==="profit"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="cost"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0);
+  const autoCumProfit = (autoData.prepYTD||0) + (autoData.liqYTD||0);
 
   const totals = {
     rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0),
@@ -2708,7 +2709,7 @@ function AdminTrackerPage() {
             {label:"Costs",value:`£${totals.exp.toFixed(2)}`,cls:"warning"},
             {label:"Net Profit",value:`£${totals.profit.toFixed(2)}`,cls:totals.profit>=0?"":"warning"},
             {label:"Hours",value:`${totals.hrs.toFixed(1)}h`,cls:""},
-            {label:"All-Time Profit",value:`£${totals.cumProfit.toFixed(2)}`,cls:"admin"},
+            {label:"YTD Profit",value:`£${totals.cumProfit.toFixed(2)}`,cls:"admin"},
           ].map(s => (
             <div key={s.label} className={`card stat-card ${s.cls}`}>
               <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>{s.label}</div>
