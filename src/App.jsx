@@ -2626,8 +2626,8 @@ function AdminTrackerPage() {
 
   const stats = INCOME_STREAMS.map(s => {
     const ents = filtE.filter(e => e.stream === s.id);
-    const manualRev = ents.filter(e => e.type==="revenue").reduce((a,e) => a+Number(e.amount),0);
-    const exp = ents.filter(e => e.type==="expense").reduce((a,e) => a+Number(e.amount),0);
+    const manualRev = ents.filter(e => e.type==="profit").reduce((a,e) => a+Number(e.amount),0);
+    const exp = ents.filter(e => e.type==="cost").reduce((a,e) => a+Number(e.amount),0);
     const hrs = filtT.filter(e => e.stream===s.id).reduce((a,e) => a+Number(e.hours),0);
     let autoRev = 0;
     if (s.id === "prep" && !autoData.loading) autoRev = period === "weekly" ? (autoData.prepWeekly||0) : period === "ytd" ? (autoData.prepYTD||0) : (autoData.prepMonthly||0);
@@ -2636,7 +2636,7 @@ function AdminTrackerPage() {
     return { ...s, rev, exp, profit: rev-exp, hrs, rate: hrs>0?(rev-exp)/hrs:0, isAuto: autoRev > 0 };
   });
 
-  const manualCumProfit = data.entries.filter(e=>e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);
+  const manualCumProfit = data.entries.filter(e=>e.type==="profit").reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="cost").reduce((a,e)=>a+Number(e.amount),0);
   const autoCumProfit = (autoData.prepAllTime||0) + (autoData.liqAllTime||0);
 
   const totals = {
@@ -2704,8 +2704,8 @@ function AdminTrackerPage() {
 
         <div className="stats-grid" style={{gridTemplateColumns:"repeat(5,1fr)"}}>
           {[
-            {label:"Revenue",value:`£${totals.rev.toFixed(2)}`,cls:""},
-            {label:"Expenses",value:`£${totals.exp.toFixed(2)}`,cls:"warning"},
+            {label:"Income",value:`£${totals.rev.toFixed(2)}`,cls:""},
+            {label:"Costs",value:`£${totals.exp.toFixed(2)}`,cls:"warning"},
             {label:"Net Profit",value:`£${totals.profit.toFixed(2)}`,cls:totals.profit>=0?"":"warning"},
             {label:"Hours",value:`${totals.hrs.toFixed(1)}h`,cls:""},
             {label:"All-Time Profit",value:`£${totals.cumProfit.toFixed(2)}`,cls:"admin"},
@@ -2750,9 +2750,9 @@ function AdminTrackerPage() {
                 return <tr key={e.id} style={{borderBottom:"1px solid var(--border)"}}>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.date}</td>
                   <td style={{padding:"8px 12px"}}><span className="badge" style={{background:s?.color+"22",color:s?.color}}>{s?.icon} {s?.label}</span></td>
-                  <td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="revenue"?"rgba(0,230,118,0.15)":"rgba(239,68,68,0.15)",color:e.type==="revenue"?"var(--green)":"var(--red)"}}>{e.type}</span></td>
+                  <td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="profit"?"rgba(0,230,118,0.15)":"rgba(239,68,68,0.15)",color:e.type==="profit"?"var(--green)":"var(--red)"}}>{e.type}</span></td>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.category||"—"}</td>
-                  <td style={{padding:"8px 12px",fontWeight:600,color:e.type==="revenue"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td>
+                  <td style={{padding:"8px 12px",fontWeight:600,color:e.type==="profit"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.note||"—"}</td>
                   <td style={{padding:"8px 12px"}}><button className="btn" style={{fontSize:11,padding:"3px 8px",color:"var(--red)",border:"1px solid var(--red)",background:"transparent"}} onClick={()=>delEntry(e.id)}>✕</button></td>
                 </tr>;
@@ -2770,7 +2770,7 @@ function AdminTrackerPage() {
             {[
               {label:"Date",el:<input className="form-input" type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />},
               {label:"Stream",el:<select className="form-input" value={form.stream} onChange={e=>setForm(f=>({...f,stream:e.target.value}))}>{INCOME_STREAMS.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select>},
-              {label:"Type",el:<select className="form-input" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}><option value="revenue">Revenue</option><option value="expense">Expense</option></select>},
+              {label:"Type",el:<select className="form-input" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}><option value="profit">Profit</option><option value="cost">Cost</option></select>},
               {label:"Category",el:<select className="form-input" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}><option value="">General</option>{EXPENSE_CATS.map(c=><option key={c} value={c}>{c}</option>)}</select>},
               {label:"Amount (£)",el:<input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} />},
               {label:"Note",el:<input className="form-input" type="text" placeholder="Optional" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} />},
@@ -2848,8 +2848,8 @@ function AdminTrackerPage() {
         <div style={{fontSize:11,color:"var(--text-muted)",letterSpacing:1,textTransform:"uppercase",marginBottom:16}}>All Time</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:24}}>
           {INCOME_STREAMS.map(s => {
-            const manualRev=data.entries.filter(e=>e.stream===s.id&&e.type==="revenue").reduce((a,e)=>a+Number(e.amount),0);
-            const exp=data.entries.filter(e=>e.stream===s.id&&e.type==="expense").reduce((a,e)=>a+Number(e.amount),0);
+            const manualRev=data.entries.filter(e=>e.stream===s.id&&e.type==="profit").reduce((a,e)=>a+Number(e.amount),0);
+            const exp=data.entries.filter(e=>e.stream===s.id&&e.type==="cost").reduce((a,e)=>a+Number(e.amount),0);
             const hrs=data.timeEntries.filter(e=>e.stream===s.id).reduce((a,e)=>a+Number(e.hours),0);
             const autoRev = s.id==="prep"?(autoData.prepAllTime||0):s.id==="liquidation"?(autoData.liqAllTime||0):0;
             const rev = autoRev + manualRev;
@@ -2872,9 +2872,9 @@ function AdminTrackerPage() {
                 return <tr key={e.id} style={{borderBottom:"1px solid var(--border)"}}>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.date}</td>
                   <td style={{padding:"8px 12px"}}><span className="badge" style={{background:s?.color+"22",color:s?.color}}>{s?.icon} {s?.label}</span></td>
-                  <td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="revenue"?"rgba(0,230,118,0.15)":"rgba(239,68,68,0.15)",color:e.type==="revenue"?"var(--green)":"var(--red)"}}>{e.type}</span></td>
+                  <td style={{padding:"8px 12px"}}><span className="badge" style={{background:e.type==="profit"?"rgba(0,230,118,0.15)":"rgba(239,68,68,0.15)",color:e.type==="profit"?"var(--green)":"var(--red)"}}>{e.type}</span></td>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.category||"—"}</td>
-                  <td style={{padding:"8px 12px",fontWeight:600,color:e.type==="revenue"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td>
+                  <td style={{padding:"8px 12px",fontWeight:600,color:e.type==="profit"?"var(--green)":"var(--red)"}}>£{Number(e.amount).toFixed(2)}</td>
                   <td style={{padding:"8px 12px",fontSize:12,color:"var(--text-muted)"}}>{e.note||"—"}</td>
                   <td style={{padding:"8px 12px"}}><button className="btn" style={{fontSize:11,padding:"3px 8px",color:"var(--red)",border:"1px solid var(--red)",background:"transparent"}} onClick={()=>delEntry(e.id)}>✕</button></td>
                 </tr>;
