@@ -3456,4 +3456,3 @@ function AppRouter() {
   if (!user) return <LoginPage />;
   return isAdmin ? <AdminPortal /> : <ClientPortal />;
 }
-// restore Fri 27 Mar 2026 17:29:44 GMT
