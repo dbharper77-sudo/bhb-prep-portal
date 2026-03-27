@@ -4075,12 +4075,13 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 // Admin - Client Liquidation Tab
 async function lookupAsinTitle(asin) {
   try {
-    const res = await fetch("https://corsproxy.io/?" + encodeURIComponent("https://www.amazon.co.uk/dp/" + asin));
-    const html = await res.text();
-    const og = html.match(/property="og:title" content="([^"]{5,300})"/);
-    if (og && og[1]) return og[1].replace(/\s+/g, " ").trim();
-    const t = html.match(/<title>([^|<]{5,200})/);
-    if (t && t[1]) return t[1].replace(/\s+/g, " ").trim();
+    const res = await fetch("https://cccsreyspmpwnfbmegwz.supabase.co/functions/v1/dynamic-endpoint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ asin })
+    });
+    const data = await res.json();
+    if (data?.title) return data.title;
   } catch(e) {}
   return null;
 }
