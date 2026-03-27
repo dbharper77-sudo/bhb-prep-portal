@@ -4075,29 +4075,13 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 // Admin - Client Liquidation Tab
 async function lookupAsinTitle(asin) {
   try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.amazon.co.uk/dp/${asin}`)}`);
-    const data = await res.json();
-    const match = data.contents?.match(/<span id="productTitle"[^>]*>([^<]+)<\/span>/);
-    if (match) return match[1].trim();
+    const res = await fetch("https://corsproxy.io/?" + encodeURIComponent("https://www.amazon.co.uk/dp/" + asin));
+    const html = await res.text();
+    const og = html.match(/property="og:title" content="([^"]{5,300})"/);
+    if (og && og[1]) return og[1].replace(/\s+/g, " ").trim();
+    const t = html.match(/<title>([^|<]{5,200})/);
+    if (t && t[1]) return t[1].replace(/\s+/g, " ").trim();
   } catch(e) {}
-  return null;
-}
-
-async function lookupAsinTitle(asin) {
-  const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent('https://www.amazon.co.uk/dp/' + asin)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.amazon.co.uk/dp/' + asin)}`,
-  ];
-  for (const url of proxies) {
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      const html = await res.text();
-      const m1 = html.match(/id="productTitle"[^>]*>\s*([^<]{5,200})\s*</);
-      if (m1?.[1]?.trim()) return m1[1].trim();
-      const m2 = html.match(/"title":"([^"]{5,200})"/);
-      if (m2?.[1]?.trim()) return m2[1].trim();
-    } catch(e) {}
-  }
   return null;
 }
 
