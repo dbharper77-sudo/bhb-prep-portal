@@ -4075,16 +4075,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 // Admin - Client Liquidation Tab
 async function lookupAsinTitle(asin) {
   try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.amazon.co.uk/dp/${asin}`)}`);
-    const data = await res.json();
-    const match = data.contents?.match(/<span id="productTitle"[^>]*>([^<]+)<\/span>/);
-    if (match) return match[1].trim();
-  } catch(e) {}
-  return null;
-}
-
-async function lookupAsinTitle(asin) {
-  try {
     const url = `https://api.allorigins.win/get?url=${encodeURIComponent('https://www.amazon.co.uk/dp/' + asin)}`;
     const res = await fetch(url);
     const data = await res.json();
