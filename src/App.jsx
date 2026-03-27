@@ -4073,6 +4073,27 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
 
 // Admin - Client Liquidation Tab
+async function lookupAsinTitle(asin) {
+  try {
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.amazon.co.uk/dp/${asin}`)}`);
+    const data = await res.json();
+    const match = data.contents?.match(/<span id="productTitle"[^>]*>([^<]+)<\/span>/);
+    if (match) return match[1].trim();
+  } catch(e) {}
+  return null;
+}
+
+async function lookupAsinTitle(asin) {
+  try {
+    const url = `https://api.allorigins.win/get?url=${encodeURIComponent('https://www.amazon.co.uk/dp/' + asin)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const match = data.contents && data.contents.match(/id="productTitle"[^>]*>\s*([^<]+)\s*</);
+    if (match && match[1]) return match[1].trim();
+  } catch(e) {}
+  return null;
+}
+
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -4219,7 +4240,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
@@ -4245,7 +4266,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
