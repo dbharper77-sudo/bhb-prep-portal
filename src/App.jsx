@@ -3456,9 +3456,12 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ expiresIn: 31536000 })
       });
-      const signData = await signRes.json();
+      const signText = await signRes.text();
+      console.log("signRes raw:", signText);
+      const signData = JSON.parse(signText);
       const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || "";
-      const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`;
+      console.log("rawUrl:", rawUrl);
+      const url = rawUrl.startsWith("http") ? rawUrl : rawUrl.startsWith("/") ? `${SUPABASE_URL}${rawUrl}` : `${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`;
       await updateInvoice(inv.id, { invoice_url: url }, true);
       showToast("PDF generated & uploaded!");
     } catch (err) {
