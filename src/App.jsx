@@ -3347,6 +3347,28 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.setTextColor(18, 18, 24); doc.setFontSize(9); doc.setFont("helvetica", "bold");
       doc.text(`${mNames[periodMonth]} ${periodYear}`, M + 6, 76);
 
+      // Companies House lookup
+      let chAddress = [];
+      let chCompanyName = "";
+      try {
+        const chName = encodeURIComponent(client.full_name || "");
+        const chRes = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${chName}&items_per_page=1`);
+        if (chRes.ok) {
+          const chData = await chRes.json();
+          const co = chData.items && chData.items[0];
+          if (co) {
+            chCompanyName = co.title || "";
+            const addr = co.address || {};
+            chAddress = [
+              addr.premises && addr.address_line_1 ? `${addr.premises} ${addr.address_line_1}` : addr.address_line_1 || addr.premises || "",
+              addr.address_line_2 || "",
+              addr.locality || "",
+              addr.postal_code || ""
+            ].filter(Boolean);
+          }
+        }
+      } catch(e) { console.log("CH lookup failed:", e); }
+
       // Bill To
       doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("BILL TO", M, 90);
@@ -3354,9 +3376,14 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.line(M, 92, M + 20, 92);
 
       doc.setTextColor(18, 18, 24); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-      doc.text(client.full_name || client.email || "Client", M, 98);
+      doc.text(chCompanyName || client.full_name || client.email || "Client", M, 98);
       doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 55);
-      doc.text(client.email || "", M, 104);
+      let billY = 104;
+      if (client.full_name && chCompanyName && chCompanyName.toLowerCase() !== client.full_name.toLowerCase()) {
+        doc.text(client.full_name, M, billY); billY += 5.5;
+      }
+      chAddress.forEach(line => { if (line) { doc.text(line, M, billY); billY += 5.5; } });
+      doc.text(client.email || "", M, billY);
 
       // Table header
       const monthShipments = getMonthlyShipmentBreakdown(periodMonth, periodYear);
@@ -3470,7 +3497,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       const signData = await signRes.json();
       const signedPath = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || "";
       const url = signedPath.startsWith("http") ? signedPath : `${SUPABASE_URL}${signedPath}`;
-      await updateInvoice(inv.id, { invoice_url: url }, true);
+      // Also store the raw storage path so we can regenerate signed URLs
+      await updateInvoice(inv.id, { invoice_url: url, storage_path: path }, true);
       showToast("PDF generated & uploaded!");
     } catch (err) {
       console.error("PDF error:", err);
@@ -3779,7 +3807,20 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {inv.invoice_url && (
-                        <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
+                        <button style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 13, cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                          onClick={async () => {
+                            const storagePath = inv.storage_path || `${client.id}/${inv.invoice_number}.pdf`;
+                            const sr = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${storagePath}`, {
+                              method: "POST",
+                              headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({ expiresIn: 3600 })
+                            });
+                            const sd = await sr.json();
+                            const sp = sd.signedURL || sd.signedUrl || (sd.data && (sd.data.signedURL || sd.data.signedUrl)) || "";
+                            const freshUrl = sp.startsWith("http") ? sp : `${SUPABASE_URL}${sp}`;
+                            if (freshUrl && freshUrl.includes("token=")) { window.open(freshUrl, "_blank"); }
+                            else { window.open(inv.invoice_url, "_blank"); }
+                          }}>📄 View PDF</button>
                       )}
                       <button
                         style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", background: "var(--amber, #e6a01e)", border: "none", borderRadius: 7, fontSize: 12, color: "#fff", fontWeight: 600 }}
