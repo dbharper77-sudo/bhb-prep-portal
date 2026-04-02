@@ -3347,7 +3347,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       // Bill To
       doc.setTextColor(...C.muted); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("BILL TO", M, 90);
-      doc.setDrawColor(...C.amber[0], ...[]); 
+      doc.setDrawColor(230, 160, 30);
       doc.setDrawColor(230, 160, 30); doc.setLineWidth(0.8);
       doc.line(M, 92, M + 20, 92);
 
