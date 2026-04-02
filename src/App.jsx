@@ -3705,7 +3705,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [showShipmentForm, setShowShipmentForm] = useState(false);
-  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [partialPrepItem, setPartialPrepItem] = useState(null);
@@ -3790,11 +3790,11 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     showToast("Deleted!"); onRefresh();
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = s => {
     setEditingShipment(s.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", other_fees_note: s.other_fees_note||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
     setShowShipmentForm(true);
   };
 
@@ -3802,7 +3802,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, other_fees_note: shipmentForm.other_fees_note||"", notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
@@ -3818,6 +3818,9 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       if (shipmentForm.selected_parcels?.length > 0 && shipId) {
         const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
         for (const pid of shipmentForm.selected_parcels) {
+          const parcel = localParcels.find(p => p.id === pid);
+          // Only mark as collected if the parcel is currently prepped (not in-transit or delivered)
+          if (shipmentForm.status === "collected" && parcel && !["prepped"].includes(parcel.status)) continue;
           await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: shipId, status: parcelStatus }) });
         }
       }
@@ -3946,6 +3949,8 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label><input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes</label><input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label><input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Other Costs (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={shipmentForm.other_fees} onChange={e => setShipmentForm({ ...shipmentForm, other_fees: e.target.value })} /></div>
+              <div className="input-group" style={{ margin: 0, gridColumn: "span 2" }}><label className="input-label">Other Costs Description</label><input className="input" placeholder="e.g. Bubble wrap, labels..." value={shipmentForm.other_fees_note} onChange={e => setShipmentForm({ ...shipmentForm, other_fees_note: e.target.value })} /></div>
             </div>
             {preppedParcels.length > 0 && (
               <div style={{ marginBottom: 16 }}>
@@ -4073,6 +4078,19 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
 
 // Admin - Client Liquidation Tab
+async function lookupAsinTitle(asin) {
+  try {
+    const res = await fetch("https://cccsreyspmpwnfbmegwz.supabase.co/functions/v1/dynamic-endpoint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ asin })
+    });
+    const data = await res.json();
+    if (data?.title) return data.title;
+  } catch(e) {}
+  return null;
+}
+
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -4138,8 +4156,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     });
     const hw = client.discord_webhook || webhookUrl;
     if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
-    showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
-    await loadSales(); onRefresh();
+    await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
   };
 
   const pending = liquidation.filter(l => !l.sale_price).length;
@@ -4219,7 +4236,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
@@ -4245,7 +4262,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
