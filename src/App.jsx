@@ -3279,7 +3279,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const generateAndUploadPDF = async (inv) => {
     showToast("Generating PDF...");
     try {
-      // Load jsPDF
       if (!window.jspdf) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
@@ -3290,13 +3289,10 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit: "mm", format: "a4" });
-
-      // Colours & fonts
-      const C = { dark: [18, 18, 24], mid: [40, 40, 55], muted: [110, 110, 130], border: [220, 220, 230], amber: [230, 160, 30], green: [34, 197, 94], bg: [248, 248, 252] };
       const W = 210; const M = 18;
 
-      // Header background
-      doc.setFillColor(...C.dark);
+      // Header bar
+      doc.setFillColor(18, 18, 24);
       doc.rect(0, 0, W, 42, "F");
 
       // Company name
@@ -3304,7 +3300,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.setFontSize(18); doc.setFont("helvetica", "bold");
       doc.text("DBH FBA LTD", M, 16);
 
-      // Company details right side
+      // Company details right
       doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.setTextColor(180, 180, 200);
       const compRight = ["19-21 Hatchett Street", "Birmingham B19 3NX", "United Kingdom", "VAT No: 441311541", "dbharper77@gmail.com"];
@@ -3315,53 +3311,48 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.text("INVOICE", M, 36);
 
       // Invoice meta box
-      doc.setFillColor(...C.bg);
+      doc.setFillColor(248, 248, 252);
       doc.roundedRect(M, 48, W - M * 2, 30, 3, 3, "F");
-      doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+      doc.setDrawColor(220, 220, 230); doc.setLineWidth(0.3);
       doc.roundedRect(M, 48, W - M * 2, 30, 3, 3, "S");
 
       const mNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-      const periodMonth = inv.period_month - 1; // 0-indexed
+      const periodMonth = inv.period_month - 1;
       const periodYear = inv.period_year;
-
-      // Invoice number / date / due date
-      const issueDate = new Date(periodYear, periodMonth + 1, 1); // 1st of following month
-      const dueDate = new Date(periodYear, periodMonth + 1, 6);   // 6th = 5 days after 1st
+      const issueDate = new Date(periodYear, periodMonth + 1, 1);
+      const dueDate = new Date(periodYear, periodMonth + 1, 6);
       const fmt = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-      doc.setTextColor(...C.muted); doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("Invoice Number", M + 6, 57);
       doc.text("Issue Date", M + 68, 57);
       doc.text("Due Date", M + 120, 57);
 
-      doc.setTextColor(...C.dark); doc.setFontSize(9.5); doc.setFont("helvetica", "bold");
+      doc.setTextColor(18, 18, 24); doc.setFontSize(9.5); doc.setFont("helvetica", "bold");
       doc.text(inv.invoice_number || "—", M + 6, 63);
       doc.text(fmt(issueDate), M + 68, 63);
       doc.text(fmt(dueDate), M + 120, 63);
 
-      doc.setTextColor(...C.muted); doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("Period", M + 6, 70);
-      doc.setTextColor(...C.dark); doc.setFontSize(9); doc.setFont("helvetica", "bold");
+      doc.setTextColor(18, 18, 24); doc.setFontSize(9); doc.setFont("helvetica", "bold");
       doc.text(`${mNames[periodMonth]} ${periodYear}`, M + 6, 76);
 
       // Bill To
-      doc.setTextColor(...C.muted); doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("BILL TO", M, 90);
-      doc.setDrawColor(230, 160, 30);
       doc.setDrawColor(230, 160, 30); doc.setLineWidth(0.8);
       doc.line(M, 92, M + 20, 92);
 
-      doc.setTextColor(...C.dark); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+      doc.setTextColor(18, 18, 24); doc.setFontSize(10); doc.setFont("helvetica", "bold");
       doc.text(client.full_name || client.email || "Client", M, 98);
-      doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...C.mid);
+      doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 55);
       doc.text(client.email || "", M, 104);
 
-      // Shipments breakdown
-      const monthShipments = getMonthlyShipmentBreakdown(periodMonth, periodYear);
-
-      let y = 116;
       // Table header
-      doc.setFillColor(...C.dark);
+      const monthShipments = getMonthlyShipmentBreakdown(periodMonth, periodYear);
+      let y = 116;
+      doc.setFillColor(18, 18, 24);
       doc.rect(M, y, W - M * 2, 9, "F");
       doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("helvetica", "bold");
       doc.text("Description", M + 4, y + 6);
@@ -3372,7 +3363,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
 
       let subtotal = 0;
       const rows = [];
-
       monthShipments.forEach((s, idx) => {
         const units = parseInt(s.units_prepped) || 0;
         const unitCost = parseFloat(s.unit_cost) || 0;
@@ -3380,15 +3370,14 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         const boxCost = parseFloat(s.box_cost) || 0;
         const other = parseFloat(s.other_fees) || 0;
         const label = s.shipment_id ? `Shipment ${s.shipment_id}` : `Shipment ${idx + 1}`;
-
         if (units > 0 && unitCost > 0) {
           const amt = units * unitCost;
-          rows.push({ desc: `${label} — Unit Prep (${units} units × £${unitCost.toFixed(2)})`, qty: units, unit: unitCost, amt });
+          rows.push({ desc: `${label} — Unit Prep (${units} units @ £${unitCost.toFixed(2)})`, qty: units, unit: unitCost, amt });
           subtotal += amt;
         }
         if (boxes > 0 && boxCost > 0) {
           const amt = boxes * boxCost;
-          rows.push({ desc: `${label} — Box Labelling (${boxes} boxes × £${boxCost.toFixed(2)})`, qty: boxes, unit: boxCost, amt });
+          rows.push({ desc: `${label} — Box Labelling (${boxes} boxes @ £${boxCost.toFixed(2)})`, qty: boxes, unit: boxCost, amt });
           subtotal += amt;
         }
         if (other > 0) {
@@ -3396,18 +3385,16 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
           subtotal += other;
         }
       });
-
-      // If no shipments found, fall back to invoice total
       if (rows.length === 0) {
-        rows.push({ desc: `FBA Prep Services — ${mNames[periodMonth]} ${periodYear}`, qty: 1, unit: parseFloat(inv.amount), amt: parseFloat(inv.amount) });
-        subtotal = parseFloat(inv.amount);
+        const amt = parseFloat(inv.amount) || 0;
+        rows.push({ desc: `FBA Prep Services — ${mNames[periodMonth]} ${periodYear}`, qty: 1, unit: amt, amt });
+        subtotal = amt;
       }
 
       rows.forEach((row, i) => {
-        const bg = i % 2 === 0 ? C.bg : [255, 255, 255];
-        doc.setFillColor(...bg);
+        if (i % 2 === 0) { doc.setFillColor(248, 248, 252); } else { doc.setFillColor(255, 255, 255); }
         doc.rect(M, y, W - M * 2, 8, "F");
-        doc.setTextColor(...C.dark); doc.setFontSize(8); doc.setFont("helvetica", "normal");
+        doc.setTextColor(18, 18, 24); doc.setFontSize(8); doc.setFont("helvetica", "normal");
         doc.text(row.desc, M + 4, y + 5.5);
         doc.text(row.qty.toString(), 110, y + 5.5, { align: "right" });
         doc.text(`£${row.unit.toFixed(2)}`, 140, y + 5.5, { align: "right" });
@@ -3415,40 +3402,32 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         y += 8;
       });
 
-      // Divider
-      doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+      doc.setDrawColor(220, 220, 230); doc.setLineWidth(0.3);
       doc.line(M, y + 2, W - M, y + 2);
       y += 8;
 
-      // Totals box
+      // Totals
       const vat = subtotal * 0.20;
       const total = subtotal + vat;
       const totalsX = W - M - 70;
-
-      doc.setFillColor(...C.bg);
+      doc.setFillColor(248, 248, 252);
       doc.roundedRect(totalsX, y, 70, 36, 3, 3, "F");
-
-      doc.setTextColor(...C.muted); doc.setFontSize(8.5); doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 130); doc.setFontSize(8.5); doc.setFont("helvetica", "normal");
       doc.text("Subtotal (ex VAT)", totalsX + 4, y + 8);
       doc.text("VAT (20%)", totalsX + 4, y + 17);
-      doc.setDrawColor(...C.border); doc.line(totalsX + 4, y + 21, totalsX + 66, y + 21);
-
-      doc.setTextColor(...C.dark); doc.setFontSize(8.5); doc.setFont("helvetica", "bold");
+      doc.setDrawColor(220, 220, 230); doc.line(totalsX + 4, y + 21, totalsX + 66, y + 21);
+      doc.setTextColor(18, 18, 24); doc.setFontSize(8.5); doc.setFont("helvetica", "bold");
       doc.text(`£${subtotal.toFixed(2)}`, totalsX + 66, y + 8, { align: "right" });
       doc.text(`£${vat.toFixed(2)}`, totalsX + 66, y + 17, { align: "right" });
-
-      // Total highlight
-      doc.setFillColor(...C.dark);
+      doc.setFillColor(18, 18, 24);
       doc.roundedRect(totalsX, y + 23, 70, 11, 2, 2, "F");
       doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold");
       doc.text("TOTAL DUE", totalsX + 4, y + 30.5);
-      doc.setTextColor(...C.amber);
+      doc.setTextColor(230, 160, 30);
       doc.text(`£${total.toFixed(2)}`, totalsX + 66, y + 30.5, { align: "right" });
-
       y += 44;
 
       // Payment terms
-      doc.setFillColor(230, 160, 30, 0.1);
       doc.setFillColor(255, 248, 230);
       doc.roundedRect(M, y, W - M * 2, 20, 3, 3, "F");
       doc.setTextColor(160, 100, 0); doc.setFontSize(8); doc.setFont("helvetica", "bold");
@@ -3458,12 +3437,12 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.text("For payment queries please contact dbharper77@gmail.com", M + 4, y + 18);
 
       // Footer
-      doc.setFillColor(...C.dark);
+      doc.setFillColor(18, 18, 24);
       doc.rect(0, 287, W, 10, "F");
       doc.setTextColor(150, 150, 170); doc.setFontSize(7); doc.setFont("helvetica", "normal");
       doc.text("DBH FBA LTD | Registered in England & Wales | VAT No: 441311541", W / 2, 293, { align: "center" });
 
-      // Export as blob and upload
+      // Upload
       const pdfBlob = doc.output("blob");
       const path = `${client.id}/${inv.invoice_number}.pdf`;
       const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
@@ -3472,7 +3451,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         body: pdfBlob
       });
       if (!uploadRes.ok) { const t = await uploadRes.text(); throw new Error(t); }
-
       const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
         method: "POST",
         headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
