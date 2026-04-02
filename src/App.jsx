@@ -3279,16 +3279,25 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   const generateAndUploadPDF = async (inv) => {
     showToast("Generating PDF...");
     try {
-      if (!window.jspdf) {
+      // Load jsPDF from CDN if not already loaded
+      if (!window.jspdf || !window.jspdf.jsPDF) {
         await new Promise((resolve, reject) => {
+          // Remove any existing failed script
+          const existing = document.querySelector('script[src*="jspdf"]');
+          if (existing) existing.remove();
           const script = document.createElement("script");
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-          script.onload = resolve; script.onerror = reject;
+          script.onload = () => { console.log("jsPDF loaded, window.jspdf:", typeof window.jspdf); resolve(); };
+          script.onerror = (e) => reject(new Error("Failed to load jsPDF: " + e));
           document.head.appendChild(script);
         });
+        // Small delay to ensure module initialises
+        await new Promise(r => setTimeout(r, 200));
       }
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      console.log("jspdf object:", window.jspdf);
+      const JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jspdf && window.jspdf.default) || window.jsPDF;
+      if (!JsPDF) throw new Error("jsPDF not found on window after load");
+      const doc = new JsPDF({ unit: "mm", format: "a4" });
       const W = 210; const M = 18;
 
       // Header bar
@@ -3450,18 +3459,17 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
         body: pdfBlob
       });
-      if (!uploadRes.ok) { const t = await uploadRes.text(); throw new Error(t); }
+      const uploadText = await uploadRes.text();
+      console.log("upload status:", uploadRes.status, uploadText);
+      if (!uploadRes.ok) { throw new Error("Upload failed: " + uploadText); }
       const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
         method: "POST",
         headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ expiresIn: 31536000 })
       });
-      const signText = await signRes.text();
-      console.log("signRes raw:", signText);
-      const signData = JSON.parse(signText);
-      const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || "";
-      console.log("rawUrl:", rawUrl);
-      const url = rawUrl.startsWith("http") ? rawUrl : rawUrl.startsWith("/") ? `${SUPABASE_URL}${rawUrl}` : `${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`;
+      const signData = await signRes.json();
+      const signedPath = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || "";
+      const url = signedPath.startsWith("http") ? signedPath : `${SUPABASE_URL}${signedPath}`;
       await updateInvoice(inv.id, { invoice_url: url }, true);
       showToast("PDF generated & uploaded!");
     } catch (err) {
