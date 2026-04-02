@@ -3157,6 +3157,9 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
 function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation, token, showToast, onRefresh, onBack }) {
   const [webhook, setWebhook] = useState(client.discord_webhook || "");
   const [savingWebhook, setSavingWebhook] = useState(false);
+  const [bizName, setBizName] = useState(client.business_name || "");
+  const [bizAddress, setBizAddress] = useState(client.business_address || "");
+  const [savingBiz, setSavingBiz] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState("");
@@ -3204,6 +3207,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   // Sync state when client changes
   useEffect(() => {
     setWebhook(client.discord_webhook || "");
+    setBizName(client.business_name || "");
+    setBizAddress(client.business_address || "");
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
     setDealsLastPayment(client.deals_last_payment || '');
@@ -3237,6 +3242,18 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     showToast("Webhook saved!");
     onRefresh();
     setSavingWebhook(false);
+  };
+
+  const saveBizDetails = async () => {
+    setSavingBiz(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, {
+      method: "PATCH",
+      headers: { ...supabase.headers(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ business_name: bizName, business_address: bizAddress })
+    });
+    showToast("Business details saved!");
+    onRefresh();
+    setSavingBiz(false);
   };
 
   const savePricing = async () => {
@@ -3347,42 +3364,19 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       doc.setTextColor(18, 18, 24); doc.setFontSize(9); doc.setFont("helvetica", "bold");
       doc.text(`${mNames[periodMonth]} ${periodYear}`, M + 6, 76);
 
-      // Companies House lookup
-      let chAddress = [];
-      let chCompanyName = "";
-      try {
-        const chName = encodeURIComponent(client.full_name || "");
-        const chRes = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${chName}&items_per_page=1`);
-        if (chRes.ok) {
-          const chData = await chRes.json();
-          const co = chData.items && chData.items[0];
-          if (co) {
-            chCompanyName = co.title || "";
-            const addr = co.address || {};
-            chAddress = [
-              addr.premises && addr.address_line_1 ? `${addr.premises} ${addr.address_line_1}` : addr.address_line_1 || addr.premises || "",
-              addr.address_line_2 || "",
-              addr.locality || "",
-              addr.postal_code || ""
-            ].filter(Boolean);
-          }
-        }
-      } catch(e) { console.log("CH lookup failed:", e); }
-
       // Bill To
       doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.text("BILL TO", M, 90);
       doc.setDrawColor(230, 160, 30); doc.setLineWidth(0.8);
       doc.line(M, 92, M + 20, 92);
 
+      const bizLines = (client.business_address || "").split("\n").map(l => l.trim()).filter(Boolean);
       doc.setTextColor(18, 18, 24); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-      doc.text(chCompanyName || client.full_name || client.email || "Client", M, 98);
+      doc.text(client.business_name || client.full_name || client.email || "Client", M, 98);
       doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 55);
       let billY = 104;
-      if (client.full_name && chCompanyName && chCompanyName.toLowerCase() !== client.full_name.toLowerCase()) {
-        doc.text(client.full_name, M, billY); billY += 5.5;
-      }
-      chAddress.forEach(line => { if (line) { doc.text(line, M, billY); billY += 5.5; } });
+      if (client.business_name && client.full_name) { doc.text(client.full_name, M, billY); billY += 5.5; }
+      bizLines.forEach(line => { doc.text(line, M, billY); billY += 5.5; });
       doc.text(client.email || "", M, billY);
 
       // Table header
@@ -3716,6 +3710,19 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
               </div>
             </div>
             <button className="btn btn-primary admin" onClick={savePricing} disabled={savingPricing}>{savingPricing ? "Saving..." : "Save Pricing"}</button>
+          </div>
+
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-title">Client Business Details</div>
+            <div className="input-group" style={{ marginBottom: 12 }}>
+              <label className="input-label">Business Name</label>
+              <input className="input" placeholder="e.g. Alans Logistics Ltd" value={bizName} onChange={e => setBizName(e.target.value)} />
+            </div>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">Business Address</label>
+              <textarea className="input" rows={3} placeholder={"e.g. 123 High Street\nBirmingham\nB1 1AA"} value={bizAddress} onChange={e => setBizAddress(e.target.value)} style={{ resize: "vertical", fontFamily: "inherit" }} />
+            </div>
+            <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveBizDetails} disabled={savingBiz}>{savingBiz ? "Saving..." : "Save Business Details"}</button>
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
