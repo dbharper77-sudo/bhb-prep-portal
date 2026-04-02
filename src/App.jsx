@@ -3486,18 +3486,9 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
         body: pdfBlob
       });
-      const uploadText = await uploadRes.text();
-      console.log("upload status:", uploadRes.status, uploadText);
-      if (!uploadRes.ok) { throw new Error("Upload failed: " + uploadText); }
-      const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
-        method: "POST",
-        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ expiresIn: 31536000 })
-      });
-      const signData = await signRes.json();
-      const signedPath = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || "";
-      const url = signedPath.startsWith("http") ? signedPath : `${SUPABASE_URL}${signedPath}`;
-      // Also store the raw storage path so we can regenerate signed URLs
+      if (!uploadRes.ok) { const t = await uploadRes.text(); throw new Error("Upload failed: " + t); }
+      // Public bucket - use direct public URL
+      const url = `${SUPABASE_URL}/storage/v1/object/public/Invoices/${path}`;
       await updateInvoice(inv.id, { invoice_url: url, storage_path: path }, true);
       showToast("PDF generated & uploaded!");
     } catch (err) {
@@ -3807,20 +3798,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {inv.invoice_url && (
-                        <button style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 13, cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                          onClick={async () => {
-                            const storagePath = inv.storage_path || `${client.id}/${inv.invoice_number}.pdf`;
-                            const sr = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${storagePath}`, {
-                              method: "POST",
-                              headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                              body: JSON.stringify({ expiresIn: 3600 })
-                            });
-                            const sd = await sr.json();
-                            const sp = sd.signedURL || sd.signedUrl || (sd.data && (sd.data.signedURL || sd.data.signedUrl)) || "";
-                            const freshUrl = sp.startsWith("http") ? sp : `${SUPABASE_URL}${sp}`;
-                            if (freshUrl && freshUrl.includes("token=")) { window.open(freshUrl, "_blank"); }
-                            else { window.open(inv.invoice_url, "_blank"); }
-                          }}>📄 View PDF</button>
+                        <a href={`${SUPABASE_URL}/storage/v1/object/public/Invoices/${inv.storage_path || client.id + "/" + inv.invoice_number + ".pdf"}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
                       )}
                       <button
                         style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", background: "var(--amber, #e6a01e)", border: "none", borderRadius: 7, fontSize: 12, color: "#fff", fontWeight: 600 }}
