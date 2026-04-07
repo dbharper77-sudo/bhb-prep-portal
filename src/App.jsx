@@ -3157,9 +3157,6 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
 function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation, token, showToast, onRefresh, onBack }) {
   const [webhook, setWebhook] = useState(client.discord_webhook || "");
   const [savingWebhook, setSavingWebhook] = useState(false);
-  const [bizName, setBizName] = useState(client.business_name || "");
-  const [bizAddress, setBizAddress] = useState(client.business_address || "");
-  const [savingBiz, setSavingBiz] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState("");
@@ -3207,8 +3204,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
   // Sync state when client changes
   useEffect(() => {
     setWebhook(client.discord_webhook || "");
-    setBizName(client.business_name || "");
-    setBizAddress(client.business_address || "");
     setDealsAccess(client.deals_access || false);
     setDealsStartDate(client.deals_start_date || '');
     setDealsLastPayment(client.deals_last_payment || '');
@@ -3244,18 +3239,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     setSavingWebhook(false);
   };
 
-  const saveBizDetails = async () => {
-    setSavingBiz(true);
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, {
-      method: "PATCH",
-      headers: { ...supabase.headers(token), "Content-Type": "application/json" },
-      body: JSON.stringify({ business_name: bizName, business_address: bizAddress })
-    });
-    showToast("Business details saved!");
-    onRefresh();
-    setSavingBiz(false);
-  };
-
   const savePricing = async () => {
     setSavingPricing(true);
     await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${client.id}`, { 
@@ -3283,212 +3266,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       totals[key] = (totals[key] || 0) + cost;
     });
     return totals;
-  };
-
-  const getMonthlyShipmentBreakdown = (month, year) => {
-    // month is 0-indexed here
-    return shipments.filter(s => {
-      const d = new Date(s.date_shipped || s.created_at);
-      return d.getMonth() === month && d.getFullYear() === year;
-    });
-  };
-
-  const generateAndUploadPDF = async (inv) => {
-    showToast("Generating PDF...");
-    try {
-      // Load jsPDF from CDN if not already loaded
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        await new Promise((resolve, reject) => {
-          // Remove any existing failed script
-          const existing = document.querySelector('script[src*="jspdf"]');
-          if (existing) existing.remove();
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-          script.onload = () => { console.log("jsPDF loaded, window.jspdf:", typeof window.jspdf); resolve(); };
-          script.onerror = (e) => reject(new Error("Failed to load jsPDF: " + e));
-          document.head.appendChild(script);
-        });
-        // Small delay to ensure module initialises
-        await new Promise(r => setTimeout(r, 200));
-      }
-      console.log("jspdf object:", window.jspdf);
-      const JsPDF = (window.jspdf && window.jspdf.jsPDF) || (window.jspdf && window.jspdf.default) || window.jsPDF;
-      if (!JsPDF) throw new Error("jsPDF not found on window after load");
-      const doc = new JsPDF({ unit: "mm", format: "a4" });
-      const W = 210; const M = 18;
-
-      // Header bar
-      doc.setFillColor(18, 18, 24);
-      doc.rect(0, 0, W, 42, "F");
-
-      // Company name
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(18); doc.setFont("helvetica", "bold");
-      doc.text("DBH FBA LTD", M, 16);
-
-      // Company details right
-      doc.setFontSize(8); doc.setFont("helvetica", "normal");
-      doc.setTextColor(180, 180, 200);
-      const compRight = ["19-21 Hatchett Street", "Birmingham B19 3NX", "United Kingdom", "VAT No: 441311541", "dbharper77@gmail.com"];
-      compRight.forEach((line, i) => doc.text(line, W - M, 10 + i * 5.2, { align: "right" }));
-
-      // INVOICE label
-      doc.setTextColor(230, 160, 30); doc.setFontSize(26); doc.setFont("helvetica", "bold");
-      doc.text("INVOICE", M, 36);
-
-      // Invoice meta box
-      doc.setFillColor(248, 248, 252);
-      doc.roundedRect(M, 48, W - M * 2, 30, 3, 3, "F");
-      doc.setDrawColor(220, 220, 230); doc.setLineWidth(0.3);
-      doc.roundedRect(M, 48, W - M * 2, 30, 3, 3, "S");
-
-      const mNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-      const periodMonth = inv.period_month - 1;
-      const periodYear = inv.period_year;
-      const issueDate = new Date(periodYear, periodMonth + 1, 1);
-      const dueDate = new Date(periodYear, periodMonth + 1, 6);
-      const fmt = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-
-      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
-      doc.text("Invoice Number", M + 6, 57);
-      doc.text("Issue Date", M + 68, 57);
-      doc.text("Due Date", M + 120, 57);
-
-      doc.setTextColor(18, 18, 24); doc.setFontSize(9.5); doc.setFont("helvetica", "bold");
-      doc.text(inv.invoice_number || "—", M + 6, 63);
-      doc.text(fmt(issueDate), M + 68, 63);
-      doc.text(fmt(dueDate), M + 120, 63);
-
-      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
-      doc.text("Period", M + 6, 70);
-      doc.setTextColor(18, 18, 24); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text(`${mNames[periodMonth]} ${periodYear}`, M + 6, 76);
-
-      // Bill To
-      doc.setTextColor(110, 110, 130); doc.setFontSize(8); doc.setFont("helvetica", "normal");
-      doc.text("BILL TO", M, 90);
-      doc.setDrawColor(230, 160, 30); doc.setLineWidth(0.8);
-      doc.line(M, 92, M + 20, 92);
-
-      const bizLines = (client.business_address || "").split("\n").map(l => l.trim()).filter(Boolean);
-      doc.setTextColor(18, 18, 24); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-      doc.text(client.business_name || client.full_name || client.email || "Client", M, 98);
-      doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 55);
-      let billY = 104;
-      if (client.business_name && client.full_name) { doc.text(client.full_name, M, billY); billY += 5.5; }
-      bizLines.forEach(line => { doc.text(line, M, billY); billY += 5.5; });
-      doc.text(client.email || "", M, billY);
-
-      // Table header
-      const monthShipments = getMonthlyShipmentBreakdown(periodMonth, periodYear);
-      let y = 116;
-      doc.setFillColor(18, 18, 24);
-      doc.rect(M, y, W - M * 2, 9, "F");
-      doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-      doc.text("Description", M + 4, y + 6);
-      doc.text("Qty", 110, y + 6, { align: "right" });
-      doc.text("Unit Price", 140, y + 6, { align: "right" });
-      doc.text("Amount (ex VAT)", W - M - 4, y + 6, { align: "right" });
-      y += 9;
-
-      let subtotal = 0;
-      const rows = [];
-      monthShipments.forEach((s, idx) => {
-        const units = parseInt(s.units_prepped) || 0;
-        const unitCost = parseFloat(s.unit_cost) || 0;
-        const boxes = parseInt(s.box_count) || 0;
-        const boxCost = parseFloat(s.box_cost) || 0;
-        const other = parseFloat(s.other_fees) || 0;
-        const label = s.shipment_id ? `Shipment ${s.shipment_id}` : `Shipment ${idx + 1}`;
-        if (units > 0 && unitCost > 0) {
-          const amt = units * unitCost;
-          rows.push({ desc: `${label} — Unit Prep (${units} units @ £${unitCost.toFixed(2)})`, qty: units, unit: unitCost, amt });
-          subtotal += amt;
-        }
-        if (boxes > 0 && boxCost > 0) {
-          const amt = boxes * boxCost;
-          rows.push({ desc: `${label} — Box Labelling (${boxes} boxes @ £${boxCost.toFixed(2)})`, qty: boxes, unit: boxCost, amt });
-          subtotal += amt;
-        }
-        if (other > 0) {
-          rows.push({ desc: `${label} — Additional Charges`, qty: 1, unit: other, amt: other });
-          subtotal += other;
-        }
-      });
-      if (rows.length === 0) {
-        const amt = parseFloat(inv.amount) || 0;
-        rows.push({ desc: `FBA Prep Services — ${mNames[periodMonth]} ${periodYear}`, qty: 1, unit: amt, amt });
-        subtotal = amt;
-      }
-
-      rows.forEach((row, i) => {
-        if (i % 2 === 0) { doc.setFillColor(248, 248, 252); } else { doc.setFillColor(255, 255, 255); }
-        doc.rect(M, y, W - M * 2, 8, "F");
-        doc.setTextColor(18, 18, 24); doc.setFontSize(8); doc.setFont("helvetica", "normal");
-        doc.text(row.desc, M + 4, y + 5.5);
-        doc.text(row.qty.toString(), 110, y + 5.5, { align: "right" });
-        doc.text(`£${row.unit.toFixed(2)}`, 140, y + 5.5, { align: "right" });
-        doc.text(`£${row.amt.toFixed(2)}`, W - M - 4, y + 5.5, { align: "right" });
-        y += 8;
-      });
-
-      doc.setDrawColor(220, 220, 230); doc.setLineWidth(0.3);
-      doc.line(M, y + 2, W - M, y + 2);
-      y += 8;
-
-      // Totals
-      const vat = subtotal * 0.20;
-      const total = subtotal + vat;
-      const totalsX = W - M - 70;
-      doc.setFillColor(248, 248, 252);
-      doc.roundedRect(totalsX, y, 70, 36, 3, 3, "F");
-      doc.setTextColor(110, 110, 130); doc.setFontSize(8.5); doc.setFont("helvetica", "normal");
-      doc.text("Subtotal (ex VAT)", totalsX + 4, y + 8);
-      doc.text("VAT (20%)", totalsX + 4, y + 17);
-      doc.setDrawColor(220, 220, 230); doc.line(totalsX + 4, y + 21, totalsX + 66, y + 21);
-      doc.setTextColor(18, 18, 24); doc.setFontSize(8.5); doc.setFont("helvetica", "bold");
-      doc.text(`£${subtotal.toFixed(2)}`, totalsX + 66, y + 8, { align: "right" });
-      doc.text(`£${vat.toFixed(2)}`, totalsX + 66, y + 17, { align: "right" });
-      doc.setFillColor(18, 18, 24);
-      doc.roundedRect(totalsX, y + 23, 70, 11, 2, 2, "F");
-      doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("TOTAL DUE", totalsX + 4, y + 30.5);
-      doc.setTextColor(230, 160, 30);
-      doc.text(`£${total.toFixed(2)}`, totalsX + 66, y + 30.5, { align: "right" });
-      y += 44;
-
-      // Payment terms
-      doc.setFillColor(255, 248, 230);
-      doc.roundedRect(M, y, W - M * 2, 20, 3, 3, "F");
-      doc.setTextColor(160, 100, 0); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-      doc.text("Payment Terms", M + 4, y + 7);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-      doc.text(`Payment is due by ${fmt(dueDate)}. Please include invoice reference ${inv.invoice_number || ""} with your payment.`, M + 4, y + 13);
-      doc.text("For payment queries please contact dbharper77@gmail.com", M + 4, y + 18);
-
-      // Footer
-      doc.setFillColor(18, 18, 24);
-      doc.rect(0, 287, W, 10, "F");
-      doc.setTextColor(150, 150, 170); doc.setFontSize(7); doc.setFont("helvetica", "normal");
-      doc.text("DBH FBA LTD | Registered in England & Wales | VAT No: 441311541", W / 2, 293, { align: "center" });
-
-      // Upload
-      const pdfBlob = doc.output("blob");
-      const path = `${client.id}/${inv.invoice_number}.pdf`;
-      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
-        method: "POST",
-        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
-        body: pdfBlob
-      });
-      if (!uploadRes.ok) { const t = await uploadRes.text(); throw new Error("Upload failed: " + t); }
-      // Public bucket - use direct public URL
-      const url = `${SUPABASE_URL}/storage/v1/object/public/Invoices/${path}`;
-      await updateInvoice(inv.id, { invoice_url: url, storage_path: path }, true);
-      showToast("PDF generated & uploaded!");
-    } catch (err) {
-      console.error("PDF error:", err);
-      showToast("PDF failed: " + err.message);
-    }
   };
 
   const generateInvoice = async (month, year, manualAmt = null) => {
@@ -3713,19 +3490,6 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-title">Client Business Details</div>
-            <div className="input-group" style={{ marginBottom: 12 }}>
-              <label className="input-label">Business Name</label>
-              <input className="input" placeholder="e.g. Alans Logistics Ltd" value={bizName} onChange={e => setBizName(e.target.value)} />
-            </div>
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label className="input-label">Business Address</label>
-              <textarea className="input" rows={3} placeholder={"e.g. 123 High Street\nBirmingham\nB1 1AA"} value={bizAddress} onChange={e => setBizAddress(e.target.value)} style={{ resize: "vertical", fontFamily: "inherit" }} />
-            </div>
-            <button className="btn btn-primary admin" style={{ marginTop: 12 }} onClick={saveBizDetails} disabled={savingBiz}>{savingBiz ? "Saving..." : "Save Business Details"}</button>
-          </div>
-
-          <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-title">Discord Webhook</div>
             <div className="input-group" style={{ marginBottom: 0 }}>
               <input className="input" placeholder="https://discord.com/api/webhooks/..." value={webhook} onChange={e => setWebhook(e.target.value)} />
@@ -3803,16 +3567,52 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                     </select>
                   </td>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      {inv.invoice_url && (
-                        <a href={`${SUPABASE_URL}/storage/v1/object/public/Invoices/${inv.storage_path || client.id + "/" + inv.invoice_number + ".pdf"}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
-                      )}
-                      <button
-                        style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", background: "var(--amber, #e6a01e)", border: "none", borderRadius: 7, fontSize: 12, color: "#fff", fontWeight: 600 }}
-                        onClick={() => generateAndUploadPDF(inv)}>
-                        ✨ {inv.invoice_url ? "Regenerate" : "Generate PDF"}
-                      </button>
-                    </div>
+                    {inv.invoice_url ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <a href={inv.invoice_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)", fontSize: 13 }}>📄 View PDF</a>
+                        <label style={{ cursor: "pointer", fontSize: 12, color: "var(--text-muted)", textDecoration: "underline" }}>
+                          Replace
+                          <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const path = `${client.id}/${inv.invoice_number}.pdf`;
+                            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                              body: file
+                            });
+                            if (uploadRes.ok) {
+                              const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
+                                method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                                body: JSON.stringify({ expiresIn: 31536000 })
+                              });
+                              const signData = await signRes.json();
+                              console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
+                              console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
+                            } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
+                          }} />
+                        </label>
+                      </div>
+                    ) : (
+                      <label style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+                        📎 Upload PDF
+                        <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={async e => {
+                          const file = e.target.files[0]; if (!file) return;
+                          const path = `${client.id}/${inv.invoice_number}.pdf`;
+                          const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/Invoices/${path}`, {
+                            method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/pdf", "x-upsert": "true" },
+                            body: file
+                          });
+                          if (uploadRes.ok) {
+                            const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/Invoices/${path}`, {
+                              method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({ expiresIn: 31536000 })
+                            });
+                            const signData = await signRes.json();
+                            console.log("signData:", JSON.stringify(signData)); const rawUrl = signData.signedURL || signData.signedUrl || (signData.data && (signData.data.signedURL || signData.data.signedUrl)) || ""; const url = rawUrl.startsWith("http") ? rawUrl : `${SUPABASE_URL}${rawUrl}`; 
+                            console.log("Saving URL:", url); await updateInvoice(inv.id, { invoice_url: url }, true); showToast("PDF uploaded!");
+                          } else { const t = await uploadRes.text(); console.error(t); showToast("Upload failed: " + uploadRes.status); }
+                        }} />
+                      </label>
+                    )}
                   </td>
                   <td>
                     <button className="btn-icon btn-danger" onClick={() => deleteInvoice(inv.id)}><Icons.Trash /></button>
@@ -3905,7 +3705,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [showShipmentForm, setShowShipmentForm] = useState(false);
-  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [partialPrepItem, setPartialPrepItem] = useState(null);
@@ -3990,11 +3790,11 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     showToast("Deleted!"); onRefresh();
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = s => {
     setEditingShipment(s.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", other_fees_note: s.other_fees_note||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
     setShowShipmentForm(true);
   };
 
@@ -4002,7 +3802,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, other_fees_note: shipmentForm.other_fees_note||"", notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
@@ -4018,9 +3818,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       if (shipmentForm.selected_parcels?.length > 0 && shipId) {
         const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
         for (const pid of shipmentForm.selected_parcels) {
-          const parcel = localParcels.find(p => p.id === pid);
-          // Only mark as collected if the parcel is currently prepped (not in-transit or delivered)
-          if (shipmentForm.status === "collected" && parcel && !["prepped"].includes(parcel.status)) continue;
           await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: shipId, status: parcelStatus }) });
         }
       }
@@ -4149,8 +3946,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label><input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes</label><input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label><input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Other Costs (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={shipmentForm.other_fees} onChange={e => setShipmentForm({ ...shipmentForm, other_fees: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0, gridColumn: "span 2" }}><label className="input-label">Other Costs Description</label><input className="input" placeholder="e.g. Bubble wrap, labels..." value={shipmentForm.other_fees_note} onChange={e => setShipmentForm({ ...shipmentForm, other_fees_note: e.target.value })} /></div>
             </div>
             {preppedParcels.length > 0 && (
               <div style={{ marginBottom: 16 }}>
@@ -4278,19 +4073,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
 
 // Admin - Client Liquidation Tab
-async function lookupAsinTitle(asin) {
-  try {
-    const res = await fetch("https://cccsreyspmpwnfbmegwz.supabase.co/functions/v1/dynamic-endpoint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
-      body: JSON.stringify({ asin })
-    });
-    const data = await res.json();
-    if (data?.title) return data.title;
-  } catch(e) {}
-  return null;
-}
-
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -4356,7 +4138,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     });
     const hw = client.discord_webhook || webhookUrl;
     if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
-    await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
+    showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
+    await loadSales(); onRefresh();
   };
 
   const pending = liquidation.filter(l => !l.sale_price).length;
@@ -4436,7 +4219,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
@@ -4462,7 +4245,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
