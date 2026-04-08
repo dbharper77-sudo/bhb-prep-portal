@@ -4144,37 +4144,43 @@ const PANAYIOTIS_SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 function parseCSV(text) {
   const lines = text.split(/\r?\n/);
   if (lines.length < 2) return [];
-  // Parse headers - handle quoted headers
-  const headers = [];
-  let cur = "", inQ = false;
-  const hline = lines[0];
-  for (let i = 0; i < hline.length; i++) {
-    if (hline[i] === '"') { inQ = !inQ; }
-    else if (hline[i] === ',' && !inQ) { headers.push(cur.trim().replace(/^"|"$/g,"")); cur = ""; }
-    else { cur += hline[i]; }
+
+  // Parse a single CSV line respecting quoted fields
+  function parseLine(line) {
+    const vals = [];
+    let cur = "", inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; } // escaped quote
+        else { inQ = !inQ; }
+      } else if (ch === ',' && !inQ) {
+        vals.push(cur.trim().replace(/^"|"$/g,""));
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    vals.push(cur.trim().replace(/^"|"$/g,""));
+    return vals;
   }
-  headers.push(cur.trim().replace(/^"|"$/g,""));
+
+  const headers = parseLine(lines[0]);
+
+  // Build a lookup: header name -> index (use LAST occurrence so duplicates handled)
+  const headerIndex = {};
+  headers.forEach((h, i) => { headerIndex[h.trim()] = i; });
 
   const results = [];
   for (let li = 1; li < lines.length; li++) {
-    const line = lines[li];
-    if (!line.trim()) continue;
-    const vals = [];
-    let c = "", q = false;
-    for (let i = 0; i < line.length; i++) {
-      if (line[i] === '"') {
-        if (q && line[i+1] === '"') { c += '"'; i++; } // escaped quote
-        else { q = !q; }
-      } else if (line[i] === ',' && !q) {
-        vals.push(c.trim());
-        c = "";
-      } else {
-        c += line[i];
-      }
-    }
-    vals.push(c.trim());
+    if (!lines[li].trim()) continue;
+    const vals = parseLine(lines[li]);
+
+    // Map by header name — immune to extra columns from unquoted commas in URLs
     const row = {};
-    headers.forEach((h, i) => { row[h] = (vals[i] || "").replace(/^"|"$/g,"").trim(); });
+    Object.entries(headerIndex).forEach(([h, i]) => {
+      row[h] = (vals[i] || "").trim();
+    });
     results.push(row);
   }
   return results;
