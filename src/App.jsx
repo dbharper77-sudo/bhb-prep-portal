@@ -4137,6 +4137,151 @@ async function lookupAsinTitle(asin) {
   return null;
 }
 
+// ── Google Sheets CSV URL for Panayiotis ──────────────────────────────────
+const PANAYIOTIS_ID = "8deef97c-470b-42d1-bc14-6b69f10d6f28";
+const PANAYIOTIS_SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPiFYXDHT1LINku5one25hx1TeC6JojcE4bzDiT75Fthv1wNRYrWDaBludilvdCYQUPziU5k3bs_y-/pub?gid=1782424989&single=true&output=csv";
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map(line => {
+    const vals = []; let cur = "", inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQ = !inQ; }
+      else if (line[i] === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
+      else { cur += line[i]; }
+    }
+    vals.push(cur.trim());
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (vals[i] || "").replace(/^"|"$/g, "").trim(); });
+    return row;
+  });
+}
+
+async function syncSheetToSupabase(token, showToast, onRefresh) {
+  try {
+    showToast("Syncing from Google Sheet...");
+    const res = await fetch(PANAYIOTIS_SHEET_CSV);
+    if (!res.ok) throw new Error("Could not fetch sheet");
+    const text = await res.text();
+    const rows = parseCSV(text).filter(r => r["Product Name"] && r["UID"]);
+
+    let upserted = 0, skipped = 0;
+
+    for (const row of rows) {
+      const uid = row["UID"];
+      const hasDateReceived = row["Date Received"] && row["Date Received"].trim() !== "";
+      const soldTicked = row["Sold"] && ["TRUE","true","1","yes","Yes","YES","✓","TRUE"].includes(row["Sold"].trim());
+
+      // Determine status
+      let received = hasDateReceived;
+      let listed = hasDateReceived && !soldTicked;
+
+      // Build stock record
+      const stockPayload = {
+        user_id: PANAYIOTIS_ID,
+        sheet_uid: uid,
+        product_name: row["Product Name"] || null,
+        asin: row["ASIN"] || null,
+        sku: row["SKU"] || null,
+        lpn_number: row["LPN Number"] || null,
+        condition: row["Condition"] || null,
+        received: received,
+        listed: listed,
+        date_added: row["Date"] || null,
+        date_received: hasDateReceived ? row["Date Received"] : null,
+      };
+
+      // Check if already exists by sheet_uid
+      const checkRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/liquidation_stock?sheet_uid=eq.${encodeURIComponent(uid)}&user_id=eq.${PANAYIOTIS_ID}`,
+        { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }
+      );
+      const existing = await checkRes.json();
+
+      let stockId;
+      if (existing && existing.length > 0) {
+        stockId = existing[0].id;
+        // Update existing
+        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(stockPayload)
+        });
+        upserted++;
+      } else {
+        // Insert new
+        const insRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+          body: JSON.stringify({ ...stockPayload, quantity: 1 })
+        });
+        const insData = await insRes.json();
+        stockId = Array.isArray(insData) ? insData[0]?.id : insData?.id;
+        upserted++;
+      }
+
+      // If sold — sync to liquidation_sales (only if sale price present)
+      if (soldTicked && row["Sale price"] && row["Sale price"].trim() !== "" && stockId) {
+        const salePrice = parseFloat(row["Sale price"]) || 0;
+        const ebayFees = parseFloat(row["Ebay Fees"]) || 0;
+        const shipping = parseFloat(row["Shipping"]) || 0;
+        const netSale = parseFloat(row["Net Sale"]) || (salePrice - ebayFees - shipping);
+        const dbhFee = parseFloat(row["DBH £"]) || 0;
+        const payout = parseFloat(row["Payout"]) || 0;
+        const dateSold = row["Date Sold"] || row["Date listed"] || null;
+        const payoutDate = row["Payout Date"] || null;
+        const paid = ["TRUE","true","1","yes","Yes","YES"].includes((row["PAID"] || "").trim());
+
+        // Check if sale already exists for this stock_id
+        const saleCheck = await fetch(
+          `${SUPABASE_URL}/rest/v1/liquidation_sales?stock_id=eq.${stockId}&user_id=eq.${PANAYIOTIS_ID}`,
+          { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }
+        );
+        const existingSales = await saleCheck.json();
+
+        const salePayload = {
+          stock_id: stockId, user_id: PANAYIOTIS_ID,
+          date_sold: dateSold, qty_sold: 1,
+          sale_price: salePrice, ebay_fees: ebayFees, shipping: shipping,
+          net_sale: netSale, dbh_fee: dbhFee, payout: payout,
+          payout_date: payoutDate || null, paid: paid,
+        };
+
+        if (existingSales && existingSales.length > 0) {
+          // Update existing sale (don't overwrite paid if already marked)
+          const updatePayload = { ...salePayload };
+          if (existingSales[0].paid) delete updatePayload.paid; // preserve manually set paid status
+          await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${existingSales[0].id}`, {
+            method: "PATCH",
+            headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify(updatePayload)
+          });
+        } else {
+          await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
+            method: "POST",
+            headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+            body: JSON.stringify(salePayload)
+          });
+        }
+        // Mark stock as having qty_sold
+        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ qty_sold: 1, received: true })
+        });
+      }
+    }
+
+    showToast(`✅ Synced ${upserted} items from sheet`);
+    onRefresh();
+  } catch (e) {
+    console.error("Sheet sync error:", e);
+    showToast("❌ Sync failed — check sheet is published");
+  }
+}
+
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -4149,6 +4294,17 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [saleSaving, setSaleSaving] = useState(false);
   const [receiveItem, setReceiveItem] = useState(null);
   const [receiveQty, setReceiveQty] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const isPanayiotis = client.id === PANAYIOTIS_ID;
+
+  // Auto-sync every 60 seconds for Panayiotis
+  useEffect(() => {
+    if (!isPanayiotis) return;
+    const doSync = () => syncSheetToSupabase(token, () => {}, onRefresh);
+    doSync(); // sync immediately on open
+    const interval = setInterval(doSync, 60000);
+    return () => clearInterval(interval);
+  }, [isPanayiotis, token]);
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
   useEffect(() => { loadSales(); }, [client.id]);
@@ -4262,6 +4418,22 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   return (
     <>
+      {/* Google Sheet sync banner for Panayiotis */}
+      {isPanayiotis && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: "10px 16px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 10 }}>
+          <span style={{ fontSize: 18 }}>🔄</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--green)" }}>Google Sheet Sync Active</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Auto-syncs every 60 seconds. Stock and sales pulled directly from your Google Sheet.</div>
+          </div>
+          <button
+            onClick={async () => { setSyncing(true); await syncSheetToSupabase(token, showToast, onRefresh); setSyncing(false); }}
+            disabled={syncing}
+            style={{ padding: "6px 14px", background: "var(--green)", color: "#000", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: syncing ? "not-allowed" : "pointer", opacity: syncing ? 0.6 : 1 }}
+          >{syncing ? "Syncing..." : "↻ Sync Now"}</button>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
         <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
