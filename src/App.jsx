@@ -4159,127 +4159,137 @@ function parseCSV(text) {
   });
 }
 
+// Convert DD/MM/YYYY or DD/MM/YY to YYYY-MM-DD for Supabase
+function parseSheetDate(val) {
+  if (!val || !val.trim()) return null;
+  const parts = val.trim().split("/");
+  if (parts.length === 3) {
+    let [d, m, y] = parts;
+    if (y.length === 2) y = "20" + y;
+    return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  }
+  return null;
+}
+
+function isYes(val) {
+  return ["yes","YES","Yes","true","TRUE","1","Y","y"].includes((val || "").trim());
+}
+
 async function syncSheetToSupabase(token, showToast, onRefresh) {
   try {
     showToast("Syncing from Google Sheet...");
     const res = await fetch(PANAYIOTIS_SHEET_CSV);
     if (!res.ok) throw new Error("Could not fetch sheet");
     const text = await res.text();
-    const rows = parseCSV(text).filter(r => r["Product Name"] && r["UID"]);
+    console.log("Sheet headers:", text.split("\n")[0]);
+    const rows = parseCSV(text).filter(r => r["Product Name"] && r["Product Name"].trim() && r["UID"] && r["UID"].trim());
+    console.log(`Parsed ${rows.length} valid rows`);
 
-    let upserted = 0, skipped = 0;
+    const adminHeaders = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+
+    let inserted = 0, updated = 0, salesSynced = 0;
 
     for (const row of rows) {
-      const uid = row["UID"];
-      const hasDateReceived = row["Date Received"] && row["Date Received"].trim() !== "";
-      const soldTicked = row["Sold"] && ["TRUE","true","1","yes","Yes","YES","✓","TRUE"].includes(row["Sold"].trim());
+      const uid = row["UID"].trim();
+      // Use Date Delivered as the received date (this is what shows stock has arrived)
+      const deliveredDate = (row["Date Delivered"] || "").trim();
+      const hasArrived = deliveredDate !== "";
+      const soldVal = (row["Sold"] || "").trim();
+      const soldTicked = isYes(soldVal);
+      const hasSalePrice = row["Sale price"] && row["Sale price"].trim() !== "" && row["Sale price"].trim() !== "0";
 
-      // Determine status
-      let received = hasDateReceived;
-      let listed = hasDateReceived && !soldTicked;
-
-      // Build stock record
       const stockPayload = {
         user_id: PANAYIOTIS_ID,
         sheet_uid: uid,
-        product_name: row["Product Name"] || null,
-        asin: row["ASIN"] || null,
-        sku: row["SKU"] || null,
-        lpn_number: row["LPN Number"] || null,
-        condition: row["Condition"] || null,
-        received: received,
-        listed: listed,
-        date_added: row["Date"] || null,
-        date_received: hasDateReceived ? row["Date Received"] : null,
+        product_name: (row["Product Name"] || "").trim() || null,
+        asin: (row["ASIN"] || "").trim() || null,
+        sku: (row["SKU"] || "").trim() || null,
+        lpn_number: (row["LPN Number"] || "").trim() || null,
+        condition: (row["Condition"] || "").trim() || null,
+        received: hasArrived,
+        listed: hasArrived && !soldTicked,
+        qty_sold: soldTicked ? 1 : 0,
+        date_added: parseSheetDate(row["Date"]) || null,
+        date_received: parseSheetDate(deliveredDate) || null,
       };
 
-      // Check if already exists by sheet_uid
+      // Check existing
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/liquidation_stock?sheet_uid=eq.${encodeURIComponent(uid)}&user_id=eq.${PANAYIOTIS_ID}`,
-        { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }
+        { headers: adminHeaders }
       );
       const existing = await checkRes.json();
 
       let stockId;
-      if (existing && existing.length > 0) {
+      if (Array.isArray(existing) && existing.length > 0) {
         stockId = existing[0].id;
-        // Update existing
         await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
-          method: "PATCH",
-          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(stockPayload)
+          method: "PATCH", headers: adminHeaders, body: JSON.stringify(stockPayload)
         });
-        upserted++;
+        updated++;
       } else {
-        // Insert new
         const insRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
-          method: "POST",
-          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+          method: "POST", headers: { ...adminHeaders, "Prefer": "return=representation" },
           body: JSON.stringify({ ...stockPayload, quantity: 1 })
         });
         const insData = await insRes.json();
+        if (!insRes.ok) { console.error("Insert failed UID", uid, insData); continue; }
         stockId = Array.isArray(insData) ? insData[0]?.id : insData?.id;
-        upserted++;
+        inserted++;
       }
 
-      // If sold — sync to liquidation_sales (only if sale price present)
-      if (soldTicked && row["Sale price"] && row["Sale price"].trim() !== "" && stockId) {
-        const salePrice = parseFloat(row["Sale price"]) || 0;
-        const ebayFees = parseFloat(row["Ebay Fees"]) || 0;
-        const shipping = parseFloat(row["Shipping"]) || 0;
-        const netSale = parseFloat(row["Net Sale"]) || (salePrice - ebayFees - shipping);
-        const dbhFee = parseFloat(row["DBH £"]) || 0;
-        const payout = parseFloat(row["Payout"]) || 0;
-        const dateSold = row["Date Sold"] || row["Date listed"] || null;
-        const payoutDate = row["Payout Date"] || null;
-        const paid = ["TRUE","true","1","yes","Yes","YES"].includes((row["PAID"] || "").trim());
-
-        // Check if sale already exists for this stock_id
-        const saleCheck = await fetch(
-          `${SUPABASE_URL}/rest/v1/liquidation_sales?stock_id=eq.${stockId}&user_id=eq.${PANAYIOTIS_ID}`,
-          { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }
-        );
-        const existingSales = await saleCheck.json();
+      // Sync sale
+      if (soldTicked && hasSalePrice && stockId) {
+        const clean = s => parseFloat((s || "0").replace(/[^0-9.-]/g,"")) || 0;
+        const salePrice  = clean(row["Sale price"]);
+        const ebayFees   = clean(row["Ebay Fees"]);
+        const shipping   = clean(row["Shipping"]);
+        const netSale    = clean(row["Net Sale"]) || (salePrice - ebayFees - shipping);
+        const dbhFee     = clean(row["DBH £"]);
+        const fixedFee   = clean(row["Fixed Fees"]) || 0.40;
+        const payout     = clean(row["Payout"]);
+        const dateSold   = parseSheetDate(row["Date Sold"]) || parseSheetDate(row["Date listed"]) || null;
+        const payoutDate = parseSheetDate(row["Payout Date"]) || null;
+        const paid       = isYes(row["PAID"]);
 
         const salePayload = {
           stock_id: stockId, user_id: PANAYIOTIS_ID,
           date_sold: dateSold, qty_sold: 1,
           sale_price: salePrice, ebay_fees: ebayFees, shipping: shipping,
-          net_sale: netSale, dbh_fee: dbhFee, payout: payout,
-          payout_date: payoutDate || null, paid: paid,
+          net_sale: netSale, dbh_fee: dbhFee, fixed_fee: fixedFee,
+          payout: payout, payout_date: payoutDate, paid: paid,
         };
 
-        if (existingSales && existingSales.length > 0) {
-          // Update existing sale (don't overwrite paid if already marked)
+        const saleCheck = await fetch(
+          `${SUPABASE_URL}/rest/v1/liquidation_sales?stock_id=eq.${stockId}&user_id=eq.${PANAYIOTIS_ID}`,
+          { headers: adminHeaders }
+        );
+        const existingSales = await saleCheck.json();
+
+        if (Array.isArray(existingSales) && existingSales.length > 0) {
           const updatePayload = { ...salePayload };
-          if (existingSales[0].paid) delete updatePayload.paid; // preserve manually set paid status
+          if (existingSales[0].paid) delete updatePayload.paid;
           await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${existingSales[0].id}`, {
-            method: "PATCH",
-            headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify(updatePayload)
+            method: "PATCH", headers: adminHeaders, body: JSON.stringify(updatePayload)
           });
         } else {
           await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
-            method: "POST",
-            headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+            method: "POST", headers: { ...adminHeaders, "Prefer": "return=representation" },
             body: JSON.stringify(salePayload)
           });
         }
-        // Mark stock as having qty_sold
-        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
-          method: "PATCH",
-          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ qty_sold: 1, received: true })
-        });
+        salesSynced++;
       }
     }
 
-    showToast(`✅ Synced ${upserted} items from sheet`);
+    console.log(`Sync done: ${inserted} inserted, ${updated} updated, ${salesSynced} sales`);
+    showToast(`Synced ${inserted + updated} items, ${salesSynced} sales`);
     onRefresh();
   } catch (e) {
     console.error("Sheet sync error:", e);
-    showToast("❌ Sync failed — check sheet is published");
+    showToast("Sync failed: " + e.message);
   }
+}
 }
 
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
