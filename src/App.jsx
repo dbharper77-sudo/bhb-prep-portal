@@ -4160,6 +4160,7 @@ function parseCSV(text) {
 }
 
 // Convert DD/MM/YYYY or DD/MM/YY to YYYY-MM-DD for Supabase
+// Convert DD/MM/YYYY or DD/MM/YY to YYYY-MM-DD for Supabase
 function parseSheetDate(val) {
   if (!val || !val.trim()) return null;
   const parts = val.trim().split("/");
@@ -4181,9 +4182,9 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
     const res = await fetch(PANAYIOTIS_SHEET_CSV);
     if (!res.ok) throw new Error("Could not fetch sheet");
     const text = await res.text();
-    console.log("Sheet headers:", text.split("\n")[0]);
+
     const rows = parseCSV(text).filter(r => r["Product Name"] && r["Product Name"].trim() && r["UID"] && r["UID"].trim());
-    console.log(`Parsed ${rows.length} valid rows`);
+    console.log(`Sheet: ${rows.length} rows. First row keys:`, Object.keys(rows[0] || {}));
 
     const adminHeaders = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
 
@@ -4191,12 +4192,21 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
 
     for (const row of rows) {
       const uid = row["UID"].trim();
-      // Use Date Delivered as the received date (this is what shows stock has arrived)
-      const deliveredDate = (row["Date Delivered"] || "").trim();
-      const hasArrived = deliveredDate !== "";
-      const soldVal = (row["Sold"] || "").trim();
-      const soldTicked = isYes(soldVal);
-      const hasSalePrice = row["Sale price"] && row["Sale price"].trim() !== "" && row["Sale price"].trim() !== "0";
+
+      // "Delivered" column = Yes/No — this is whether item has arrived
+      const delivered = isYes(row["Delivered"]);
+      // "Date Delivered" = actual date it arrived
+      const dateDelivered = (row["Date Delivered"] || "").trim();
+
+      const soldTicked = isYes(row["Sold"]);
+      const hasSalePrice = row["Sale price"] && row["Sale price"].trim() !== "" && parseFloat(row["Sale price"]) > 0;
+
+      // Status logic:
+      // Not delivered = In Transit
+      // Delivered + not sold = Listed
+      // Sold = Sold (received + qty_sold)
+      const received = delivered;
+      const listed = delivered && !soldTicked;
 
       const stockPayload = {
         user_id: PANAYIOTIS_ID,
@@ -4206,14 +4216,14 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
         sku: (row["SKU"] || "").trim() || null,
         lpn_number: (row["LPN Number"] || "").trim() || null,
         condition: (row["Condition"] || "").trim() || null,
-        received: hasArrived,
-        listed: hasArrived && !soldTicked,
+        received: received,
+        listed: listed,
         qty_sold: soldTicked ? 1 : 0,
         date_added: parseSheetDate(row["Date"]) || null,
-        date_received: parseSheetDate(deliveredDate) || null,
+        date_received: parseSheetDate(dateDelivered) || null,
       };
 
-      // Check existing
+      // Check existing by sheet_uid
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/liquidation_stock?sheet_uid=eq.${encodeURIComponent(uid)}&user_id=eq.${PANAYIOTIS_ID}`,
         { headers: adminHeaders }
@@ -4238,13 +4248,14 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
         inserted++;
       }
 
-      // Sync sale
+      // Sync sale if sold and has sale price
       if (soldTicked && hasSalePrice && stockId) {
         const clean = s => parseFloat((s || "0").replace(/[^0-9.-]/g,"")) || 0;
         const salePrice  = clean(row["Sale price"]);
         const ebayFees   = clean(row["Ebay Fees"]);
         const shipping   = clean(row["Shipping"]);
         const netSale    = clean(row["Net Sale"]) || (salePrice - ebayFees - shipping);
+        const dbhPct     = clean(row["DBH %"]);
         const dbhFee     = clean(row["DBH £"]);
         const fixedFee   = clean(row["Fixed Fees"]) || 0.40;
         const payout     = clean(row["Payout"]);
@@ -4252,12 +4263,15 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
         const payoutDate = parseSheetDate(row["Payout Date"]) || null;
         const paid       = isYes(row["PAID"]);
 
+        console.log(`Sale for ${row["Product Name"]}: price=${salePrice} payout=${payout} paid=${paid}`);
+
         const salePayload = {
           stock_id: stockId, user_id: PANAYIOTIS_ID,
           date_sold: dateSold, qty_sold: 1,
           sale_price: salePrice, ebay_fees: ebayFees, shipping: shipping,
-          net_sale: netSale, dbh_fee: dbhFee, fixed_fee: fixedFee,
-          payout: payout, payout_date: payoutDate, paid: paid,
+          net_sale: netSale, dbh_pct: dbhPct, dbh_fee: dbhFee,
+          fixed_fee: fixedFee, payout: payout,
+          payout_date: payoutDate, paid: paid,
         };
 
         const saleCheck = await fetch(
@@ -4268,15 +4282,16 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
 
         if (Array.isArray(existingSales) && existingSales.length > 0) {
           const updatePayload = { ...salePayload };
-          if (existingSales[0].paid) delete updatePayload.paid;
+          if (existingSales[0].paid) delete updatePayload.paid; // never un-mark a paid payout
           await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${existingSales[0].id}`, {
             method: "PATCH", headers: adminHeaders, body: JSON.stringify(updatePayload)
           });
         } else {
-          await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
+          const saleInsRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
             method: "POST", headers: { ...adminHeaders, "Prefer": "return=representation" },
             body: JSON.stringify(salePayload)
           });
+          if (!saleInsRes.ok) { const err = await saleInsRes.json(); console.error("Sale insert failed", err); }
         }
         salesSynced++;
       }
@@ -4289,7 +4304,6 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
     console.error("Sheet sync error:", e);
     showToast("Sync failed: " + e.message);
   }
-}
 }
 
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
