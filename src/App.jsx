@@ -4142,28 +4142,49 @@ const PANAYIOTIS_ID = "8deef97c-470b-42d1-bc14-6b69f10d6f28";
 const PANAYIOTIS_SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPiFYXDHT1LINku5one25hx1TeC6JojcE4bzDiT75Fthv1wNRYrWDaBludilvdCYQUPziU5k3bs_y-/pub?gid=1782424989&single=true&output=csv";
 
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  const lines = text.split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-  return lines.slice(1).map(line => {
-    const vals = []; let cur = "", inQ = false;
+  // Parse headers - handle quoted headers
+  const headers = [];
+  let cur = "", inQ = false;
+  const hline = lines[0];
+  for (let i = 0; i < hline.length; i++) {
+    if (hline[i] === '"') { inQ = !inQ; }
+    else if (hline[i] === ',' && !inQ) { headers.push(cur.trim().replace(/^"|"$/g,"")); cur = ""; }
+    else { cur += hline[i]; }
+  }
+  headers.push(cur.trim().replace(/^"|"$/g,""));
+
+  const results = [];
+  for (let li = 1; li < lines.length; li++) {
+    const line = lines[li];
+    if (!line.trim()) continue;
+    const vals = [];
+    let c = "", q = false;
     for (let i = 0; i < line.length; i++) {
-      if (line[i] === '"') { inQ = !inQ; }
-      else if (line[i] === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
-      else { cur += line[i]; }
+      if (line[i] === '"') {
+        if (q && line[i+1] === '"') { c += '"'; i++; } // escaped quote
+        else { q = !q; }
+      } else if (line[i] === ',' && !q) {
+        vals.push(c.trim());
+        c = "";
+      } else {
+        c += line[i];
+      }
     }
-    vals.push(cur.trim());
+    vals.push(c.trim());
     const row = {};
-    headers.forEach((h, i) => { row[h] = (vals[i] || "").replace(/^"|"$/g, "").trim(); });
-    return row;
-  });
+    headers.forEach((h, i) => { row[h] = (vals[i] || "").replace(/^"|"$/g,"").trim(); });
+    results.push(row);
+  }
+  return results;
 }
 
-// Convert DD/MM/YYYY or DD/MM/YY to YYYY-MM-DD for Supabase
-// Convert DD/MM/YYYY or DD/MM/YY to YYYY-MM-DD for Supabase
 function parseSheetDate(val) {
   if (!val || !val.trim()) return null;
-  const parts = val.trim().split("/");
+  const v = val.trim();
+  // DD/MM/YYYY or DD/MM/YY
+  const parts = v.split("/");
   if (parts.length === 3) {
     let [d, m, y] = parts;
     if (y.length === 2) y = "20" + y;
@@ -4184,29 +4205,25 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
     const text = await res.text();
 
     const rows = parseCSV(text).filter(r => r["Product Name"] && r["Product Name"].trim() && r["UID"] && r["UID"].trim());
-    console.log(`Sheet: ${rows.length} rows. First row keys:`, Object.keys(rows[0] || {}));
+    console.log(`Sheet rows: ${rows.length}`);
+    if (rows.length > 0) {
+      const sample = rows[0];
+      console.log("Sample row keys:", Object.keys(sample));
+      console.log("Sample payout:", sample["Payout"], "| paid:", sample["PAID"]);
+    }
 
-    const adminHeaders = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+    const ah = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
 
-    let inserted = 0, updated = 0, salesSynced = 0;
+    let inserted = 0, updated = 0, salesInserted = 0, salesUpdated = 0, salesFailed = 0;
 
     for (const row of rows) {
       const uid = row["UID"].trim();
-
-      // "Delivered" column = Yes/No — this is whether item has arrived
       const delivered = isYes(row["Delivered"]);
-      // "Date Delivered" = actual date it arrived
       const dateDelivered = (row["Date Delivered"] || "").trim();
-
       const soldTicked = isYes(row["Sold"]);
-      const hasSalePrice = row["Sale price"] && row["Sale price"].trim() !== "" && parseFloat(row["Sale price"]) > 0;
-
-      // Status logic:
-      // Not delivered = In Transit
-      // Delivered + not sold = Listed
-      // Sold = Sold (received + qty_sold)
-      const received = delivered;
-      const listed = delivered && !soldTicked;
+      const rawSalePrice = (row["Sale price"] || "").trim();
+      const salePrice = parseFloat(rawSalePrice.replace(/[^0-9.-]/g,"")) || 0;
+      const hasSale = soldTicked && salePrice > 0;
 
       const stockPayload = {
         user_id: PANAYIOTIS_ID,
@@ -4216,54 +4233,51 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
         sku: (row["SKU"] || "").trim() || null,
         lpn_number: (row["LPN Number"] || "").trim() || null,
         condition: (row["Condition"] || "").trim() || null,
-        received: received,
-        listed: listed,
+        received: delivered,
+        listed: delivered && !soldTicked,
         qty_sold: soldTicked ? 1 : 0,
         date_added: parseSheetDate(row["Date"]) || null,
         date_received: parseSheetDate(dateDelivered) || null,
       };
 
-      // Check existing by sheet_uid
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/liquidation_stock?sheet_uid=eq.${encodeURIComponent(uid)}&user_id=eq.${PANAYIOTIS_ID}`,
-        { headers: adminHeaders }
+        { headers: ah }
       );
       const existing = await checkRes.json();
-
       let stockId;
+
       if (Array.isArray(existing) && existing.length > 0) {
         stockId = existing[0].id;
         await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
-          method: "PATCH", headers: adminHeaders, body: JSON.stringify(stockPayload)
+          method: "PATCH", headers: ah, body: JSON.stringify(stockPayload)
         });
         updated++;
       } else {
         const insRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
-          method: "POST", headers: { ...adminHeaders, "Prefer": "return=representation" },
+          method: "POST", headers: { ...ah, "Prefer": "return=representation" },
           body: JSON.stringify({ ...stockPayload, quantity: 1 })
         });
         const insData = await insRes.json();
-        if (!insRes.ok) { console.error("Insert failed UID", uid, insData); continue; }
+        if (!insRes.ok) { console.error("Stock insert failed:", uid, insData); continue; }
         stockId = Array.isArray(insData) ? insData[0]?.id : insData?.id;
         inserted++;
       }
 
-      // Sync sale if sold and has sale price
-      if (soldTicked && hasSalePrice && stockId) {
-        const clean = s => parseFloat((s || "0").replace(/[^0-9.-]/g,"")) || 0;
-        const salePrice  = clean(row["Sale price"]);
-        const ebayFees   = clean(row["Ebay Fees"]);
-        const shipping   = clean(row["Shipping"]);
-        const netSale    = clean(row["Net Sale"]) || (salePrice - ebayFees - shipping);
-        const dbhPct     = clean(row["DBH %"]);
-        const dbhFee     = clean(row["DBH £"]);
-        const fixedFee   = clean(row["Fixed Fees"]) || 0.40;
-        const payout     = clean(row["Payout"]);
-        const dateSold   = parseSheetDate(row["Date Sold"]) || parseSheetDate(row["Date listed"]) || null;
-        const payoutDate = parseSheetDate(row["Payout Date"]) || null;
-        const paid       = isYes(row["PAID"]);
+      if (hasSale && stockId) {
+        const n = s => parseFloat((s || "0").replace(/[^0-9.-]/g,"")) || 0;
+        const ebayFees  = n(row["Ebay Fees"]);
+        const shipping  = n(row["Shipping"]);
+        const netSale   = n(row["Net Sale"]) || (salePrice - ebayFees - shipping);
+        const dbhPct    = n(row["DBH %"]);
+        const dbhFee    = n(row["DBH £"]);
+        const fixedFee  = n(row["Fixed Fees"]) || 0.40;
+        const payout    = n(row["Payout"]);
+        const dateSold  = parseSheetDate(row["Date Sold"]) || parseSheetDate(row["Date listed"]) || null;
+        const payoutDt  = parseSheetDate(row["Payout Date"]) || null;
+        const paid      = isYes(row["PAID"]);
 
-        console.log(`Sale for ${row["Product Name"]}: price=${salePrice} payout=${payout} paid=${paid}`);
+        console.log(`Sale: ${(row["Product Name"]||"").slice(0,30)} | sale=${salePrice} net=${netSale} payout=${payout} paid=${paid}`);
 
         const salePayload = {
           stock_id: stockId, user_id: PANAYIOTIS_ID,
@@ -4271,37 +4285,39 @@ async function syncSheetToSupabase(token, showToast, onRefresh) {
           sale_price: salePrice, ebay_fees: ebayFees, shipping: shipping,
           net_sale: netSale, dbh_pct: dbhPct, dbh_fee: dbhFee,
           fixed_fee: fixedFee, payout: payout,
-          payout_date: payoutDate, paid: paid,
+          payout_date: payoutDt, paid: paid,
         };
 
-        const saleCheck = await fetch(
+        const sc = await fetch(
           `${SUPABASE_URL}/rest/v1/liquidation_sales?stock_id=eq.${stockId}&user_id=eq.${PANAYIOTIS_ID}`,
-          { headers: adminHeaders }
+          { headers: ah }
         );
-        const existingSales = await saleCheck.json();
+        const exSales = await sc.json();
 
-        if (Array.isArray(existingSales) && existingSales.length > 0) {
-          const updatePayload = { ...salePayload };
-          if (existingSales[0].paid) delete updatePayload.paid; // never un-mark a paid payout
-          await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${existingSales[0].id}`, {
-            method: "PATCH", headers: adminHeaders, body: JSON.stringify(updatePayload)
+        if (Array.isArray(exSales) && exSales.length > 0) {
+          const upd = { ...salePayload };
+          if (exSales[0].paid) delete upd.paid;
+          const pr = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${exSales[0].id}`, {
+            method: "PATCH", headers: ah, body: JSON.stringify(upd)
           });
+          if (!pr.ok) { const e = await pr.json(); console.error("Sale update failed:", e); salesFailed++; }
+          else salesUpdated++;
         } else {
-          const saleInsRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
-            method: "POST", headers: { ...adminHeaders, "Prefer": "return=representation" },
+          const pr = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
+            method: "POST", headers: { ...ah, "Prefer": "return=representation" },
             body: JSON.stringify(salePayload)
           });
-          if (!saleInsRes.ok) { const err = await saleInsRes.json(); console.error("Sale insert failed", err); }
+          if (!pr.ok) { const e = await pr.json(); console.error("Sale insert failed:", e, "payload:", salePayload); salesFailed++; }
+          else salesInserted++;
         }
-        salesSynced++;
       }
     }
 
-    console.log(`Sync done: ${inserted} inserted, ${updated} updated, ${salesSynced} sales`);
-    showToast(`Synced ${inserted + updated} items, ${salesSynced} sales`);
+    console.log(`Done: stock ${inserted} in / ${updated} up | sales ${salesInserted} in / ${salesUpdated} up / ${salesFailed} FAILED`);
+    showToast(`Synced ${inserted + updated} items, ${salesInserted + salesUpdated} sales`);
     onRefresh();
   } catch (e) {
-    console.error("Sheet sync error:", e);
+    console.error("Sync error:", e);
     showToast("Sync failed: " + e.message);
   }
 }
