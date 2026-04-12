@@ -105,6 +105,10 @@ const Icons = {
   List: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
   BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+  ShoppingBag: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+  Eye: () => <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  RefreshCw: () => <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>,
+  ExternalLink: () => <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
 };
 
 const css = `
@@ -2933,6 +2937,273 @@ function AdminTrackerPage() {
     </div>
   );
 }
+function AdminEbayListingsPage({ token, showToast }) {
+  const EBAY_CREDS_KEY = "dbh_ebay_creds";
+  const [creds, setCreds] = useState(() => { try { return JSON.parse(localStorage.getItem(EBAY_CREDS_KEY) || "null"); } catch { return null; } });
+  const [credForm, setCredForm] = useState({ clientId: "", clientSecret: "", refreshToken: "" });
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [lastFetched, setLastFetched] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [editingId, setEditingId] = useState(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+
+  const saveCreds = () => {
+    if (!credForm.clientId || !credForm.clientSecret || !credForm.refreshToken) { showToast("Fill in all three fields"); return; }
+    localStorage.setItem(EBAY_CREDS_KEY, JSON.stringify(credForm));
+    setCreds(credForm);
+    setShowSetup(false);
+    showToast("eBay credentials saved!");
+  };
+
+  const clearCreds = () => { localStorage.removeItem(EBAY_CREDS_KEY); setCreds(null); setListings([]); };
+
+  const getAccessToken = async () => {
+    const basic = btoa(`${creds.clientId}:${creds.clientSecret}`);
+    const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
+      method: "POST",
+      headers: { "Authorization": `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(creds.refreshToken)}&scope=https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account`
+    });
+    const data = await res.json();
+    if (!data.access_token) throw new Error(data.error_description || "Failed to get access token");
+    return data.access_token;
+  };
+
+  const fetchListings = async () => {
+    if (!creds) return;
+    setLoading(true);
+    try {
+      const accessToken = await getAccessToken();
+      let allItems = [];
+      let offset = 0;
+      const limit = 200;
+      while (true) {
+        const res = await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`, {
+          headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json", "Accept-Language": "en-GB" }
+        });
+        const data = await res.json();
+        if (!data.inventoryItems) break;
+        allItems = allItems.concat(data.inventoryItems);
+        if (allItems.length >= (data.total || 0)) break;
+        offset += limit;
+      }
+
+      // Get active listings with analytics via Trading API
+      const tradingRes = await fetch("https://api.ebay.com/ws/api.dll", {
+        method: "POST",
+        headers: {
+          "X-EBAY-API-CALL-NAME": "GetMyeBaySelling",
+          "X-EBAY-API-APP-NAME": creds.clientId,
+          "X-EBAY-API-CERT-NAME": creds.clientSecret,
+          "X-EBAY-API-SITEID": "3",
+          "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+          "X-EBAY-API-IAF-TOKEN": accessToken,
+          "Content-Type": "text/xml"
+        },
+        body: `<?xml version="1.0" encoding="utf-8"?><GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents"><RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials><ActiveList><Include>true</Include><Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>1</PageNumber></Pagination><Sort>TimeLeft</Sort></ActiveList><HideVariations>false</HideVariations></GetMyeBaySellingRequest>`
+      });
+      const xmlText = await tradingRes.text();
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, "text/xml");
+      const items = xml.querySelectorAll("ActiveList Item");
+      const parsed = Array.from(items).map(item => {
+        const get = (tag) => item.querySelector(tag)?.textContent || "";
+        const watchCount = parseInt(get("WatchCount")) || 0;
+        const hitCount = parseInt(get("HitCount")) || 0;
+        const price = parseFloat(get("CurrentPrice") || get("BuyItNowPrice") || get("StartPrice")) || 0;
+        const timeLeft = get("TimeLeft");
+        const daysLeft = timeLeft ? Math.floor(parseInt(timeLeft.replace(/[^0-9]/g, "").slice(0,3)) / 24) : 28;
+        const qty = parseInt(get("QuantityAvailable") || get("Quantity")) || 1;
+        const listingId = get("ItemID");
+        const title = get("Title");
+        const sku = get("SKU");
+        return { listingId, title, sku, price, watchCount, hitCount, daysLeft, qty, timeLeft };
+      });
+
+      setListings(parsed.length > 0 ? parsed : allItems.map(i => ({
+        listingId: i.sku, title: i.product?.title || i.sku, sku: i.sku, price: 0, watchCount: 0, hitCount: 0, daysLeft: 28, qty: i.availability?.shipToLocationAvailability?.quantity || 1
+      })));
+      setLastFetched(new Date());
+      showToast(`Loaded ${parsed.length || allItems.length} listings`);
+    } catch (e) {
+      showToast("Error: " + e.message);
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  const updatePrice = async (listingId, newPrice) => {
+    setSaving(true);
+    try {
+      const accessToken = await getAccessToken();
+      const res = await fetch("https://api.ebay.com/ws/api.dll", {
+        method: "POST",
+        headers: {
+          "X-EBAY-API-CALL-NAME": "ReviseItem",
+          "X-EBAY-API-APP-NAME": creds.clientId,
+          "X-EBAY-API-CERT-NAME": creds.clientSecret,
+          "X-EBAY-API-SITEID": "3",
+          "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+          "X-EBAY-API-IAF-TOKEN": accessToken,
+          "Content-Type": "text/xml"
+        },
+        body: `<?xml version="1.0" encoding="utf-8"?><ReviseItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials><Item><ItemID>${listingId}</ItemID><StartPrice>${parseFloat(newPrice).toFixed(2)}</StartPrice></Item></ReviseItemRequest>`
+      });
+      const xmlText = await res.text();
+      const xml = new DOMParser().parseFromString(xmlText, "text/xml");
+      const ack = xml.querySelector("Ack")?.textContent;
+      if (ack === "Success" || ack === "Warning") {
+        setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: parseFloat(newPrice) } : l));
+        setEditingId(null);
+        showToast("Price updated on eBay!");
+      } else {
+        const errMsg = xml.querySelector("ShortMessage")?.textContent || "Update failed";
+        showToast("Error: " + errMsg);
+      }
+    } catch (e) { showToast("Error: " + e.message); }
+    setSaving(false);
+  };
+
+  const getStatus = (l) => {
+    if (l.hitCount === 0 && l.watchCount === 0) return "cold";
+    if (l.hitCount >= 15 || l.watchCount >= 3) return "hot";
+    return "warm";
+  };
+
+  const filtered = listings.filter(l => {
+    if (filter === "hot") return getStatus(l) === "hot";
+    if (filter === "cold") return getStatus(l) === "cold";
+    if (filter === "expiring") return l.daysLeft <= 3;
+    return true;
+  });
+
+  const hotCount = listings.filter(l => getStatus(l) === "hot").length;
+  const coldCount = listings.filter(l => getStatus(l) === "cold").length;
+  const expiringCount = listings.filter(l => l.daysLeft <= 3).length;
+
+  if (!creds || showSetup) {
+    return <>
+      <div className="page-header"><div><div className="page-title">eBay Listings Health</div><div className="page-subtitle">Connect your eBay account to monitor listings</div></div></div>
+      <div className="card" style={{ maxWidth: 560 }}>
+        <div className="card-title" style={{ marginBottom: 20 }}>eBay Developer Credentials</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>Client ID (App ID)</div>
+            <input className="form-input" placeholder="e.g. DanHarp-DBHPrep-PRD-..." value={credForm.clientId} onChange={e => setCredForm(p => ({ ...p, clientId: e.target.value }))} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>Client Secret (Cert ID)</div>
+            <input className="form-input" placeholder="e.g. PRD-..." value={credForm.clientSecret} onChange={e => setCredForm(p => ({ ...p, clientSecret: e.target.value }))} type="password" />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>User Refresh Token</div>
+            <input className="form-input" placeholder="Paste your OAuth refresh token here" value={credForm.refreshToken} onChange={e => setCredForm(p => ({ ...p, refreshToken: e.target.value }))} type="password" />
+          </div>
+          <div style={{ padding: "12px 14px", background: "rgba(0,229,255,0.05)", border: "1px solid rgba(0,229,255,0.2)", borderRadius: 8, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            <strong style={{ color: "var(--cyan)" }}>How to get these:</strong><br />
+            1. developer.ebay.com → My Account → Application Keys<br />
+            2. Copy your Production Client ID and Client Secret<br />
+            3. For the Refresh Token: go to the User Tokens section in your eBay developer account and generate a token with sell.inventory + sell.account scopes
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-primary admin" onClick={saveCreds}>Save & Connect</button>
+            {creds && <button className="btn" style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }} onClick={() => setShowSetup(false)}>Cancel</button>}
+          </div>
+        </div>
+      </div>
+    </>;
+  }
+
+  return <>
+    <div className="page-header">
+      <div><div className="page-title">eBay Listings Health</div><div className="page-subtitle">{lastFetched ? `Last updated ${lastFetched.toLocaleTimeString("en-GB")}` : "Click refresh to load your listings"}</div></div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button className="btn" style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", fontSize: 13 }} onClick={() => { setShowSetup(true); setCredForm(creds); }}>Edit Credentials</button>
+        <button className="btn btn-primary admin" onClick={fetchListings} disabled={loading}><Icons.RefreshCw />{loading ? "Loading..." : "Refresh"}</button>
+      </div>
+    </div>
+
+    {listings.length > 0 && <>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+        <div className="card stat-card admin"><div className="card-title">Total Active</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listings.length}</div></div>
+        <div className="card stat-card admin"><div className="card-title">Hot (15+ views)</div><div className="stat-value" style={{ color: "var(--green)" }}>{hotCount}</div></div>
+        <div className="card stat-card admin" style={{ "--before-color": "var(--red)" }}><div className="card-title">Cold (0 views)</div><div className="stat-value" style={{ color: "var(--red)" }}>{coldCount}</div></div>
+        <div className="card stat-card warning"><div className="card-title">Expiring Soon</div><div className="stat-value" style={{ color: "var(--amber)" }}>{expiringCount}</div></div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["all", "All"], ["hot", "Hot"], ["cold", "Cold / 0 views"], ["expiring", "Expiring ≤3d"]].map(([val, label]) => (
+          <button key={val} onClick={() => setFilter(val)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: filter === val ? "1px solid var(--orange)" : "1px solid var(--border)", background: filter === val ? "rgba(255,145,0,0.15)" : "transparent", color: filter === val ? "var(--orange)" : "var(--text-secondary)", fontFamily: "Outfit,sans-serif" }}>{label}</button>
+        ))}
+      </div>
+
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {["Item", "Price", "Views (30d)", "Watchers", "Days Left", "Status", "Actions"].map(h => (
+                  <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((l, i) => {
+                const status = getStatus(l);
+                const statusColor = status === "hot" ? "var(--green)" : status === "cold" ? "var(--red)" : "var(--amber)";
+                const statusLabel = status === "hot" ? "Hot" : status === "cold" ? "Cold" : "Warm";
+                const isEditing = editingId === l.listingId;
+                return (
+                  <tr key={l.listingId || i} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                    <td style={{ padding: "11px 14px", maxWidth: 280 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title || "—"}</div>
+                      {l.sku && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>SKU: {l.sku}</div>}
+                    </td>
+                    <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+                      {isEditing ? (
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <input value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 80, padding: "4px 8px", background: "var(--bg-card)", border: "1px solid var(--cyan)", borderRadius: 6, color: "var(--text-primary)", fontSize: 13, fontFamily: "Outfit,sans-serif" }} />
+                          <button onClick={() => updatePrice(l.listingId, editPrice)} disabled={saving} style={{ padding: "4px 10px", background: "var(--green)", border: "none", borderRadius: 6, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{saving ? "..." : "Save"}</button>
+                          <button onClick={() => setEditingId(null)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "JetBrains Mono,monospace" }}>£{l.price.toFixed(2)}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "11px 14px" }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: l.hitCount >= 15 ? "var(--green)" : l.hitCount === 0 ? "var(--red)" : "var(--text-primary)" }}>{l.hitCount}</span>
+                    </td>
+                    <td style={{ padding: "11px 14px" }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: l.watchCount >= 3 ? "var(--green)" : l.watchCount === 0 ? "var(--text-muted)" : "var(--text-primary)" }}>{l.watchCount}</span>
+                    </td>
+                    <td style={{ padding: "11px 14px" }}>
+                      <span style={{ fontSize: 13, color: l.daysLeft <= 3 ? "var(--red)" : l.daysLeft <= 7 ? "var(--amber)" : "var(--text-secondary)" }}>{l.daysLeft}d</span>
+                    </td>
+                    <td style={{ padding: "11px 14px" }}>
+                      <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>{statusLabel}</span>
+                    </td>
+                    <td style={{ padding: "11px 14px" }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {!isEditing && <button onClick={() => { setEditingId(l.listingId); setEditPrice(l.price.toFixed(2)); }} style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif", display: "flex", alignItems: "center", gap: 4 }}><Icons.Edit /> Price</button>}
+                        {l.listingId && <a href={`https://www.ebay.co.uk/itm/${l.listingId}`} target="_blank" rel="noreferrer" style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}><Icons.ExternalLink /> View</a>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>}
+
+    {listings.length === 0 && !loading && <div className="card empty-state" style={{ marginTop: 24 }}><Icons.ShoppingBag /><p>Click Refresh to load your eBay listings</p></div>}
+  </>;
+}
+
 function AdminPortal() {
   const { user, token, signOut } = useAuth();
   const [page, setPage] = useState("clients");
@@ -2971,6 +3242,7 @@ function AdminPortal() {
     { id: "clients", label: "All Clients", icon: Icons.Users },
     { id: "deals", label: "DBH Deals", icon: Icons.List },
     { id: "tracker", label: "Income Tracker", icon: Icons.BarChart },
+    { id: "ebay", label: "eBay Listings", icon: Icons.ShoppingBag },
     { id: "settings", label: "Settings", icon: Icons.Settings }
   ];
 
@@ -2978,7 +3250,7 @@ function AdminPortal() {
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
     if (page === "deals") return <AdminDealsPage token={token} showToast={showToast} />;
     if (page === "tracker") return <AdminTrackerPage />;
-    if (page === "tracker") return <AdminTrackerPage />;
+    if (page === "ebay") return <AdminEbayListingsPage token={token} showToast={showToast} />;
     if (page === "client" && selectedClient) {
       return <AdminClientPage 
         client={selectedClient} 
@@ -4343,13 +4615,9 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [syncing, setSyncing] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
 
-  // Auto-sync every 60 seconds for Panayiotis
+  // Auto-sync disabled - manual only via Sync Now button
   useEffect(() => {
     if (!isPanayiotis) return;
-    const doSync = () => syncSheetToSupabase(token, () => {}, onRefresh);
-    doSync(); // sync immediately on open
-    const interval = setInterval(doSync, 60000);
-    return () => clearInterval(interval);
   }, [isPanayiotis, token]);
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
