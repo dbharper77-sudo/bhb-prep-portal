@@ -4031,6 +4031,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [showAddParcel, setShowAddParcel] = useState(false);
   const [addParcelForm, setAddParcelForm] = useState({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" });
   const [parcelTab, setParcelTab] = useState("transit");
+  const [parcelSearch, setParcelSearch] = useState("");
   const [receiveParcel, setReceiveParcel] = useState(null);
   const [receiveParcelQty, setReceiveParcelQty] = useState("");
 
@@ -4047,7 +4048,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const sorted = sortByStatus(activeParcels);
 
   const inboundUnits = localParcels.filter(p => ["in_transit","partial_delivery"].includes(p.status)).reduce((s,p)=>s+(parseInt(p.quantity)||0),0);
-  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered"||p.status==="partial_delivery").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
   const preppedUnits = preppedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
   const collectedUnits = completedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
 
@@ -4236,8 +4237,8 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
         {/* Tabs */}
         {(() => {
-          const transitParcels = localParcels.filter(p => p.status === "in_transit" || p.status === "partial_delivery");
-          const warehouseParcels = localParcels.filter(p => p.status === "delivered");
+          const transitParcels = localParcels.filter(p => p.status === "in_transit");
+          const warehouseParcels = localParcels.filter(p => p.status === "delivered" || p.status === "partial_delivery");
           const preppedTabParcels = localParcels.filter(p => p.status === "prepped");
           const collectedTabParcels = localParcels.filter(p => p.status === "collected");
 
@@ -4249,15 +4250,22 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
           ];
 
           const tabParcels = { transit: transitParcels, warehouse: warehouseParcels, prepped: preppedTabParcels, collected: collectedTabParcels };
-          const currentParcels = tabParcels[parcelTab] || [];
+          const q = parcelSearch.toLowerCase();
+          const currentParcels = (tabParcels[parcelTab] || [])
+            .filter(p => !q || (p.product_name||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q) || (p.asin||"").toLowerCase().includes(q) || (p.supplier||"").toLowerCase().includes(q))
+            .sort((a, b) => new Date(b.date_added || 0) - new Date(a.date_added || 0));
 
           return <>
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {tabDefs.map(([k, label, items]) => (
-                <button key={k} onClick={() => setParcelTab(k)} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: parcelTab === k ? "var(--cyan)" : "transparent", color: parcelTab === k ? "#000" : "var(--text-secondary)", borderColor: parcelTab === k ? "var(--cyan)" : "var(--border)" }}>
+                <button key={k} onClick={() => { setParcelTab(k); setParcelSearch(""); }} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: parcelTab === k ? "var(--cyan)" : "transparent", color: parcelTab === k ? "#000" : "var(--text-secondary)", borderColor: parcelTab === k ? "var(--cyan)" : "var(--border)" }}>
                   {label}{items.length > 0 ? <span style={{ marginLeft: 6, background: parcelTab === k ? "rgba(0,0,0,0.15)" : "var(--border)", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{items.length}</span> : null}
                 </button>
               ))}
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+              <input className="input" placeholder="🔍  Search product, SKU, ASIN, supplier..." value={parcelSearch} onChange={e => setParcelSearch(e.target.value)} style={{ maxWidth: 380 }} />
             </div>
 
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
