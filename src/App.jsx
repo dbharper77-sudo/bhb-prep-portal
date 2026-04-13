@@ -4060,7 +4060,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"" });
+    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"", quantity: item.quantity||1 });
   };
 
   const doSaveEdit = async (overrideData) => {
@@ -4112,6 +4112,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
       if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
       showToast(`${newQtyReceived} in warehouse · ${remainder} moved back to In Transit`);
+      onRefresh();
       return;
     }
     await doSaveEdit(finalData);
@@ -4298,7 +4299,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
                         <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
                         <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
                         <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
-                        <td className="mono">{p.quantity}</td>
+                        <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.quantity || ""} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 0 })} placeholder="0" /> : p.quantity}</td>
                         <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received != null ? p.qty_received : "—")}</td>
                         <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
                         {parcelTab !== "transit" && <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>}
