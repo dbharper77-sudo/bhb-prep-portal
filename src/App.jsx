@@ -4030,6 +4030,9 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [partialPrepQty, setPartialPrepQty] = useState("");
   const [showAddParcel, setShowAddParcel] = useState(false);
   const [addParcelForm, setAddParcelForm] = useState({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" });
+  const [parcelTab, setParcelTab] = useState("transit");
+  const [receiveParcel, setReceiveParcel] = useState(null);
+  const [receiveParcelQty, setReceiveParcelQty] = useState("");
 
   useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
   useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
@@ -4198,13 +4201,15 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
+      <div style={{ marginBottom: 24 }}>
+        {/* Header: title + Add Parcel */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Inbound Parcels</div>
           <button className="btn btn-primary btn-sm" onClick={() => { setShowAddParcel(true); setAddParcelForm({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" }); }}><Icons.Plus /> Add Parcel</button>
         </div>
+
         {showAddParcel && (
-          <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
+          <div className="card" style={{ padding: 16, marginBottom: 12 }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
               <div><label className="input-label">Product *</label><input className="input" placeholder="Product name" value={addParcelForm.product_name} onChange={e => setAddParcelForm({...addParcelForm, product_name: e.target.value})} /></div>
               <div><label className="input-label">ASIN</label><input className="input" placeholder="B0..." value={addParcelForm.asin} onChange={e => setAddParcelForm({...addParcelForm, asin: e.target.value})} /></div>
@@ -4228,28 +4233,131 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
             </div>
           </div>
         )}
-        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
-        <div className="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
-          <tbody>{sorted.map(p => {
-            const isEdit = editingId === p.id, data = isEdit ? editData : p;
-            return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
-              <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
-              <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
-              <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
-              <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
-              <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
-              <td className="mono">{p.quantity}</td>
-              <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received || "—")}</td>
-              <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
-              <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
-              <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
-              <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
-              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteParcel(p.id)}><Icons.Trash /></button></div>}</td>
-            </tr>;
-          })}</tbody>
-        </table></div>}
+
+        {/* Tabs */}
+        {(() => {
+          const transitParcels = localParcels.filter(p => p.status === "in_transit" || p.status === "partial_delivery");
+          const warehouseParcels = localParcels.filter(p => p.status === "delivered");
+          const preppedTabParcels = localParcels.filter(p => p.status === "prepped");
+          const collectedTabParcels = localParcels.filter(p => p.status === "collected");
+
+          const tabDefs = [
+            ["transit", `⏳ In Transit`, transitParcels],
+            ["warehouse", `🏭 In Warehouse`, warehouseParcels],
+            ["prepped", `✅ Prepped`, preppedTabParcels],
+            ["collected", `📦 Collected`, collectedTabParcels],
+          ];
+
+          const tabParcels = { transit: transitParcels, warehouse: warehouseParcels, prepped: preppedTabParcels, collected: collectedTabParcels };
+          const currentParcels = tabParcels[parcelTab] || [];
+
+          return <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+              {tabDefs.map(([k, label, items]) => (
+                <button key={k} onClick={() => setParcelTab(k)} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: parcelTab === k ? "var(--cyan)" : "transparent", color: parcelTab === k ? "#000" : "var(--text-secondary)", borderColor: parcelTab === k ? "var(--cyan)" : "var(--border)" }}>
+                  {label}{items.length > 0 ? <span style={{ marginLeft: 6, background: parcelTab === k ? "rgba(0,0,0,0.15)" : "var(--border)", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{items.length}</span> : null}
+                </button>
+              ))}
+            </div>
+
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              {currentParcels.length === 0
+                ? <div className="empty-state"><Icons.Box /><p>No parcels here.</p></div>
+                : <div className="table-wrap"><table>
+                    <thead><tr>
+                      <th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th>
+                      <th>Expected</th><th>Received</th><th>Tracking</th>
+                      {parcelTab !== "transit" && <th>Status</th>}
+                      <th>Notes</th><th>Flag</th><th></th>
+                    </tr></thead>
+                    <tbody>{currentParcels.map(p => {
+                      const isEdit = editingId === p.id, data = isEdit ? editData : p;
+                      return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
+                        <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
+                        <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
+                        <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
+                        <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
+                        <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
+                        <td className="mono">{p.quantity}</td>
+                        <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received != null ? p.qty_received : "—")}</td>
+                        <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
+                        {parcelTab !== "transit" && <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>}
+                        <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
+                        <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
+                        <td>
+                          {isEdit
+                            ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
+                            : <div style={{ display: "flex", gap: 4 }}>
+                                <button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button>
+                                {parcelTab === "transit" && (
+                                  <button style={{ padding: "4px 10px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                                    onClick={() => { setReceiveParcel(p); setReceiveParcelQty(String(p.quantity || 1)); }}>
+                                    ✓ Received
+                                  </button>
+                                )}
+                                {parcelTab === "warehouse" && (
+                                  <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                                    onClick={() => { setPartialPrepItem({ ...p, quantity: p.quantity, qty_received: p.qty_received || p.quantity }); setPartialPrepQty(String(p.qty_received || p.quantity)); }}>
+                                    ✓ Prepped
+                                  </button>
+                                )}
+                                <button className="btn-icon btn-danger" onClick={() => deleteParcel(p.id)}><Icons.Trash /></button>
+                              </div>}
+                        </td>
+                      </tr>;
+                    })}</tbody>
+                  </table></div>}
+            </div>
+          </>;
+        })()}
       </div>
+
+      {/* Receive Parcel Modal */}
+      {receiveParcel && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 420, maxWidth: "95vw", padding: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Mark Received</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>{receiveParcel.product_name}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, background: "var(--bg-primary)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Expected</div><div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{receiveParcel.quantity}</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Now Received</div><div style={{ fontSize: 22, fontWeight: 700, color: "var(--cyan)" }}>{parseInt(receiveParcelQty) || 0}</div></div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="input-label">Qty Received</label>
+            <input className="input" type="number" min="1" max={receiveParcel.quantity} value={receiveParcelQty} onChange={e => setReceiveParcelQty(e.target.value)} autoFocus />
+          </div>
+          {(() => {
+            const rec = parseInt(receiveParcelQty) || 0;
+            const rem = (receiveParcel.quantity || 1) - rec;
+            if (rem > 0 && rec > 0) return <div style={{ fontSize: 12, color: "var(--amber)", marginBottom: 12 }}>⚠ {rec} will move to <strong>In Warehouse</strong> · {rem} will remain <strong>In Transit</strong></div>;
+            if (rec >= (receiveParcel.quantity || 1) && rec > 0) return <div style={{ fontSize: 12, color: "var(--green)", marginBottom: 12 }}>✓ Full delivery — all {rec} units moving to <strong>In Warehouse</strong></div>;
+            return null;
+          })()}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn btn-secondary" onClick={() => setReceiveParcel(null)}>Cancel</button>
+            <button className="btn btn-primary" style={{ background: "var(--cyan)", color: "#000" }} disabled={saving} onClick={async () => {
+              setSaving(true);
+              const qtyIn = parseInt(receiveParcelQty) || (receiveParcel.quantity || 1);
+              const totalQty = receiveParcel.quantity || 1;
+              const remaining = totalQty - qtyIn;
+              const clientWebhook = client.discord_webhook || webhookUrl;
+              if (remaining > 0) {
+                // Partial: update original row → delivered with qty_received=qtyIn
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${receiveParcel.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ status: "delivered", qty_received: qtyIn }) });
+                // Create new row for the remainder still in transit
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveParcel.product_name, asin: receiveParcel.asin, sku: receiveParcel.sku, supplier: receiveParcel.supplier, quantity: remaining, tracking_number: receiveParcel.tracking_number, status: "in_transit", user_id: client.id, date_added: receiveParcel.date_added }) });
+                if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "📬 PARTIAL DELIVERY TO WAREHOUSE", color: 0xffab00, fields: [{ name: "Product", value: receiveParcel.product_name, inline: true }, { name: "Units Received", value: `${qtyIn}`, inline: true }, { name: "Still In Transit", value: `${remaining}`, inline: true }, { name: "SKU", value: receiveParcel.sku || "—", inline: true }], footer: { text: client.full_name || client.email } });
+              } else {
+                // Full delivery
+                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${receiveParcel.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ status: "delivered", qty_received: qtyIn }) });
+                if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: receiveParcel.product_name, inline: true }, { name: "Units Received", value: `${qtyIn}`, inline: true }, { name: "SKU", value: receiveParcel.sku || "—", inline: true }], footer: { text: client.full_name || client.email } });
+              }
+              const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+              if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
+              setReceiveParcel(null); setSaving(false); showToast("Marked received!"); setParcelTab("warehouse"); onRefresh();
+            }}>{saving ? "Saving..." : "Confirm"}</button>
+          </div>
+        </div>
+      </div>}
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
