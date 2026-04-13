@@ -4082,25 +4082,37 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const saveEdit = async () => {
     const oldItem = localParcels.find(p => p.id === editingId);
-    // If changing to prepped, always show partial prep modal so admin can confirm qty
-    // qtyReceived = how many are physically here; totalExpected = original order qty
     const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
     const totalExpected = parseInt(oldItem?.quantity) || 1;
     if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-      // If coming from partial_delivery, the row is already split — just mark prepped, no modal needed
-      if (oldItem?.status === "partial_delivery") {
+      if (oldItem?.status === "partial_delivery" || oldItem?.status === "delivered") {
         await doSaveEdit({ ...editData, status: "prepped" });
         return;
       }
-      // Otherwise show modal to handle split
       setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
       setPartialPrepQty(String(qtyReceived));
       return;
     }
-    // Auto-detect partial delivery: if marking delivered but qty_received < quantity, use partial_delivery status
     let finalData = { ...editData };
+    // Auto-detect partial delivery when marking delivered with fewer units than expected
     if (editData.status === "delivered" && editData.qty_received && parseInt(editData.qty_received) < (oldItem?.quantity || 0)) {
       finalData.status = "partial_delivery";
+    }
+    // If editing qty_received on a warehouse row and it's less than original quantity, split the remainder back to in_transit
+    const isWarehouseRow = ["delivered", "partial_delivery"].includes(oldItem?.status);
+    const newQtyReceived = parseInt(editData.qty_received);
+    const originalQty = parseInt(oldItem?.quantity) || 0;
+    if (isWarehouseRow && newQtyReceived && newQtyReceived < originalQty) {
+      const remainder = originalQty - newQtyReceived;
+      // Update existing row with received qty only
+      finalData.quantity = newQtyReceived;
+      await doSaveEdit(finalData);
+      // Create new in_transit row for the remainder
+      await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: oldItem.product_name, asin: oldItem.asin, sku: oldItem.sku, supplier: oldItem.supplier, quantity: remainder, tracking_number: oldItem.tracking_number, status: "in_transit", user_id: client.id, date_added: oldItem.date_added }) });
+      const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
+      if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
+      showToast(`${newQtyReceived} in warehouse · ${remainder} moved back to In Transit`);
+      return;
     }
     await doSaveEdit(finalData);
   };
