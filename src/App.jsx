@@ -4780,6 +4780,43 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [syncing, setSyncing] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
 
+  // Print DBH SKU label (50x25mm) — opens a pop-up print window
+  const printLabel = (item) => {
+    if (!item.dbh_sku) { showToast("No DBH SKU on this item"); return; }
+    const sku = item.dbh_sku;
+    const productName = (item.product_name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase();
+    const html = `<!DOCTYPE html><html><head><title>Label ${sku}</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+<style>
+  @page { size: 50mm 25mm; margin: 0; }
+  html, body { margin: 0; padding: 0; background: white; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  .label { width: 50mm; height: 25mm; box-sizing: border-box; padding: 1mm 1.5mm; display: flex; flex-direction: column; justify-content: space-between; position: relative; page-break-after: always; }
+  .client { position: absolute; top: 0.8mm; right: 1.5mm; font-size: 1.8mm; color: #1F4E78; font-weight: 700; text-transform: uppercase; }
+  .barcode-wrap { text-align: center; margin-top: 0.5mm; }
+  .barcode-wrap svg { width: 100%; height: 8mm; }
+  .sku { text-align: center; font-size: 3.4mm; font-weight: 700; letter-spacing: 0.08mm; color: #000; margin-top: 0.5mm; }
+  .product { font-size: 1.8mm; color: #333; text-align: center; line-height: 1.1; overflow: hidden; max-height: 4mm; }
+  .instruction { margin: 16px; font-family: system-ui; color: #333; font-size: 13px; }
+  @media print { .instruction { display: none; } }
+<\/style></head><body>
+<div class="instruction">Press <b>Cmd+P</b> (or Ctrl+P). In the print dialogue, select paper size <b>50mm x 25mm</b> (or "Custom: 50x25mm"). Ensure margins are "None". Scale should be 100%.</div>
+<div class="label">
+  <div class="client">${clientName}</div>
+  <div class="barcode-wrap"><svg id="bc"></svg></div>
+  <div class="sku">${sku}</div>
+  <div class="product">${productName}</div>
+</div>
+<script>
+  JsBarcode('#bc', '${sku}', { format: 'CODE128', displayValue: false, margin: 0, height: 28, width: 1.2 });
+  setTimeout(() => window.print(), 400);
+<\/script></body></html>`;
+    const w = window.open("", "_blank", "width=500,height=400");
+    if (!w) { showToast("Pop-up blocked — allow pop-ups for this site"); return; }
+    w.document.write(html);
+    w.document.close();
+  };
+
   // Auto-sync disabled - manual only via Sync Now button
   useEffect(() => {
     if (!isPanayiotis) return;
@@ -4945,6 +4982,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
+                    <button title="Print DBH SKU label" onClick={() => printLabel(item)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🖨 Label</button>
                     <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => { setReceiveItem(item); setReceiveQty(String(item.quantity || 1)); }}>✓ Received</button>
                   </div>}
               </td>
@@ -4975,6 +5013,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
+                    <button title="Print DBH SKU label" onClick={() => printLabel(item)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🖨 Label</button>
                     {remaining > 0 && <button style={{ padding: "4px 10px", background: "var(--orange)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => openLogSale(item)}>+ Sale</button>}
                   </div>}
               </td>
