@@ -767,7 +767,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
     const yy = String(today.getFullYear()).slice(-2);
     const mm = String(today.getMonth() + 1).padStart(2, "0");
     const dd = String(today.getDate()).padStart(2, "0");
-    const datePart = `${yy}${mm}${dd}`;
+    const datePart = `${dd}${mm}${yy}`;
 
     // Find highest existing seq for this client across all time
     const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${user.id}&dbh_sku=like.*-${clientName}-*&select=dbh_sku`, {
