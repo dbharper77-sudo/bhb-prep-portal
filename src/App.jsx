@@ -755,25 +755,59 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
 }
 
 function LiquidationSendStockPage({ token, onRefresh, showToast }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "", quantity: "1" });
   const [saving, setSaving] = useState(false);
   const update = f => e => setForm({ ...form, [f]: e.target.value });
+
+  // Generate DBH SKU: YYMMDD-CLIENTNAME-NNN (seq resets per client, never resets over time)
+  const generateDbhSku = async () => {
+    const clientName = (profile?.full_name || user?.email || "CLIENT").split(" ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const today = new Date();
+    const yy = String(today.getFullYear()).slice(-2);
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const datePart = `${yy}${mm}${dd}`;
+
+    // Find highest existing seq for this client across all time
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${user.id}&dbh_sku=like.*-${clientName}-*&select=dbh_sku`, {
+      headers: supabase.headers(token)
+    });
+    const existing = await res.json();
+    let maxSeq = 0;
+    if (Array.isArray(existing)) {
+      existing.forEach(r => {
+        const parts = (r.dbh_sku || "").split("-");
+        const seq = parseInt(parts[parts.length - 1]);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      });
+    }
+    const nextSeq = String(maxSeq + 1).padStart(3, "0");
+    return `${datePart}-${clientName}-${nextSeq}`;
+  };
+
   const handleSubmit = async () => {
     if (!form.product_name) return; setSaving(true);
-    await supabase.from("liquidation_stock", token).insert({ ...form, quantity: parseInt(form.quantity) || 1, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
-    showToast("Stock submitted!"); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "", quantity: "1" }); onRefresh(); setSaving(false);
+    try {
+      const dbh_sku = await generateDbhSku();
+      await supabase.from("liquidation_stock", token).insert({ ...form, dbh_sku, quantity: parseInt(form.quantity) || 1, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
+      showToast(`Stock submitted! DBH SKU: ${dbh_sku}`); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "", quantity: "1" }); onRefresh();
+    } catch (e) {
+      showToast("Error: " + e.message);
+    }
+    setSaving(false);
   };
   return (
     <><div className="page-header"><div><div className="page-title">Send Stock</div><div className="page-subtitle">Submit returns for liquidation</div></div></div>
     <div className="page-body"><div className="card" style={{ maxWidth: 600 }}>
       <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
       <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">SKU</label><input className="input" value={form.sku} onChange={update("sku")} /></div></div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">Your SKU (optional)</label><input className="input" placeholder="Your own SKU if you have one" value={form.sku} onChange={update("sku")} /></div></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
         <div className="input-group"><label className="input-label">Quantity</label><input className="input" type="number" min="1" placeholder="1" value={form.quantity} onChange={update("quantity")} /></div>
       </div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, fontStyle: "italic" }}>A DBH tracking code will be auto-generated when you submit.</div>
       <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
     </div></div></>
   );
@@ -822,10 +856,11 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{transitItems.map(s => {
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono">
@@ -851,11 +886,12 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{listedItems.map(s => {
             const remaining = (s.quantity || 1) - (s.qty_sold || 0);
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
