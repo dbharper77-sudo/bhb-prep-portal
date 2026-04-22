@@ -4931,10 +4931,11 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{item.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
@@ -4956,11 +4957,12 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
           <tbody>{listedItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{item.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
@@ -5035,7 +5037,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               if (remaining > 0) {
                 // Partial receive — update existing item with received qty, create new row for remainder
                 await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true, quantity: qtyReceived }) });
-                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, dbh_sku: receiveItem.dbh_sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
               } else {
                 // Full receive
                 await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) });
