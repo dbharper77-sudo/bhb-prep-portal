@@ -756,7 +756,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
 
 function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   const { user, profile } = useAuth();
-  const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "", quantity: "1" });
+  const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", condition: "", purchase_price: "", quantity: "1" });
   const [saving, setSaving] = useState(false);
   const update = f => e => setForm({ ...form, [f]: e.target.value });
 
@@ -791,7 +791,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
     try {
       const dbh_sku = await generateDbhSku();
       await supabase.from("liquidation_stock", token).insert({ ...form, dbh_sku, quantity: parseInt(form.quantity) || 1, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
-      showToast(`Stock submitted! DBH SKU: ${dbh_sku}`); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "", quantity: "1" }); onRefresh();
+      showToast(`Stock submitted! DBH SKU: ${dbh_sku}`); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", condition: "", purchase_price: "", quantity: "1" }); onRefresh();
     } catch (e) {
       showToast("Error: " + e.message);
     }
@@ -803,6 +803,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
       <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">Your SKU (optional)</label><input className="input" placeholder="Your own SKU if you have one" value={form.sku} onChange={update("sku")} /></div></div>
+      <div className="input-group"><label className="input-label">Condition</label><select className="input" value={form.condition} onChange={update("condition")}><option value="">— Select condition —</option><option value="New">New</option><option value="Open Box">Open Box</option><option value="Used">Used</option><option value="Like New">Like New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option></select></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
         <div className="input-group"><label className="input-label">Quantity</label><input className="input" type="number" min="1" placeholder="1" value={form.quantity} onChange={update("quantity")} /></div>
@@ -2098,7 +2099,7 @@ function AdminLiquidationPage({ token, showToast }) {
             <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
             <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
             <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
-            <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+            <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
             <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
             <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 100, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
@@ -4786,6 +4787,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     const sku = item.dbh_sku;
     const productName = (item.product_name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase();
+    const condition = (item.condition || "").toUpperCase();
     const html = `<!DOCTYPE html><html><head><title>Label ${sku}</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
@@ -4793,6 +4795,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   html, body { margin: 0; padding: 0; background: white; font-family: 'Helvetica Neue', Arial, sans-serif; }
   .label { width: 50mm; height: 25mm; box-sizing: border-box; padding: 1mm 1.5mm; display: flex; flex-direction: column; justify-content: space-between; position: relative; page-break-after: always; }
   .client { position: absolute; top: 0.8mm; right: 1.5mm; font-size: 1.8mm; color: #1F4E78; font-weight: 700; text-transform: uppercase; }
+  .condition { position: absolute; top: 0.8mm; left: 1.5mm; font-size: 1.8mm; color: #C00000; font-weight: 700; text-transform: uppercase; }
   .barcode-wrap { text-align: center; margin-top: 0.5mm; }
   .barcode-wrap svg { width: 100%; height: 8mm; }
   .sku { text-align: center; font-size: 3.4mm; font-weight: 700; letter-spacing: 0.08mm; color: #000; margin-top: 0.5mm; }
@@ -4800,8 +4803,9 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   .instruction { margin: 16px; font-family: system-ui; color: #333; font-size: 13px; }
   @media print { .instruction { display: none; } }
 <\/style></head><body>
-<div class="instruction">Press <b>Cmd+P</b> (or Ctrl+P). In the print dialogue, select paper size <b>50mm x 25mm</b> (or "Custom: 50x25mm"). Ensure margins are "None". Scale should be 100%.</div>
+<div class="instruction">Press <b>Cmd+P</b> (or Ctrl+P). In the print dialogue, select paper size <b>50mm x 25mm</b> (or "Custom: 50x25mm"). Ensure margins are "None". Scale should be 100%. Uncheck "Headers and footers".</div>
 <div class="label">
+  ${condition ? `<div class="condition">${condition}</div>` : ''}
   <div class="client">${clientName}</div>
   <div class="barcode-wrap"><svg id="bc"></svg></div>
   <div class="sku">${sku}</div>
@@ -4977,7 +4981,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
-              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td>
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
@@ -5007,7 +5011,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
               <td><span className="mono" style={{ color: remaining <= 0 ? "var(--red)" : "var(--text-primary)", fontWeight: 700 }}>{remaining}</span></td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
-              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : <button onClick={async (e) => { e.stopPropagation(); const newVal = !item.listed; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ listed: newVal }) }); showToast(newVal ? "Marked listed!" : "Unmarked!"); onRefresh(); }} style={{ background: "transparent", border: `1px solid ${item.listed ? "var(--green)" : "var(--border)"}`, color: item.listed ? "var(--green)" : "var(--text-muted)", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{item.listed ? "Yes" : "No"}</button>}</td>
               <td>
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
