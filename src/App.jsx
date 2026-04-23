@@ -748,7 +748,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
       {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{stockItem?.product_name || "—"}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
+        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
   );
@@ -924,9 +924,10 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
           <tbody>{sales.map(s => {
             const stockItem = liquidationStock.find(l => l.id === s.stock_id);
+            const pname = s.product_name_snapshot || stockItem?.product_name || "—";
             return <tr key={s.id}>
               <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
-              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{pname}</td>
               <td className="mono">{s.qty_sold}</td>
               <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
               <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
@@ -4867,7 +4868,10 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       dbh_fee: parseFloat(c.fee.toFixed(2)), fixed_fee: parseFloat(saleForm.fixed_fee) || 0.40,
       payout: parseFloat(c.payout.toFixed(2)), payout_date: payoutDate.toISOString().split('T')[0], paid: false,
       ebay_order_id: saleForm.ebay_order_id || null,
-      logged_at: new Date().toISOString()
+      logged_at: new Date().toISOString(),
+      product_name_snapshot: logSaleItem.product_name || null,
+      asin_snapshot: logSaleItem.asin || null,
+      dbh_sku_snapshot: logSaleItem.dbh_sku || null
     };
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
       method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
@@ -5033,9 +5037,10 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>eBay Order ID</th><th>Logged At</th><th>Paid</th></tr></thead>
           <tbody>{sales.map(s => {
             const stockItem = liquidation.find(l => l.id === s.stock_id);
+            const displayName = s.product_name_snapshot || stockItem?.product_name || "—";
             return <tr key={s.id}>
               <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
-              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{displayName}</td>
               <td className="mono">{s.qty_sold}</td>
               <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
               <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.ebay_fees).toFixed(2)}</td>
@@ -5051,7 +5056,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
                   {s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--green)", color: "var(--green)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) }); loadSales(); showToast("Marked paid!"); }}>Mark Paid</button>}
-                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: stockItem?.product_name || "Unknown", inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
+                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); if (s.stock_id && stockItem) { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); } const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: displayName, inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
                 </div>
               </td>
             </tr>;
