@@ -3393,6 +3393,26 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const [dragOverId, setDragOverId] = useState(null);
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
+  const [clientTypeTab, setClientTypeTab] = useState("all");
+  const [clientTypes, setClientTypes] = useState({});
+
+  useEffect(() => {
+    // Load client types from Supabase profiles
+    const types = {};
+    clients.forEach(c => { if (c.client_type) types[c.id] = c.client_type; });
+    setClientTypes(types);
+  }, [clients]);
+
+  const updateClientType = async (e, clientId, newType) => {
+    e.stopPropagation();
+    setClientTypes(prev => ({ ...prev, [clientId]: newType }));
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${clientId}`, {
+      method: "PATCH",
+      headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ client_type: newType })
+    });
+    showToast("Client type updated!");
+  };
 
   const saveSetting = async (key, value) => {
     const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { headers: supabase.headers(token) }).then(r => r.json());
@@ -3449,11 +3469,14 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     return ordered;
   }, [clients, clientOrder]);
 
-  const filteredClients = sortedClients.filter(c => 
-    c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.company_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredClients = sortedClients.filter(c => {
+    const matchesSearch = c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.company_name?.toLowerCase().includes(search.toLowerCase());
+    const type = clientTypes[c.id] || c.client_type || "prep";
+    const matchesType = clientTypeTab === "all" || type === clientTypeTab;
+    return matchesSearch && matchesType;
+  });
 
   const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
   const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
@@ -3491,9 +3514,19 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const displayClients = activeTab === "active" ? activeClients : archivedClients;
 
   if (loading) return <div className="loader"><div className="spinner" /></div>;
+  const allCount = sortedClients.filter(c => !archivedIds.includes(c.id)).length;
+  const prepCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "prep").length;
+  const dealsCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "deals").length;
+  const liquidationCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "liquidation").length;
+
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
+      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+        {[["all", `All (${allCount})`], ["prep", `Prep (${prepCount})`], ["deals", `Deal Sheet (${dealsCount})`], ["liquidation", `Liquidation (${liquidationCount})`]].map(([val, label]) => (
+          <button key={val} onClick={() => setClientTypeTab(val)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: clientTypeTab === val ? "1px solid var(--orange)" : "1px solid var(--border)", background: clientTypeTab === val ? "rgba(255,145,0,0.15)" : "transparent", color: clientTypeTab === val ? "var(--orange)" : "var(--text-secondary)", fontFamily: "Outfit,sans-serif" }}>{label}</button>
+        ))}
+      </div>
       <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <div className="search-bar" style={{ flex: 1 }}><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div style={{ display: "flex", gap: 4 }}>
@@ -3525,11 +3558,17 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
                     {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)" }}>⚠ PAYMENT DUE</span>}
+                    {(() => { const t = clientTypes[c.id] || c.client_type || "prep"; const colors = { prep: "var(--cyan)", deals: "var(--green)", liquidation: "var(--orange)" }; const labels = { prep: "Prep", deals: "Deal Sheet", liquidation: "Liquidation" }; return <span style={{ padding: "2px 8px", background: `${colors[t]}22`, color: colors[t], borderRadius: 12, fontSize: 11, fontWeight: 700, border: `1px solid ${colors[t]}44` }}>{labels[t] || t}</span>; })()}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
+                  <select onClick={e => e.stopPropagation()} onChange={e => updateClientType(e, c.id, e.target.value)} value={clientTypes[c.id] || c.client_type || "prep"} style={{ padding: "5px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, fontFamily: "Outfit,sans-serif", cursor: "pointer" }}>
+                    <option value="prep">Prep</option>
+                    <option value="deals">Deal Sheet</option>
+                    <option value="liquidation">Liquidation</option>
+                  </select>
                   <button className="btn-icon" onClick={(e) => toggleArchive(e, c.id)} title={archivedIds.includes(c.id) ? "Unarchive client" : "Archive client"} style={{ color: archivedIds.includes(c.id) ? "var(--cyan)" : "var(--text-muted)", fontSize: 14 }}>{archivedIds.includes(c.id) ? "↩" : "🗂"}</button>
                   <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
                 </div>
