@@ -367,6 +367,60 @@ function LiquidationMonthlyChart({ data }) {
 }
 
 // Auth
+function ResetPasswordPage({ accessToken }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const handleReset = async () => {
+    setError("");
+    if (!password || password.length < 6) return setError("Password must be at least 6 characters");
+    if (password !== confirm) return setError("Passwords don't match");
+    setLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${accessToken}` },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (data.error || data.error_description) throw new Error(data.error_description || data.error || "Failed to update password");
+      setDone(true);
+      setTimeout(() => { window.location.href = window.location.origin; }, 2500);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="auth-wrapper"><div className="auth-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}>
+        <div className="sidebar-logo-icon">DBH</div>
+        <div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div>
+      </div>
+      <div className="auth-title">Set New Password</div>
+      <div className="auth-sub">Choose a new password for your account</div>
+      {done ? (
+        <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>
+          ✓ Password updated! Redirecting to login...
+        </div>
+      ) : <>
+        {error && <div className="auth-error">{error}</div>}
+        <div className="input-group" style={{ marginTop: 16 }}>
+          <label className="input-label">New Password</label>
+          <input className="input" type="password" placeholder="Min 6 characters" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
+        </div>
+        <div className="input-group">
+          <label className="input-label">Confirm Password</label>
+          <input className="input" type="password" placeholder="Repeat new password" value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
+        </div>
+        <button className="btn btn-primary auth-btn" onClick={handleReset} disabled={loading}>{loading ? "Updating..." : "Set New Password"}</button>
+      </>}
+    </div></div>
+  );
+}
+
 function LoginPage() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -5142,6 +5196,14 @@ export default function App() {
 
 function AppRouter() {
   const { user, loading, isAdmin } = useAuth();
+
+  // Detect Supabase password recovery token in URL hash
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.replace("#", "?"));
+  const type = params.get("type");
+  const accessToken = params.get("access_token");
+  if (type === "recovery" && accessToken) return <ResetPasswordPage accessToken={accessToken} />;
+
   if (loading) return <div className="loader"><div className="spinner" /></div>;
   if (!user) return <LoginPage />;
   return isAdmin ? <AdminPortal /> : <ClientPortal />;
