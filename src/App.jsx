@@ -4216,10 +4216,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
     const totalExpected = parseInt(oldItem?.quantity) || 1;
     if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-      if (oldItem?.status === "partial_delivery" || oldItem?.status === "delivered") {
-        await doSaveEdit({ ...editData, status: "prepped" });
-        return;
-      }
+      // Always show partial prep modal so admin can specify how many are being prepped
       setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
       setPartialPrepQty(String(qtyReceived));
       return;
