@@ -4871,7 +4871,50 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [receiveItem, setReceiveItem] = useState(null);
   const [receiveQty, setReceiveQty] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [showAddStock, setShowAddStock] = useState(false);
+  const [addStockForm, setAddStockForm] = useState({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" });
+  const [addStockSaving, setAddStockSaving] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
+
+  const submitAddStock = async () => {
+    if (!addStockForm.product_name) { showToast("Product name is required"); return; }
+    setAddStockSaving(true);
+    try {
+      // Generate DBH SKU
+      const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase().slice(0, 6);
+      const existing = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${client.id}&select=dbh_sku&order=created_at.desc&limit=1`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json());
+      const lastNum = existing?.[0]?.dbh_sku ? parseInt(existing[0].dbh_sku.split("-").pop()) || 0 : 0;
+      const dbh_sku = `DBH-${clientName}-${String(lastNum + 1).padStart(3, "0")}`;
+      const payload = {
+        product_name: addStockForm.product_name,
+        asin: addStockForm.asin || null,
+        lpn_number: addStockForm.lpn_number || null,
+        condition: addStockForm.condition || null,
+        quantity: parseInt(addStockForm.quantity) || 1,
+        cog: addStockForm.cog ? parseFloat(addStockForm.cog) : null,
+        user_id: client.id,
+        dbh_sku,
+        received: false,
+        listed: false,
+        date_added: new Date().toISOString().split("T")[0]
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showToast(`Stock added — ${dbh_sku}`);
+        setShowAddStock(false);
+        setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" });
+        onRefresh();
+      } else {
+        const err = await res.json();
+        showToast("Error: " + (err.message || "Failed to add stock"));
+      }
+    } catch (e) { showToast("Error: " + e.message); }
+    setAddStockSaving(false);
+  };
 
   // Print DBH SKU label (50x25mm) — opens a pop-up print window
   const printLabel = (item) => {
@@ -5058,10 +5101,11 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
         {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
           <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
         )}
+        <button onClick={() => setShowAddStock(true)} style={{ marginLeft: "auto", padding: "8px 18px", borderRadius: 8, border: "1px solid var(--cyan)", fontSize: 13, fontWeight: 700, cursor: "pointer", background: "rgba(0,229,255,0.1)", color: "var(--cyan)" }}>+ Add Stock</button>
       </div>
 
       {/* In Transit Tab */}
@@ -5154,6 +5198,57 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             </tr>;
           })}</tbody>
         </table></div>}
+      </div>}
+
+      {/* Add Stock Modal */}
+      {showAddStock && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div className="card" style={{ width: 480, maxWidth: "95vw", padding: 28, maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Add Stock</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Adding for: {client.full_name || client.email}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label className="input-label">Product Name *</label>
+              <input className="input" placeholder="e.g. Samsung Galaxy Buds2 Pro" value={addStockForm.product_name} onChange={e => setAddStockForm(p => ({ ...p, product_name: e.target.value }))} onBlur={async e => { const asin = addStockForm.asin.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
+            </div>
+            <div>
+              <label className="input-label">ASIN</label>
+              <input className="input" placeholder="e.g. B09..." value={addStockForm.asin} onChange={e => setAddStockForm(p => ({ ...p, asin: e.target.value }))} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label className="input-label">Condition</label>
+                <select className="input" value={addStockForm.condition} onChange={e => setAddStockForm(p => ({ ...p, condition: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  <option>New</option>
+                  <option>Open Box</option>
+                  <option>Like New</option>
+                  <option>Used</option>
+                  <option>Good</option>
+                  <option>Fair</option>
+                  <option>Poor</option>
+                </select>
+              </div>
+              <div>
+                <label className="input-label">Quantity</label>
+                <input className="input" type="number" min="1" value={addStockForm.quantity} onChange={e => setAddStockForm(p => ({ ...p, quantity: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label className="input-label">COG (£)</label>
+                <input className="input" type="number" step="0.01" placeholder="0.00" value={addStockForm.cog} onChange={e => setAddStockForm(p => ({ ...p, cog: e.target.value }))} />
+              </div>
+              <div>
+                <label className="input-label">LPN Number</label>
+                <input className="input" placeholder="Optional" value={addStockForm.lpn_number} onChange={e => setAddStockForm(p => ({ ...p, lpn_number: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <button className="btn btn-primary admin" onClick={submitAddStock} disabled={addStockSaving} style={{ flex: 1 }}>{addStockSaving ? "Adding..." : "Add Stock"}</button>
+              <button className="btn" onClick={() => { setShowAddStock(false); setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" }); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
       </div>}
 
       {/* Partial Receive Modal */}
