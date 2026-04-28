@@ -3338,11 +3338,15 @@ function AdminSubscriptionsPage({ token, showToast }) {
 
   useEffect(() => {
     if (subs.length === 0) return;
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date().toISOString().split("T")[0];
+    const notifKey = `dbh_subs_notified_${today}`;
+    if (localStorage.getItem(notifKey)) return; // already notified today
+    localStorage.setItem(notifKey, "1");
+    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     subs.forEach(async s => {
       if (!s.next_due_date) return;
       const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
-      const daysUntil = Math.round((due - today) / 86400000);
+      const daysUntil = Math.round((due - todayDate) / 86400000);
       const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
       if (daysUntil === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
       else if (daysUntil === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
