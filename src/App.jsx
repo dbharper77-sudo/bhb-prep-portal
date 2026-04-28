@@ -3318,6 +3318,299 @@ function AdminSubscriptionsPage({ token, showToast }) {
   const [addForm, setAddForm] = useState({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" });
   const [saving, setSaving] = useState(false);
   const [markingId, setMarkingId] = useState(null);
+  const [editSub, setEditSub] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [view, setView] = useState("clients"); // "clients" | "revenue"
+
+  const load = async () => {
+    setLoading(true);
+    const [subsRes, clientsRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=*,profiles(full_name,email,company_name)&order=next_due_date.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?deals_access=eq.true&select=id,full_name,email,company_name&order=full_name.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
+    ]);
+    setSubs(Array.isArray(subsRes) ? subsRes : []);
+    setClients(Array.isArray(clientsRes) ? clientsRes : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (subs.length === 0) return;
+    const today = new Date(); today.setHours(0,0,0,0);
+    subs.forEach(async s => {
+      if (!s.next_due_date) return;
+      const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
+      const daysUntil = Math.round((due - today) / 86400000);
+      const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
+      if (daysUntil === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+      else if (daysUntil === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+      else if (daysUntil < 0) await sendSubsDiscord({ title: "🔴 Payment Overdue", color: 0xdc2626, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Overdue By", value: `${Math.abs(daysUntil)} days`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+    });
+  }, [subs]);
+
+  const addSub = async () => {
+    if (!addForm.user_id) { showToast("Select a client"); return; }
+    setSaving(true);
+    const lastPaid = new Date(addForm.last_paid_date);
+    const nextDue = new Date(lastPaid); nextDue.setDate(nextDue.getDate() + 30);
+    const payload = { user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" };
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(payload) });
+    if (res.ok) { showToast("Subscription added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); }
+    else showToast("Error saving");
+    setSaving(false);
+  };
+
+  const saveEdit = async () => {
+    setEditSaving(true);
+    const lastPaid = new Date(editForm.last_paid_date);
+    const nextDue = new Date(editForm.next_due_date || editForm.last_paid_date);
+    // if they changed last_paid and not next_due, recalc next_due
+    const nextDueStr = editForm.next_due_date || (() => { const d = new Date(lastPaid); d.setDate(d.getDate() + 30); return d.toISOString().split("T")[0]; })();
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, {
+      method: "PATCH",
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: parseFloat(editForm.amount) || 90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes })
+    });
+    showToast("Subscription updated!");
+    setEditSub(null);
+    load();
+    setEditSaving(false);
+  };
+
+  const markPaid = async (sub) => {
+    setMarkingId(sub.id);
+    const today = new Date().toISOString().split("T")[0];
+    const nextDue = new Date(); nextDue.setDate(nextDue.getDate() + 30);
+    const nextDueStr = nextDue.toISOString().split("T")[0];
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
+    const name = sub.profiles?.full_name || sub.profiles?.email || "Unknown";
+    await sendSubsDiscord({ title: "✅ Payment Received", color: 0x22c55e, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${sub.amount}`, inline: true }, { name: "Next Due", value: new Date(nextDueStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+    showToast(`✅ ${name} marked as paid — renewed 30 days`);
+    load(); setMarkingId(null);
+  };
+
+  const deleteSub = async (id) => {
+    if (!window.confirm("Remove this subscription?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+    load();
+  };
+
+  const getStatus = (sub) => {
+    if (!sub.next_due_date) return { label: "No date", color: "var(--text-muted)", days: null };
+    const today = new Date(); today.setHours(0,0,0,0);
+    const due = new Date(sub.next_due_date); due.setHours(0,0,0,0);
+    const days = Math.round((due - today) / 86400000);
+    if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "var(--red)", days };
+    if (days === 0) return { label: "Due today", color: "var(--red)", days };
+    if (days <= 3) return { label: `Due in ${days}d`, color: "var(--amber)", days };
+    if (days <= 7) return { label: `Due in ${days}d`, color: "var(--amber)", days };
+    return { label: `Due in ${days}d`, color: "var(--green)", days };
+  };
+
+  const overdue = subs.filter(s => getStatus(s).days !== null && getStatus(s).days < 0);
+  const dueSoon = subs.filter(s => getStatus(s).days !== null && getStatus(s).days >= 0 && getStatus(s).days <= 7);
+  const upcoming = subs.filter(s => getStatus(s).days !== null && getStatus(s).days > 7);
+  const monthlyRevenue = subs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+  const annualRevenue = monthlyRevenue * 12;
+
+  // Revenue chart — last 6 months based on last_paid_date
+  const revenueByMonth = (() => {
+    const months = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const label = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
+      months[key] = { label, total: 0, count: 0 };
+    }
+    subs.forEach(s => {
+      if (!s.last_paid_date) return;
+      const key = s.last_paid_date.slice(0, 7);
+      if (months[key]) { months[key].total += parseFloat(s.amount) || 0; months[key].count++; }
+    });
+    return Object.values(months);
+  })();
+  const maxRevenue = Math.max(...revenueByMonth.map(m => m.total), 1);
+
+  if (loading) return <div className="loader"><div className="spinner" /></div>;
+
+  return <>
+    <div className="page-header">
+      <div>
+        <div className="page-title">Deal Sheet Subscriptions</div>
+        <div className="page-subtitle">{subs.length} clients · £{monthlyRevenue}/mo · £{annualRevenue.toLocaleString()}/yr projected</div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {[["clients", "👥 Clients"], ["revenue", "📊 Revenue"]].map(([v, l]) => (
+            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${view === v ? "var(--orange)" : "var(--border)"}`, background: view === v ? "rgba(255,145,0,0.15)" : "transparent", color: view === v ? "var(--orange)" : "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{l}</button>
+          ))}
+        </div>
+        <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
+      </div>
+    </div>
+
+    <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5,1fr)", marginBottom: 24 }}>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--red)" }}><div className="card-title">Overdue</div><div className="stat-value" style={{ color: "var(--red)" }}>{overdue.length}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--amber)" }}><div className="card-title">Due This Week</div><div className="stat-value" style={{ color: "var(--amber)" }}>{dueSoon.length}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--green)" }}><div className="card-title">All Good</div><div className="stat-value" style={{ color: "var(--green)" }}>{upcoming.length}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthlyRevenue}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{annualRevenue.toLocaleString()}</div></div>
+    </div>
+
+    {view === "revenue" && <>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>Revenue — Last 6 Months</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 160 }}>
+          {revenueByMonth.map((m, i) => (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan)" }}>{m.total > 0 ? `£${m.total}` : ""}</div>
+              <div style={{ width: "100%", background: m.total > 0 ? "var(--cyan)" : "var(--border)", borderRadius: "6px 6px 0 0", height: `${Math.max((m.total / maxRevenue) * 120, m.total > 0 ? 8 : 2)}px`, transition: "height 0.3s", opacity: m.total > 0 ? 1 : 0.3 }} />
+              <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{m.label}</div>
+              {m.count > 0 && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.count} client{m.count > 1 ? "s" : ""}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 16px 12px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>Revenue Breakdown</div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+            {["Client", "Business", "Monthly Fee", "Last Paid", "Paid This Year (est.)"].map(h => <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {subs.map((s, i) => {
+              const paidThisYear = s.last_paid_date && new Date(s.last_paid_date).getFullYear() === new Date().getFullYear() ? (s.amount * Math.floor((new Date() - new Date(s.last_paid_date)) / (30 * 86400000) + 1)) : 0;
+              return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                <td style={{ padding: "11px 16px", fontWeight: 600, fontSize: 13 }}>{s.profiles?.full_name || s.profiles?.email}</td>
+                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.profiles?.company_name || "—"}</td>
+                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace" }}>£{s.amount}</td>
+                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}</td>
+                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{Math.max(paidThisYear, s.amount)}</td>
+              </tr>;
+            })}
+            <tr style={{ borderTop: "2px solid var(--border)" }}>
+              <td colSpan={2} style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13 }}>TOTAL</td>
+              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--cyan)" }}>£{monthlyRevenue}/mo</td>
+              <td />
+              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{annualRevenue}/yr</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>}
+
+    {view === "clients" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            {["Client", "Amount", "Last Paid", "Next Due", "Status", "Actions"].map(h => (
+              <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet — add your first client</td></tr>}
+          {subs.map((s, i) => {
+            const st = getStatus(s);
+            const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
+            const biz = s.profiles?.company_name;
+            return (
+              <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                <td style={{ padding: "13px 16px" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
+                  {biz && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{biz}</div>}
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.profiles?.email}</div>
+                  {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
+                </td>
+                <td style={{ padding: "13px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", fontSize: 14 }}>£{s.amount}</td>
+                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.next_due_date ? new Date(s.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                <td style={{ padding: "13px 16px" }}>
+                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span>
+                </td>
+                <td style={{ padding: "13px 16px" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => markPaid(s)} disabled={markingId === s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId === s.id ? "..." : "✓ Paid"}</button>
+                    <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date || "", next_due_date: s.next_due_date || "", notes: s.notes || "" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✏️</button>
+                    <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>}
+
+    {/* Edit Modal */}
+    {editSub && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div className="card" style={{ width: 440, padding: 28 }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Edit Subscription</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name || editSub.profiles?.email}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label className="input-label">Amount (£)</label>
+            <input className="input" type="number" value={editForm.amount} onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label className="input-label">Last Paid Date</label>
+              <input className="input" type="date" value={editForm.last_paid_date} onChange={e => setEditForm(p => ({ ...p, last_paid_date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="input-label">Next Due Date</label>
+              <input className="input" type="date" value={editForm.next_due_date} onChange={e => setEditForm(p => ({ ...p, next_due_date: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="input-label">Notes</label>
+            <input className="input" placeholder="e.g. Pays via bank transfer" value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving ? "Saving..." : "Save Changes"}</button>
+            <button onClick={() => setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {/* Add Modal */}
+    {showAdd && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div className="card" style={{ width: 440, padding: 28 }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Subscription</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label className="input-label">Client</label>
+            <select className="input" value={addForm.user_id} onChange={e => setAddForm(p => ({ ...p, user_id: e.target.value }))}>
+              <option value="">— Select client —</option>
+              {clients.filter(c => !subs.find(s => s.user_id === c.id)).map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}{c.company_name ? ` (${c.company_name})` : ""}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label className="input-label">Amount (£)</label>
+              <input className="input" type="number" value={addForm.amount} onChange={e => setAddForm(p => ({ ...p, amount: e.target.value }))} />
+            </div>
+            <div>
+              <label className="input-label">Last Paid Date</label>
+              <input className="input" type="date" value={addForm.last_paid_date} onChange={e => setAddForm(p => ({ ...p, last_paid_date: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="input-label">Notes (optional)</label>
+            <input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Add Subscription"}</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>}
+  </>;
+}
 
   const load = async () => {
     setLoading(true);
