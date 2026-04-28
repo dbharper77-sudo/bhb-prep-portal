@@ -105,11 +105,6 @@ const Icons = {
   List: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
   BarChart: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
-  ShoppingBag: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
-  CreditCard: () => <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
-  Eye: () => <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
-  RefreshCw: () => <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>,
-  ExternalLink: () => <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
 };
 
 const css = `
@@ -368,60 +363,6 @@ function LiquidationMonthlyChart({ data }) {
 }
 
 // Auth
-function ResetPasswordPage({ accessToken }) {
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-
-  const handleReset = async () => {
-    setError("");
-    if (!password || password.length < 6) return setError("Password must be at least 6 characters");
-    if (password !== confirm) return setError("Passwords don't match");
-    setLoading(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${accessToken}` },
-        body: JSON.stringify({ password })
-      });
-      const data = await res.json();
-      if (data.error || data.error_description) throw new Error(data.error_description || data.error || "Failed to update password");
-      setDone(true);
-      setTimeout(() => { window.location.href = window.location.origin; }, 2500);
-    } catch (e) { setError(e.message); }
-    setLoading(false);
-  };
-
-  return (
-    <div className="auth-wrapper"><div className="auth-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}>
-        <div className="sidebar-logo-icon">DBH</div>
-        <div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div>
-      </div>
-      <div className="auth-title">Set New Password</div>
-      <div className="auth-sub">Choose a new password for your account</div>
-      {done ? (
-        <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>
-          ✓ Password updated! Redirecting to login...
-        </div>
-      ) : <>
-        {error && <div className="auth-error">{error}</div>}
-        <div className="input-group" style={{ marginTop: 16 }}>
-          <label className="input-label">New Password</label>
-          <input className="input" type="password" placeholder="Min 6 characters" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
-        </div>
-        <div className="input-group">
-          <label className="input-label">Confirm Password</label>
-          <input className="input" type="password" placeholder="Repeat new password" value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
-        </div>
-        <button className="btn btn-primary auth-btn" onClick={handleReset} disabled={loading}>{loading ? "Updating..." : "Set New Password"}</button>
-      </>}
-    </div></div>
-  );
-}
-
 function LoginPage() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -803,67 +744,29 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
       {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
+        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{stockItem?.product_name || "—"}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
   );
 }
 
 function LiquidationSendStockPage({ token, onRefresh, showToast }) {
-  const { user, profile } = useAuth();
-  const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", condition: "", purchase_price: "", quantity: "1" });
+  const { user } = useAuth();
+  const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "" });
   const [saving, setSaving] = useState(false);
   const update = f => e => setForm({ ...form, [f]: e.target.value });
-
-  // Generate DBH SKU: YYMMDD-CLIENTNAME-NNN (seq resets per client, never resets over time)
-  const generateDbhSku = async () => {
-    const clientName = (profile?.full_name || user?.email || "CLIENT").split(" ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const today = new Date();
-    const yy = String(today.getFullYear()).slice(-2);
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    const datePart = `${dd}${mm}${yy}`;
-
-    // Find highest existing seq for this client across all time
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${user.id}&dbh_sku=like.*-${clientName}-*&select=dbh_sku`, {
-      headers: supabase.headers(token)
-    });
-    const existing = await res.json();
-    let maxSeq = 0;
-    if (Array.isArray(existing)) {
-      existing.forEach(r => {
-        const parts = (r.dbh_sku || "").split("-");
-        const seq = parseInt(parts[parts.length - 1]);
-        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-      });
-    }
-    const nextSeq = String(maxSeq + 1).padStart(3, "0");
-    return `${datePart}-${clientName}-${nextSeq}`;
-  };
-
   const handleSubmit = async () => {
     if (!form.product_name) return; setSaving(true);
-    try {
-      const dbh_sku = await generateDbhSku();
-      await supabase.from("liquidation_stock", token).insert({ ...form, dbh_sku, quantity: parseInt(form.quantity) || 1, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
-      showToast(`Stock submitted! DBH SKU: ${dbh_sku}`); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", condition: "", purchase_price: "", quantity: "1" }); onRefresh();
-    } catch (e) {
-      showToast("Error: " + e.message);
-    }
-    setSaving(false);
+    await supabase.from("liquidation_stock", token).insert({ ...form, purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null, cog: form.purchase_price ? parseFloat(form.purchase_price) : null, user_id: user.id, date_added: new Date().toISOString().split('T')[0] });
+    showToast("Stock submitted!"); setForm({ removal_order_id: "", product_name: "", asin: "", sku: "", purchase_price: "" }); onRefresh(); setSaving(false);
   };
   return (
     <><div className="page-header"><div><div className="page-title">Send Stock</div><div className="page-subtitle">Submit returns for liquidation</div></div></div>
     <div className="page-body"><div className="card" style={{ maxWidth: 600 }}>
       <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
       <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">Your SKU (optional)</label><input className="input" placeholder="Your own SKU if you have one" value={form.sku} onChange={update("sku")} /></div></div>
-      <div className="input-group"><label className="input-label">Condition</label><select className="input" value={form.condition} onChange={update("condition")}><option value="">— Select condition —</option><option value="New">New</option><option value="Open Box">Open Box</option><option value="Used">Used</option><option value="Like New">Like New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option></select></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
-        <div className="input-group"><label className="input-label">Quantity</label><input className="input" type="number" min="1" placeholder="1" value={form.quantity} onChange={update("quantity")} /></div>
-      </div>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, fontStyle: "italic" }}>A DBH tracking code will be auto-generated when you submit.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">SKU</label><input className="input" value={form.sku} onChange={update("sku")} /></div></div>
+      <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
       <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
     </div></div></>
   );
@@ -871,25 +774,10 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
 
 function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onRefresh, showToast }) {
   const [activeTab, setActiveTab] = useState("transit");
-  const [editingId, setEditingId] = useState(null);
-  const [editQty, setEditQty] = useState("");
-  const [saving, setSaving] = useState(false);
   const sales = liquidationSales || [];
   const transitItems = liquidationStock.filter(i => !i.received);
   const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
   const totalPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
-
-  const saveQty = async (item) => {
-    const newQty = parseInt(editQty);
-    if (!newQty || newQty < 1) { showToast("Enter a valid quantity"); return; }
-    setSaving(true);
-    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, {
-      method: "PATCH",
-      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ quantity: newQty })
-    });
-    showToast("Quantity updated!"); setEditingId(null); onRefresh(); setSaving(false);
-  };
 
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
@@ -912,29 +800,13 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
-          <tbody>{transitItems.map(s => {
-            const isEdit = editingId === s.id;
-            return <tr key={s.id}>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
-              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
-              <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
-              <td className="mono">
-                {isEdit
-                  ? <input type="number" min="1" className="inline-input" style={{ width: 60 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
-                  : s.quantity || 1}
-              </td>
-              <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
-              <td>
-                {isEdit
-                  ? <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => saveQty(s)} disabled={saving} style={{ padding: "3px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
-                      <button onClick={() => setEditingId(null)} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
-                    </div>
-                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>}
-              </td>
-            </tr>;
-          })}</tbody>
+          <thead><tr><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th></tr></thead>
+          <tbody>{transitItems.map(s => <tr key={s.id}>
+            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+            <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+            <td className="mono">{s.quantity || 1}</td>
+            <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
+          </tr>)}</tbody>
         </table></div>}
       </div>}
 
@@ -942,31 +814,17 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th></tr></thead>
           <tbody>{listedItems.map(s => {
             const remaining = (s.quantity || 1) - (s.qty_sold || 0);
-            const isEdit = editingId === s.id;
             return <tr key={s.id}>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
-              <td className="mono">
-                {isEdit
-                  ? <input type="number" min="1" className="inline-input" style={{ width: 60 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
-                  : s.quantity || 1}
-              </td>
+              <td className="mono">{s.quantity || 1}</td>
               <td className="mono" style={{ color: "var(--green)" }}>{s.qty_sold || 0}</td>
               <td className="mono" style={{ fontWeight: 700, color: remaining <= 0 ? "var(--red)" : "var(--text-primary)" }}>{remaining}</td>
               <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
-              <td>
-                {isEdit
-                  ? <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => saveQty(s)} disabled={saving} style={{ padding: "3px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
-                      <button onClick={() => setEditingId(null)} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
-                    </div>
-                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>}
-              </td>
             </tr>;
           })}</tbody>
         </table></div>}
@@ -979,10 +837,9 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
           <tbody>{sales.map(s => {
             const stockItem = liquidationStock.find(l => l.id === s.stock_id);
-            const pname = s.product_name_snapshot || stockItem?.product_name || "—";
             return <tr key={s.id}>
               <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
-              <td style={{ fontWeight: 600, fontSize: 12 }}>{pname}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
               <td className="mono">{s.qty_sold}</td>
               <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
               <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
@@ -2122,8 +1979,7 @@ function AdminLiquidationPage({ token, showToast }) {
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
@@ -2156,7 +2012,7 @@ function AdminLiquidationPage({ token, showToast }) {
             <td style={{ fontWeight: 600 }}>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></td>
             <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
             <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
-            <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+            <td>{isEdit ? <select className="inline-select" style={{ width: 90 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
             <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : (item.listed ? "Yes" : "No")}</td>
             <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 70 }} value={data.sale_price} onChange={e => setEditData({ ...editData, sale_price: e.target.value })} /> : item.sale_price ? <span className="mono">£{parseFloat(item.sale_price).toFixed(2)}</span> : "—"}</td>
             <td>{isEdit ? <input type="date" className="inline-input" style={{ width: 100, colorScheme: "dark" }} value={data.date_sold} onChange={e => setEditData({ ...editData, date_sold: e.target.value })} /> : <span style={{ fontSize: 12 }}>{item.date_sold ? formatShortDate(item.date_sold) : "—"}</span>}</td>
@@ -3031,755 +2887,6 @@ function AdminTrackerPage() {
     </div>
   );
 }
-function AdminEbayListingsPage({ token, showToast }) {
-  const EBAY_CREDS_KEY = "dbh_ebay_creds";
-  const [creds, setCreds] = useState(() => { try { return JSON.parse(localStorage.getItem(EBAY_CREDS_KEY) || "null"); } catch { return null; } });
-  const [credForm, setCredForm] = useState({ clientId: "", clientSecret: "", refreshToken: "" });
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [lastFetched, setLastFetched] = useState(null);
-  const [filter, setFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [editPrice, setEditPrice] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [showSetup, setShowSetup] = useState(false);
-
-  const saveCreds = () => {
-    if (!credForm.clientId || !credForm.clientSecret || !credForm.refreshToken) { showToast("Fill in all three fields"); return; }
-    localStorage.setItem(EBAY_CREDS_KEY, JSON.stringify(credForm));
-    setCreds(credForm);
-    setShowSetup(false);
-    showToast("eBay credentials saved!");
-  };
-
-  const clearCreds = () => { localStorage.removeItem(EBAY_CREDS_KEY); setCreds(null); setListings([]); };
-
-  const getAccessToken = async () => {
-    const basic = btoa(`${creds.clientId}:${creds.clientSecret}`);
-    const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
-      method: "POST",
-      headers: { "Authorization": `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(creds.refreshToken)}&scope=https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account`
-    });
-    const data = await res.json();
-    if (!data.access_token) throw new Error(data.error_description || "Failed to get access token");
-    return data.access_token;
-  };
-
-  const fetchListings = async () => {
-    if (!creds) return;
-    setLoading(true);
-    try {
-      const accessToken = await getAccessToken();
-      let allItems = [];
-      let offset = 0;
-      const limit = 200;
-      while (true) {
-        const res = await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`, {
-          headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json", "Accept-Language": "en-GB" }
-        });
-        const data = await res.json();
-        if (!data.inventoryItems) break;
-        allItems = allItems.concat(data.inventoryItems);
-        if (allItems.length >= (data.total || 0)) break;
-        offset += limit;
-      }
-
-      // Get active listings with analytics via Trading API
-      const tradingRes = await fetch("https://api.ebay.com/ws/api.dll", {
-        method: "POST",
-        headers: {
-          "X-EBAY-API-CALL-NAME": "GetMyeBaySelling",
-          "X-EBAY-API-APP-NAME": creds.clientId,
-          "X-EBAY-API-CERT-NAME": creds.clientSecret,
-          "X-EBAY-API-SITEID": "3",
-          "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
-          "X-EBAY-API-IAF-TOKEN": accessToken,
-          "Content-Type": "text/xml"
-        },
-        body: `<?xml version="1.0" encoding="utf-8"?><GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents"><RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials><ActiveList><Include>true</Include><Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>1</PageNumber></Pagination><Sort>TimeLeft</Sort></ActiveList><HideVariations>false</HideVariations></GetMyeBaySellingRequest>`
-      });
-      const xmlText = await tradingRes.text();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(xmlText, "text/xml");
-      const items = xml.querySelectorAll("ActiveList Item");
-      const parsed = Array.from(items).map(item => {
-        const get = (tag) => item.querySelector(tag)?.textContent || "";
-        const watchCount = parseInt(get("WatchCount")) || 0;
-        const hitCount = parseInt(get("HitCount")) || 0;
-        const price = parseFloat(get("CurrentPrice") || get("BuyItNowPrice") || get("StartPrice")) || 0;
-        const timeLeft = get("TimeLeft");
-        const daysLeft = timeLeft ? Math.floor(parseInt(timeLeft.replace(/[^0-9]/g, "").slice(0,3)) / 24) : 28;
-        const qty = parseInt(get("QuantityAvailable") || get("Quantity")) || 1;
-        const listingId = get("ItemID");
-        const title = get("Title");
-        const sku = get("SKU");
-        return { listingId, title, sku, price, watchCount, hitCount, daysLeft, qty, timeLeft };
-      });
-
-      setListings(parsed.length > 0 ? parsed : allItems.map(i => ({
-        listingId: i.sku, title: i.product?.title || i.sku, sku: i.sku, price: 0, watchCount: 0, hitCount: 0, daysLeft: 28, qty: i.availability?.shipToLocationAvailability?.quantity || 1
-      })));
-      setLastFetched(new Date());
-      showToast(`Loaded ${parsed.length || allItems.length} listings`);
-    } catch (e) {
-      showToast("Error: " + e.message);
-      console.error(e);
-    }
-    setLoading(false);
-  };
-
-  const updatePrice = async (listingId, newPrice) => {
-    setSaving(true);
-    try {
-      const accessToken = await getAccessToken();
-      const res = await fetch("https://api.ebay.com/ws/api.dll", {
-        method: "POST",
-        headers: {
-          "X-EBAY-API-CALL-NAME": "ReviseItem",
-          "X-EBAY-API-APP-NAME": creds.clientId,
-          "X-EBAY-API-CERT-NAME": creds.clientSecret,
-          "X-EBAY-API-SITEID": "3",
-          "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
-          "X-EBAY-API-IAF-TOKEN": accessToken,
-          "Content-Type": "text/xml"
-        },
-        body: `<?xml version="1.0" encoding="utf-8"?><ReviseItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials><Item><ItemID>${listingId}</ItemID><StartPrice>${parseFloat(newPrice).toFixed(2)}</StartPrice></Item></ReviseItemRequest>`
-      });
-      const xmlText = await res.text();
-      const xml = new DOMParser().parseFromString(xmlText, "text/xml");
-      const ack = xml.querySelector("Ack")?.textContent;
-      if (ack === "Success" || ack === "Warning") {
-        setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: parseFloat(newPrice) } : l));
-        setEditingId(null);
-        showToast("Price updated on eBay!");
-      } else {
-        const errMsg = xml.querySelector("ShortMessage")?.textContent || "Update failed";
-        showToast("Error: " + errMsg);
-      }
-    } catch (e) { showToast("Error: " + e.message); }
-    setSaving(false);
-  };
-
-  const getStatus = (l) => {
-    if (l.hitCount === 0 && l.watchCount === 0) return "cold";
-    if (l.hitCount >= 15 || l.watchCount >= 3) return "hot";
-    return "warm";
-  };
-
-  const filtered = listings.filter(l => {
-    if (filter === "hot") return getStatus(l) === "hot";
-    if (filter === "cold") return getStatus(l) === "cold";
-    if (filter === "expiring") return l.daysLeft <= 3;
-    return true;
-  });
-
-  const hotCount = listings.filter(l => getStatus(l) === "hot").length;
-  const coldCount = listings.filter(l => getStatus(l) === "cold").length;
-  const expiringCount = listings.filter(l => l.daysLeft <= 3).length;
-
-  if (!creds || showSetup) {
-    return <>
-      <div className="page-header"><div><div className="page-title">eBay Listings Health</div><div className="page-subtitle">Connect your eBay account to monitor listings</div></div></div>
-      <div className="card" style={{ maxWidth: 560 }}>
-        <div className="card-title" style={{ marginBottom: 20 }}>eBay Developer Credentials</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>Client ID (App ID)</div>
-            <input className="form-input" placeholder="e.g. DanHarp-DBHPrep-PRD-..." value={credForm.clientId} onChange={e => setCredForm(p => ({ ...p, clientId: e.target.value }))} />
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>Client Secret (Cert ID)</div>
-            <input className="form-input" placeholder="e.g. PRD-..." value={credForm.clientSecret} onChange={e => setCredForm(p => ({ ...p, clientSecret: e.target.value }))} type="password" />
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>User Refresh Token</div>
-            <input className="form-input" placeholder="Paste your OAuth refresh token here" value={credForm.refreshToken} onChange={e => setCredForm(p => ({ ...p, refreshToken: e.target.value }))} type="password" />
-          </div>
-          <div style={{ padding: "12px 14px", background: "rgba(0,229,255,0.05)", border: "1px solid rgba(0,229,255,0.2)", borderRadius: 8, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            <strong style={{ color: "var(--cyan)" }}>How to get these:</strong><br />
-            1. developer.ebay.com → My Account → Application Keys<br />
-            2. Copy your Production Client ID and Client Secret<br />
-            3. For the Refresh Token: go to the User Tokens section in your eBay developer account and generate a token with sell.inventory + sell.account scopes
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn btn-primary admin" onClick={saveCreds}>Save & Connect</button>
-            {creds && <button className="btn" style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }} onClick={() => setShowSetup(false)}>Cancel</button>}
-          </div>
-        </div>
-      </div>
-    </>;
-  }
-
-  return <>
-    <div className="page-header">
-      <div><div className="page-title">eBay Listings Health</div><div className="page-subtitle">{lastFetched ? `Last updated ${lastFetched.toLocaleTimeString("en-GB")}` : "Click refresh to load your listings"}</div></div>
-      <div style={{ display: "flex", gap: 10 }}>
-        <button className="btn" style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", fontSize: 13 }} onClick={() => { setShowSetup(true); setCredForm(creds); }}>Edit Credentials</button>
-        <button className="btn btn-primary admin" onClick={fetchListings} disabled={loading}><Icons.RefreshCw />{loading ? "Loading..." : "Refresh"}</button>
-      </div>
-    </div>
-
-    {listings.length > 0 && <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
-        <div className="card stat-card admin"><div className="card-title">Total Active</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listings.length}</div></div>
-        <div className="card stat-card admin"><div className="card-title">Hot (15+ views)</div><div className="stat-value" style={{ color: "var(--green)" }}>{hotCount}</div></div>
-        <div className="card stat-card admin" style={{ "--before-color": "var(--red)" }}><div className="card-title">Cold (0 views)</div><div className="stat-value" style={{ color: "var(--red)" }}>{coldCount}</div></div>
-        <div className="card stat-card warning"><div className="card-title">Expiring Soon</div><div className="stat-value" style={{ color: "var(--amber)" }}>{expiringCount}</div></div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {[["all", "All"], ["hot", "Hot"], ["cold", "Cold / 0 views"], ["expiring", "Expiring ≤3d"]].map(([val, label]) => (
-          <button key={val} onClick={() => setFilter(val)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: filter === val ? "1px solid var(--orange)" : "1px solid var(--border)", background: filter === val ? "rgba(255,145,0,0.15)" : "transparent", color: filter === val ? "var(--orange)" : "var(--text-secondary)", fontFamily: "Outfit,sans-serif" }}>{label}</button>
-        ))}
-      </div>
-
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Item", "Price", "Views (30d)", "Watchers", "Days Left", "Status", "Actions"].map(h => (
-                  <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((l, i) => {
-                const status = getStatus(l);
-                const statusColor = status === "hot" ? "var(--green)" : status === "cold" ? "var(--red)" : "var(--amber)";
-                const statusLabel = status === "hot" ? "Hot" : status === "cold" ? "Cold" : "Warm";
-                const isEditing = editingId === l.listingId;
-                return (
-                  <tr key={l.listingId || i} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                    <td style={{ padding: "11px 14px", maxWidth: 280 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title || "—"}</div>
-                      {l.sku && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>SKU: {l.sku}</div>}
-                    </td>
-                    <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
-                      {isEditing ? (
-                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <input value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 80, padding: "4px 8px", background: "var(--bg-card)", border: "1px solid var(--cyan)", borderRadius: 6, color: "var(--text-primary)", fontSize: 13, fontFamily: "Outfit,sans-serif" }} />
-                          <button onClick={() => updatePrice(l.listingId, editPrice)} disabled={saving} style={{ padding: "4px 10px", background: "var(--green)", border: "none", borderRadius: 6, color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{saving ? "..." : "Save"}</button>
-                          <button onClick={() => setEditingId(null)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "JetBrains Mono,monospace" }}>£{l.price.toFixed(2)}</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: l.hitCount >= 15 ? "var(--green)" : l.hitCount === 0 ? "var(--red)" : "var(--text-primary)" }}>{l.hitCount}</span>
-                    </td>
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: l.watchCount >= 3 ? "var(--green)" : l.watchCount === 0 ? "var(--text-muted)" : "var(--text-primary)" }}>{l.watchCount}</span>
-                    </td>
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontSize: 13, color: l.daysLeft <= 3 ? "var(--red)" : l.daysLeft <= 7 ? "var(--amber)" : "var(--text-secondary)" }}>{l.daysLeft}d</span>
-                    </td>
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>{statusLabel}</span>
-                    </td>
-                    <td style={{ padding: "11px 14px" }}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {!isEditing && <button onClick={() => { setEditingId(l.listingId); setEditPrice(l.price.toFixed(2)); }} style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif", display: "flex", alignItems: "center", gap: 4 }}><Icons.Edit /> Price</button>}
-                        {l.listingId && <a href={`https://www.ebay.co.uk/itm/${l.listingId}`} target="_blank" rel="noreferrer" style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}><Icons.ExternalLink /> View</a>}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>}
-
-    {listings.length === 0 && !loading && <div className="card empty-state" style={{ marginTop: 24 }}><Icons.ShoppingBag /><p>Click Refresh to load your eBay listings</p></div>}
-  </>;
-}
-
-const SUBS_WEBHOOK = "https://discord.com/api/webhooks/1498614616991993866/v2sukCKrdc22FarEeDxU3boFoil7CWNohuDBpWFzHm1v-UMuOs5ohXOrN6_T3udw9FHK";
-
-async function sendSubsDiscord(embed) {
-  try {
-    await fetch(SUBS_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-  } catch (e) { console.error("Subs webhook error", e); }
-}
-
-function AdminSubscriptionsPage({ token, showToast }) {
-  const [subs, setSubs] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" });
-  const [saving, setSaving] = useState(false);
-  const [markingId, setMarkingId] = useState(null);
-  const [editSub, setEditSub] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [editSaving, setEditSaving] = useState(false);
-  const [view, setView] = useState("clients"); // "clients" | "revenue"
-
-  const load = async () => {
-    setLoading(true);
-    const [subsRes, clientsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=*,profiles(full_name,email,company_name)&order=next_due_date.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/profiles?deals_access=eq.true&select=id,full_name,email,company_name&order=full_name.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
-    ]);
-    setSubs(Array.isArray(subsRes) ? subsRes : []);
-    setClients(Array.isArray(clientsRes) ? clientsRes : []);
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  useEffect(() => {
-    if (subs.length === 0) return;
-    const today = new Date(); today.setHours(0,0,0,0);
-    subs.forEach(async s => {
-      if (!s.next_due_date) return;
-      const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
-      const daysUntil = Math.round((due - today) / 86400000);
-      const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-      if (daysUntil === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      else if (daysUntil === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      else if (daysUntil < 0) await sendSubsDiscord({ title: "🔴 Payment Overdue", color: 0xdc2626, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Overdue By", value: `${Math.abs(daysUntil)} days`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-    });
-  }, [subs]);
-
-  const addSub = async () => {
-    if (!addForm.user_id) { showToast("Select a client"); return; }
-    setSaving(true);
-    const lastPaid = new Date(addForm.last_paid_date);
-    const nextDue = new Date(lastPaid); nextDue.setDate(nextDue.getDate() + 30);
-    const payload = { user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" };
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(payload) });
-    if (res.ok) { showToast("Subscription added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); }
-    else showToast("Error saving");
-    setSaving(false);
-  };
-
-  const saveEdit = async () => {
-    setEditSaving(true);
-    const lastPaid = new Date(editForm.last_paid_date);
-    const nextDue = new Date(editForm.next_due_date || editForm.last_paid_date);
-    // if they changed last_paid and not next_due, recalc next_due
-    const nextDueStr = editForm.next_due_date || (() => { const d = new Date(lastPaid); d.setDate(d.getDate() + 30); return d.toISOString().split("T")[0]; })();
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, {
-      method: "PATCH",
-      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: parseFloat(editForm.amount) || 90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes })
-    });
-    showToast("Subscription updated!");
-    setEditSub(null);
-    load();
-    setEditSaving(false);
-  };
-
-  const markPaid = async (sub) => {
-    setMarkingId(sub.id);
-    const today = new Date().toISOString().split("T")[0];
-    const nextDue = new Date(); nextDue.setDate(nextDue.getDate() + 30);
-    const nextDueStr = nextDue.toISOString().split("T")[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
-    const name = sub.profiles?.full_name || sub.profiles?.email || "Unknown";
-    await sendSubsDiscord({ title: "✅ Payment Received", color: 0x22c55e, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${sub.amount}`, inline: true }, { name: "Next Due", value: new Date(nextDueStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-    showToast(`✅ ${name} marked as paid — renewed 30 days`);
-    load(); setMarkingId(null);
-  };
-
-  const deleteSub = async (id) => {
-    if (!window.confirm("Remove this subscription?")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
-    load();
-  };
-
-  const getStatus = (sub) => {
-    if (!sub.next_due_date) return { label: "No date", color: "var(--text-muted)", days: null };
-    const today = new Date(); today.setHours(0,0,0,0);
-    const due = new Date(sub.next_due_date); due.setHours(0,0,0,0);
-    const days = Math.round((due - today) / 86400000);
-    if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "var(--red)", days };
-    if (days === 0) return { label: "Due today", color: "var(--red)", days };
-    if (days <= 3) return { label: `Due in ${days}d`, color: "var(--amber)", days };
-    if (days <= 7) return { label: `Due in ${days}d`, color: "var(--amber)", days };
-    return { label: `Due in ${days}d`, color: "var(--green)", days };
-  };
-
-  const overdue = subs.filter(s => getStatus(s).days !== null && getStatus(s).days < 0);
-  const dueSoon = subs.filter(s => getStatus(s).days !== null && getStatus(s).days >= 0 && getStatus(s).days <= 7);
-  const upcoming = subs.filter(s => getStatus(s).days !== null && getStatus(s).days > 7);
-  const monthlyRevenue = subs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
-  const annualRevenue = monthlyRevenue * 12;
-
-  // Revenue chart — last 6 months based on last_paid_date
-  const revenueByMonth = (() => {
-    const months = {};
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(); d.setMonth(d.getMonth() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-      const label = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
-      months[key] = { label, total: 0, count: 0 };
-    }
-    subs.forEach(s => {
-      if (!s.last_paid_date) return;
-      const key = s.last_paid_date.slice(0, 7);
-      if (months[key]) { months[key].total += parseFloat(s.amount) || 0; months[key].count++; }
-    });
-    return Object.values(months);
-  })();
-  const maxRevenue = Math.max(...revenueByMonth.map(m => m.total), 1);
-
-  if (loading) return <div className="loader"><div className="spinner" /></div>;
-
-  return <>
-    <div className="page-header">
-      <div>
-        <div className="page-title">Deal Sheet Subscriptions</div>
-        <div className="page-subtitle">{subs.length} clients · £{monthlyRevenue}/mo · £{annualRevenue.toLocaleString()}/yr projected</div>
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          {[["clients", "👥 Clients"], ["revenue", "📊 Revenue"]].map(([v, l]) => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${view === v ? "var(--orange)" : "var(--border)"}`, background: view === v ? "rgba(255,145,0,0.15)" : "transparent", color: view === v ? "var(--orange)" : "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{l}</button>
-          ))}
-        </div>
-        <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
-      </div>
-    </div>
-
-    <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5,1fr)", marginBottom: 24 }}>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--red)" }}><div className="card-title">Overdue</div><div className="stat-value" style={{ color: "var(--red)" }}>{overdue.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--amber)" }}><div className="card-title">Due This Week</div><div className="stat-value" style={{ color: "var(--amber)" }}>{dueSoon.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--green)" }}><div className="card-title">All Good</div><div className="stat-value" style={{ color: "var(--green)" }}>{upcoming.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthlyRevenue}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{annualRevenue.toLocaleString()}</div></div>
-    </div>
-
-    {view === "revenue" && <>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>Revenue — Last 6 Months</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 160 }}>
-          {revenueByMonth.map((m, i) => (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan)" }}>{m.total > 0 ? `£${m.total}` : ""}</div>
-              <div style={{ width: "100%", background: m.total > 0 ? "var(--cyan)" : "var(--border)", borderRadius: "6px 6px 0 0", height: `${Math.max((m.total / maxRevenue) * 120, m.total > 0 ? 8 : 2)}px`, transition: "height 0.3s", opacity: m.total > 0 ? 1 : 0.3 }} />
-              <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{m.label}</div>
-              {m.count > 0 && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.count} client{m.count > 1 ? "s" : ""}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "16px 16px 12px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>Revenue Breakdown</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-            {["Client", "Business", "Monthly Fee", "Last Paid", "Paid This Year (est.)"].map(h => <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {subs.map((s, i) => {
-              const paidThisYear = s.last_paid_date && new Date(s.last_paid_date).getFullYear() === new Date().getFullYear() ? (s.amount * Math.floor((new Date() - new Date(s.last_paid_date)) / (30 * 86400000) + 1)) : 0;
-              return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <td style={{ padding: "11px 16px", fontWeight: 600, fontSize: 13 }}>{s.profiles?.full_name || s.profiles?.email}</td>
-                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.profiles?.company_name || "—"}</td>
-                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace" }}>£{s.amount}</td>
-                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}</td>
-                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{Math.max(paidThisYear, s.amount)}</td>
-              </tr>;
-            })}
-            <tr style={{ borderTop: "2px solid var(--border)" }}>
-              <td colSpan={2} style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13 }}>TOTAL</td>
-              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--cyan)" }}>£{monthlyRevenue}/mo</td>
-              <td />
-              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{annualRevenue}/yr</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </>}
-
-    {view === "clients" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid var(--border)" }}>
-            {["Client", "Amount", "Last Paid", "Next Due", "Status", "Actions"].map(h => (
-              <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet — add your first client</td></tr>}
-          {subs.map((s, i) => {
-            const st = getStatus(s);
-            const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-            const biz = s.profiles?.company_name;
-            return (
-              <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
-                  {biz && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{biz}</div>}
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.profiles?.email}</div>
-                  {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
-                </td>
-                <td style={{ padding: "13px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", fontSize: 14 }}>£{s.amount}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.next_due_date ? new Date(s.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px" }}>
-                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span>
-                </td>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => markPaid(s)} disabled={markingId === s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId === s.id ? "..." : "✓ Paid"}</button>
-                    <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date || "", next_due_date: s.next_due_date || "", notes: s.notes || "" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✏️</button>
-                    <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>}
-
-    {/* Edit Modal */}
-    {editSub && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div className="card" style={{ width: 440, padding: 28 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Edit Subscription</div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name || editSub.profiles?.email}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label className="input-label">Amount (£)</label>
-            <input className="input" type="number" value={editForm.amount} onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label className="input-label">Last Paid Date</label>
-              <input className="input" type="date" value={editForm.last_paid_date} onChange={e => setEditForm(p => ({ ...p, last_paid_date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="input-label">Next Due Date</label>
-              <input className="input" type="date" value={editForm.next_due_date} onChange={e => setEditForm(p => ({ ...p, next_due_date: e.target.value }))} />
-            </div>
-          </div>
-          <div>
-            <label className="input-label">Notes</label>
-            <input className="input" placeholder="e.g. Pays via bank transfer" value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving ? "Saving..." : "Save Changes"}</button>
-            <button onClick={() => setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>}
-
-    {/* Add Modal */}
-    {showAdd && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div className="card" style={{ width: 440, padding: 28 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Subscription</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label className="input-label">Client</label>
-            <select className="input" value={addForm.user_id} onChange={e => setAddForm(p => ({ ...p, user_id: e.target.value }))}>
-              <option value="">— Select client —</option>
-              {clients.filter(c => !subs.find(s => s.user_id === c.id)).map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}{c.company_name ? ` (${c.company_name})` : ""}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label className="input-label">Amount (£)</label>
-              <input className="input" type="number" value={addForm.amount} onChange={e => setAddForm(p => ({ ...p, amount: e.target.value }))} />
-            </div>
-            <div>
-              <label className="input-label">Last Paid Date</label>
-              <input className="input" type="date" value={addForm.last_paid_date} onChange={e => setAddForm(p => ({ ...p, last_paid_date: e.target.value }))} />
-            </div>
-          </div>
-          <div>
-            <label className="input-label">Notes (optional)</label>
-            <input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Add Subscription"}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>}
-  </>;
-}
-
-  const load = async () => {
-    setLoading(true);
-    const [subsRes, clientsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=*,profiles(full_name,email)&order=next_due_date.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/profiles?deals_access=eq.true&select=id,full_name,email&order=full_name.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
-    ]);
-    setSubs(Array.isArray(subsRes) ? subsRes : []);
-    setClients(Array.isArray(clientsRes) ? clientsRes : []);
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  // Check for due/overdue and notify on load
-  useEffect(() => {
-    if (subs.length === 0) return;
-    const today = new Date(); today.setHours(0,0,0,0);
-    subs.forEach(async s => {
-      if (!s.next_due_date) return;
-      const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
-      const daysUntil = Math.round((due - today) / 86400000);
-      const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-      if (daysUntil === 3) {
-        await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      } else if (daysUntil === 0) {
-        await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      } else if (daysUntil < 0) {
-        await sendSubsDiscord({ title: "🔴 Payment Overdue", color: 0xdc2626, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Overdue By", value: `${Math.abs(daysUntil)} days`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      }
-    });
-  }, [subs]);
-
-  const addSub = async () => {
-    if (!addForm.user_id) { showToast("Select a client"); return; }
-    setSaving(true);
-    const lastPaid = new Date(addForm.last_paid_date);
-    const nextDue = new Date(lastPaid); nextDue.setDate(nextDue.getDate() + 30);
-    const payload = { user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" };
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(payload) });
-    if (res.ok) { showToast("Subscription added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); }
-    else showToast("Error saving");
-    setSaving(false);
-  };
-
-  const markPaid = async (sub) => {
-    setMarkingId(sub.id);
-    const today = new Date().toISOString().split("T")[0];
-    const nextDue = new Date(); nextDue.setDate(nextDue.getDate() + 30);
-    const nextDueStr = nextDue.toISOString().split("T")[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
-    const name = sub.profiles?.full_name || sub.profiles?.email || "Unknown";
-    await sendSubsDiscord({ title: "✅ Payment Received", color: 0x22c55e, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${sub.amount}`, inline: true }, { name: "Next Due", value: new Date(nextDueStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-    showToast(`✅ ${name} marked as paid — renewed 30 days`);
-    load();
-    setMarkingId(null);
-  };
-
-  const deleteSub = async (id) => {
-    if (!window.confirm("Remove this subscription?")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
-    load();
-  };
-
-  const getStatus = (sub) => {
-    if (!sub.next_due_date) return { label: "No date", color: "var(--text-muted)", days: null };
-    const today = new Date(); today.setHours(0,0,0,0);
-    const due = new Date(sub.next_due_date); due.setHours(0,0,0,0);
-    const days = Math.round((due - today) / 86400000);
-    if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "var(--red)", days };
-    if (days === 0) return { label: "Due today", color: "var(--red)", days };
-    if (days <= 3) return { label: `Due in ${days}d`, color: "var(--amber)", days };
-    if (days <= 7) return { label: `Due in ${days}d`, color: "var(--amber)", days };
-    return { label: `Due in ${days}d`, color: "var(--green)", days };
-  };
-
-  const overdue = subs.filter(s => getStatus(s).days !== null && getStatus(s).days < 0);
-  const dueSoon = subs.filter(s => getStatus(s).days !== null && getStatus(s).days >= 0 && getStatus(s).days <= 7);
-  const upcoming = subs.filter(s => getStatus(s).days !== null && getStatus(s).days > 7);
-
-  if (loading) return <div className="loader"><div className="spinner" /></div>;
-
-  return <>
-    <div className="page-header">
-      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{subs.length} clients — £{subs.reduce((a, s) => a + (s.amount || 90), 0)}/mo potential</div></div>
-      <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
-    </div>
-
-    <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 24 }}>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--red)" }}><div className="card-title">Overdue</div><div className="stat-value" style={{ color: "var(--red)" }}>{overdue.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--amber)" }}><div className="card-title">Due This Week</div><div className="stat-value" style={{ color: "var(--amber)" }}>{dueSoon.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--green)" }}><div className="card-title">All Good</div><div className="stat-value" style={{ color: "var(--green)" }}>{upcoming.length}</div></div>
-    </div>
-
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid var(--border)" }}>
-            {["Client", "Amount", "Last Paid", "Next Due", "Status", "Actions"].map(h => (
-              <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet — add your first client</td></tr>}
-          {subs.map((s, i) => {
-            const st = getStatus(s);
-            const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-            return (
-              <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.profiles?.email}</div>
-                  {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
-                </td>
-                <td style={{ padding: "13px 16px", fontWeight: 700, fontFamily: "JetBrains Mono, monospace", fontSize: 14 }}>£{s.amount}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.next_due_date ? new Date(s.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px" }}>
-                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span>
-                </td>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => markPaid(s)} disabled={markingId === s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId === s.id ? "..." : "✓ Paid"}</button>
-                    <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-
-    {showAdd && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div className="card" style={{ width: 440, padding: 28 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Subscription</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label className="input-label">Client</label>
-            <select className="input" value={addForm.user_id} onChange={e => setAddForm(p => ({ ...p, user_id: e.target.value }))}>
-              <option value="">— Select client —</option>
-              {clients.filter(c => !subs.find(s => s.user_id === c.id)).map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label className="input-label">Amount (£)</label>
-              <input className="input" type="number" value={addForm.amount} onChange={e => setAddForm(p => ({ ...p, amount: e.target.value }))} />
-            </div>
-            <div>
-              <label className="input-label">Last Paid Date</label>
-              <input className="input" type="date" value={addForm.last_paid_date} onChange={e => setAddForm(p => ({ ...p, last_paid_date: e.target.value }))} />
-            </div>
-          </div>
-          <div>
-            <label className="input-label">Notes (optional)</label>
-            <input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Add Subscription"}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>}
-  </>;
-}
-
 function AdminPortal() {
   const { user, token, signOut } = useAuth();
   const [page, setPage] = useState("clients");
@@ -3818,8 +2925,6 @@ function AdminPortal() {
     { id: "clients", label: "All Clients", icon: Icons.Users },
     { id: "deals", label: "DBH Deals", icon: Icons.List },
     { id: "tracker", label: "Income Tracker", icon: Icons.BarChart },
-    { id: "subscriptions", label: "Subscriptions", icon: Icons.CreditCard },
-    { id: "ebay", label: "eBay Listings", icon: Icons.ShoppingBag },
     { id: "settings", label: "Settings", icon: Icons.Settings }
   ];
 
@@ -3827,8 +2932,7 @@ function AdminPortal() {
     if (page === "settings") return <AdminSettingsPage token={token} showToast={showToast} />;
     if (page === "deals") return <AdminDealsPage token={token} showToast={showToast} />;
     if (page === "tracker") return <AdminTrackerPage />;
-    if (page === "ebay") return <AdminEbayListingsPage token={token} showToast={showToast} />;
-    if (page === "subscriptions") return <AdminSubscriptionsPage token={token} showToast={showToast} />;
+    if (page === "tracker") return <AdminTrackerPage />;
     if (page === "client" && selectedClient) {
       return <AdminClientPage 
         client={selectedClient} 
@@ -3879,26 +2983,6 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const [dragOverId, setDragOverId] = useState(null);
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
-  const [clientTypeTab, setClientTypeTab] = useState("all");
-  const [clientTypes, setClientTypes] = useState({});
-
-  useEffect(() => {
-    // Load client types from Supabase profiles
-    const types = {};
-    clients.forEach(c => { if (c.client_type) types[c.id] = c.client_type; });
-    setClientTypes(types);
-  }, [clients]);
-
-  const updateClientType = async (e, clientId, newType) => {
-    e.stopPropagation();
-    setClientTypes(prev => ({ ...prev, [clientId]: newType }));
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${clientId}`, {
-      method: "PATCH",
-      headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" },
-      body: JSON.stringify({ client_type: newType })
-    });
-    showToast("Client type updated!");
-  };
 
   const saveSetting = async (key, value) => {
     const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { headers: supabase.headers(token) }).then(r => r.json());
@@ -3955,14 +3039,11 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     return ordered;
   }, [clients, clientOrder]);
 
-  const filteredClients = sortedClients.filter(c => {
-    const matchesSearch = c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      c.email?.toLowerCase().includes(search.toLowerCase()) ||
-      c.company_name?.toLowerCase().includes(search.toLowerCase());
-    const type = clientTypes[c.id] || c.client_type || "prep";
-    const matchesType = clientTypeTab === "all" || type === clientTypeTab;
-    return matchesSearch && matchesType;
-  });
+  const filteredClients = sortedClients.filter(c => 
+    c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase()) ||
+    c.company_name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
   const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
@@ -4000,19 +3081,9 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const displayClients = activeTab === "active" ? activeClients : archivedClients;
 
   if (loading) return <div className="loader"><div className="spinner" /></div>;
-  const allCount = sortedClients.filter(c => !archivedIds.includes(c.id)).length;
-  const prepCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "prep").length;
-  const dealsCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "deals").length;
-  const liquidationCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "liquidation").length;
-
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
-      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-        {[["all", `All (${allCount})`], ["prep", `Prep (${prepCount})`], ["deals", `Deal Sheet (${dealsCount})`], ["liquidation", `Liquidation (${liquidationCount})`]].map(([val, label]) => (
-          <button key={val} onClick={() => setClientTypeTab(val)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: clientTypeTab === val ? "1px solid var(--orange)" : "1px solid var(--border)", background: clientTypeTab === val ? "rgba(255,145,0,0.15)" : "transparent", color: clientTypeTab === val ? "var(--orange)" : "var(--text-secondary)", fontFamily: "Outfit,sans-serif" }}>{label}</button>
-        ))}
-      </div>
       <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <div className="search-bar" style={{ flex: 1 }}><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div style={{ display: "flex", gap: 4 }}>
@@ -4044,17 +3115,11 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
                     {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)" }}>⚠ PAYMENT DUE</span>}
-                    {(() => { const t = clientTypes[c.id] || c.client_type || "prep"; const colors = { prep: "var(--cyan)", deals: "var(--green)", liquidation: "var(--orange)" }; const labels = { prep: "Prep", deals: "Deal Sheet", liquidation: "Liquidation" }; return <span style={{ padding: "2px 8px", background: `${colors[t]}22`, color: colors[t], borderRadius: 12, fontSize: 11, fontWeight: 700, border: `1px solid ${colors[t]}44` }}>{labels[t] || t}</span>; })()}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <select onClick={e => e.stopPropagation()} onChange={e => updateClientType(e, c.id, e.target.value)} value={clientTypes[c.id] || c.client_type || "prep"} style={{ padding: "5px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, fontFamily: "Outfit,sans-serif", cursor: "pointer" }}>
-                    <option value="prep">Prep</option>
-                    <option value="deals">Deal Sheet</option>
-                    <option value="liquidation">Liquidation</option>
-                  </select>
                   <button className="btn-icon" onClick={(e) => toggleArchive(e, c.id)} title={archivedIds.includes(c.id) ? "Unarchive client" : "Archive client"} style={{ color: archivedIds.includes(c.id) ? "var(--cyan)" : "var(--text-muted)", fontSize: 14 }}>{archivedIds.includes(c.id) ? "↩" : "🗂"}</button>
                   <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
                 </div>
@@ -4640,17 +3705,13 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [showShipmentForm, setShowShipmentForm] = useState(false);
-  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
+  const [shipmentForm, setShipmentForm] = useState({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] });
   const [editingShipment, setEditingShipment] = useState(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [partialPrepItem, setPartialPrepItem] = useState(null);
   const [partialPrepQty, setPartialPrepQty] = useState("");
   const [showAddParcel, setShowAddParcel] = useState(false);
   const [addParcelForm, setAddParcelForm] = useState({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" });
-  const [parcelTab, setParcelTab] = useState("transit");
-  const [parcelSearch, setParcelSearch] = useState("");
-  const [receiveParcel, setReceiveParcel] = useState(null);
-  const [receiveParcelQty, setReceiveParcelQty] = useState("");
 
   useEffect(() => { setLocalParcels(initialParcels); }, [initialParcels]);
   useEffect(() => { setLocalShipments(initialShipments); }, [initialShipments]);
@@ -4665,7 +3726,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
   const sorted = sortByStatus(activeParcels);
 
   const inboundUnits = localParcels.filter(p => ["in_transit","partial_delivery"].includes(p.status)).reduce((s,p)=>s+(parseInt(p.quantity)||0),0);
-  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered"||p.status==="partial_delivery").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
+  const inWarehouseUnits = localParcels.filter(p=>p.status==="delivered").reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
   const preppedUnits = preppedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
   const collectedUnits = completedParcels.reduce((s,p)=>s+(parseInt(p.qty_received)||parseInt(p.quantity)||0),0);
 
@@ -4677,7 +3738,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const startEdit = item => {
     setEditingId(item.id);
-    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"", quantity: item.quantity||1 });
+    setEditData({ status: item.status||"in_transit", admin_notes: item.admin_notes||"", needs_attention: item.needs_attention||false, attention_reason: item.attention_reason||"", qty_received: item.qty_received||"" });
   };
 
   const doSaveEdit = async (overrideData) => {
@@ -4699,35 +3760,25 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
   const saveEdit = async () => {
     const oldItem = localParcels.find(p => p.id === editingId);
+    // If changing to prepped, always show partial prep modal so admin can confirm qty
+    // qtyReceived = how many are physically here; totalExpected = original order qty
     const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
     const totalExpected = parseInt(oldItem?.quantity) || 1;
     if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-      // Always show partial prep modal so admin can specify how many are being prepped
+      // If coming from partial_delivery, the row is already split — just mark prepped, no modal needed
+      if (oldItem?.status === "partial_delivery") {
+        await doSaveEdit({ ...editData, status: "prepped" });
+        return;
+      }
+      // Otherwise show modal to handle split
       setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
       setPartialPrepQty(String(qtyReceived));
       return;
     }
+    // Auto-detect partial delivery: if marking delivered but qty_received < quantity, use partial_delivery status
     let finalData = { ...editData };
-    // Auto-detect partial delivery when marking delivered with fewer units than expected
     if (editData.status === "delivered" && editData.qty_received && parseInt(editData.qty_received) < (oldItem?.quantity || 0)) {
       finalData.status = "partial_delivery";
-    }
-    // If editing qty_received on a warehouse row and it's less than original quantity, split the remainder back to in_transit
-    const isWarehouseRow = ["delivered", "partial_delivery"].includes(oldItem?.status);
-    const newQtyReceived = parseInt(editData.qty_received);
-    const originalQty = parseInt(oldItem?.quantity) || 0;
-    if (isWarehouseRow && newQtyReceived && newQtyReceived < originalQty) {
-      const remainder = originalQty - newQtyReceived;
-      // Update existing row with received qty only
-      finalData.quantity = newQtyReceived;
-      await doSaveEdit(finalData);
-      // Create new in_transit row for the remainder
-      await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: oldItem.product_name, asin: oldItem.asin, sku: oldItem.sku, supplier: oldItem.supplier, quantity: remainder, tracking_number: oldItem.tracking_number, status: "in_transit", user_id: client.id, date_added: oldItem.date_added }) });
-      const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
-      if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
-      showToast(`${newQtyReceived} in warehouse · ${remainder} moved back to In Transit`);
-      onRefresh();
-      return;
     }
     await doSaveEdit(finalData);
   };
@@ -4739,11 +3790,11 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     showToast("Deleted!"); onRefresh();
   };
 
-  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", other_fees_note: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
+  const resetShipmentForm = () => { setShipmentForm({ shipment_id: "", units_prepped: "", unit_cost: "0.45", box_count: "", box_cost: "", other_fees: "", notes: "", date_shipped: "", status: "ready_for_collection", selected_parcels: [] }); setEditingShipment(null); };
 
   const startEditShipment = s => {
     setEditingShipment(s.id);
-    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", other_fees_note: s.other_fees_note||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
+    setShipmentForm({ shipment_id: s.shipment_id, units_prepped: s.units_prepped||"", unit_cost: s.unit_cost||"0.45", box_count: s.box_count||"", box_cost: s.box_cost||"", other_fees: s.other_fees||"", notes: s.notes||"", date_shipped: s.date_shipped||"", status: s.status||"ready_for_collection", selected_parcels: localParcels.filter(p => p.shipment_id === s.id).map(p => p.id) });
     setShowShipmentForm(true);
   };
 
@@ -4751,7 +3802,7 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     if (!shipmentForm.shipment_id) return;
     setSaving(true);
     const today = new Date().toISOString().split('T')[0];
-    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, other_fees_note: shipmentForm.other_fees_note||"", notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
+    const baseData = { shipment_id: shipmentForm.shipment_id, units_prepped: parseInt(shipmentForm.units_prepped)||0, unit_cost: parseFloat(shipmentForm.unit_cost)||0, box_count: parseInt(shipmentForm.box_count)||0, box_cost: parseFloat(shipmentForm.box_cost)||0, other_fees: parseFloat(shipmentForm.other_fees)||0, notes: shipmentForm.notes||"", date_shipped: shipmentForm.date_shipped||today, status: shipmentForm.status||"ready_for_collection" };
     try {
       let shipId;
       if (editingShipment) {
@@ -4767,9 +3818,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
       if (shipmentForm.selected_parcels?.length > 0 && shipId) {
         const parcelStatus = shipmentForm.status === "collected" ? "collected" : "prepped";
         for (const pid of shipmentForm.selected_parcels) {
-          const parcel = localParcels.find(p => p.id === pid);
-          // Only mark as collected if the parcel is currently prepped (not in-transit or delivered)
-          if (shipmentForm.status === "collected" && parcel && !["prepped"].includes(parcel.status)) continue;
           await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${pid}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ shipment_id: shipId, status: parcelStatus }) });
         }
       }
@@ -4829,15 +3877,13 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
         <div className="card stat-card"><div className="card-title">All Time</div><div className="stat-value" style={{ color: "var(--text-muted)" }}>£{totalCharges.toFixed(2)}</div></div>
       </div>
 
-      <div style={{ marginBottom: 24 }}>
-        {/* Header: title + Add Parcel */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>Inbound Parcels</div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div className="card-title" style={{ margin: 0 }}>Inbound Parcels</div>
           <button className="btn btn-primary btn-sm" onClick={() => { setShowAddParcel(true); setAddParcelForm({ product_name: "", asin: "", sku: "", supplier: "", quantity: "", qty_received: "", tracking_number: "", status: "in_transit" }); }}><Icons.Plus /> Add Parcel</button>
         </div>
-
         {showAddParcel && (
-          <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 10, marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
               <div><label className="input-label">Product *</label><input className="input" placeholder="Product name" value={addParcelForm.product_name} onChange={e => setAddParcelForm({...addParcelForm, product_name: e.target.value})} /></div>
               <div><label className="input-label">ASIN</label><input className="input" placeholder="B0..." value={addParcelForm.asin} onChange={e => setAddParcelForm({...addParcelForm, asin: e.target.value})} /></div>
@@ -4861,138 +3907,28 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
             </div>
           </div>
         )}
-
-        {/* Tabs */}
-        {(() => {
-          const transitParcels = localParcels.filter(p => p.status === "in_transit");
-          const warehouseParcels = localParcels.filter(p => p.status === "delivered" || p.status === "partial_delivery");
-          const preppedTabParcels = localParcels.filter(p => p.status === "prepped");
-          const collectedTabParcels = localParcels.filter(p => p.status === "collected");
-
-          const tabDefs = [
-            ["transit", `⏳ In Transit`, transitParcels],
-            ["warehouse", `🏭 In Warehouse`, warehouseParcels],
-            ["prepped", `✅ Prepped`, preppedTabParcels],
-            ["collected", `📦 Collected`, collectedTabParcels],
-          ];
-
-          const tabParcels = { transit: transitParcels, warehouse: warehouseParcels, prepped: preppedTabParcels, collected: collectedTabParcels };
-          const q = parcelSearch.toLowerCase();
-          const currentParcels = (tabParcels[parcelTab] || [])
-            .filter(p => !q || (p.product_name||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q) || (p.asin||"").toLowerCase().includes(q) || (p.supplier||"").toLowerCase().includes(q))
-            .sort((a, b) => new Date(b.date_added || 0) - new Date(a.date_added || 0));
-
-          return <>
-            <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-              {tabDefs.map(([k, label, items]) => (
-                <button key={k} onClick={() => { setParcelTab(k); setParcelSearch(""); }} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: parcelTab === k ? "var(--cyan)" : "transparent", color: parcelTab === k ? "#000" : "var(--text-secondary)", borderColor: parcelTab === k ? "var(--cyan)" : "var(--border)" }}>
-                  {label}{items.length > 0 ? <span style={{ marginLeft: 6, background: parcelTab === k ? "rgba(0,0,0,0.15)" : "var(--border)", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{items.length}</span> : null}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ marginBottom: 10 }}>
-              <input className="input" placeholder="🔍  Search product, SKU, ASIN, supplier..." value={parcelSearch} onChange={e => setParcelSearch(e.target.value)} style={{ maxWidth: 380 }} />
-            </div>
-
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              {currentParcels.length === 0
-                ? <div className="empty-state"><Icons.Box /><p>No parcels here.</p></div>
-                : <div className="table-wrap"><table>
-                    <thead><tr>
-                      <th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th>
-                      <th>Expected</th><th>Received</th><th>Tracking</th>
-                      {parcelTab !== "transit" && <th>Status</th>}
-                      <th>Notes</th><th>Flag</th><th></th>
-                    </tr></thead>
-                    <tbody>{currentParcels.map(p => {
-                      const isEdit = editingId === p.id, data = isEdit ? editData : p;
-                      return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
-                        <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
-                        <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
-                        <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
-                        <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
-                        <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
-                        <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.quantity || ""} onChange={e => setEditData({ ...editData, quantity: parseInt(e.target.value) || 0 })} placeholder="0" /> : p.quantity}</td>
-                        <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received != null ? p.qty_received : "—")}</td>
-                        <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
-                        {parcelTab !== "transit" && <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>}
-                        <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
-                        <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
-                        <td>
-                          {isEdit
-                            ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
-                            : <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button>
-                                {parcelTab === "transit" && (
-                                  <button style={{ padding: "4px 10px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                                    onClick={() => { setReceiveParcel(p); setReceiveParcelQty(String(p.quantity || 1)); }}>
-                                    ✓ Received
-                                  </button>
-                                )}
-                                {parcelTab === "warehouse" && (
-                                  <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                                    onClick={() => { setPartialPrepItem({ ...p, quantity: p.quantity, qty_received: p.qty_received || p.quantity }); setPartialPrepQty(String(p.qty_received || p.quantity)); }}>
-                                    ✓ Prepped
-                                  </button>
-                                )}
-                                <button className="btn-icon btn-danger" onClick={() => deleteParcel(p.id)}><Icons.Trash /></button>
-                              </div>}
-                        </td>
-                      </tr>;
-                    })}</tbody>
-                  </table></div>}
-            </div>
-          </>;
-        })()}
+        {sorted.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No active parcels.</div> :
+        <div className="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>SKU</th><th>ASIN</th><th>Expected</th><th>Received</th><th>Tracking</th><th>Status</th><th>Notes</th><th>Flag</th><th></th></tr></thead>
+          <tbody>{sorted.map(p => {
+            const isEdit = editingId === p.id, data = isEdit ? editData : p;
+            return <tr key={p.id} className={isEdit ? "edit-row" : ""}>
+              <td style={{ fontSize: 12 }}>{formatShortDate(p.date_added)}</td>
+              <td><ProductWithImage name={p.product_name} asin={p.asin} /></td>
+              <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.supplier || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}>{p.sku || "—"}</td>
+              <td className="mono" style={{ fontSize: 12 }}><AsinWithImage asin={p.asin} /></td>
+              <td className="mono">{p.quantity}</td>
+              <td className="mono">{isEdit ? <input type="number" className="inline-input" style={{ width: 60 }} value={data.qty_received || ""} onChange={e => setEditData({ ...editData, qty_received: parseInt(e.target.value) || 0 })} placeholder="0" /> : (p.qty_received || "—")}</td>
+              <td className="mono" style={{ fontSize: 11 }}>{p.tracking_number ? <a href={`https://parcelsapp.com/en/tracking/${p.tracking_number}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--cyan)" }}>{p.tracking_number.slice(0, 12)}...</a> : "—"}</td>
+              <td>{isEdit ? <select className="inline-select" value={data.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>{PREP_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select> : p.needs_attention ? <span className="badge badge-attention">{p.attention_reason}</span> : <StatusBadge status={p.status} />}</td>
+              <td>{isEdit ? <input className="inline-input" value={data.admin_notes} onChange={e => setEditData({ ...editData, admin_notes: e.target.value })} placeholder="Notes..." /> : <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.admin_notes || "—"}</span>}</td>
+              <td>{isEdit ? <div><label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}><input type="checkbox" checked={data.needs_attention} onChange={e => setEditData({ ...editData, needs_attention: e.target.checked })} /> Flag</label>{data.needs_attention && <select className="inline-select" style={{ marginTop: 4, width: "100%" }} value={data.attention_reason} onChange={e => setEditData({ ...editData, attention_reason: e.target.value })}><option value="">Select...</option>{ATTENTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div> : "—"}</td>
+              <td>{isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div> : <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={() => startEdit(p)}><Icons.Edit /></button><button className="btn-icon btn-danger" onClick={() => deleteParcel(p.id)}><Icons.Trash /></button></div>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
       </div>
-
-      {/* Receive Parcel Modal */}
-      {receiveParcel && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-        <div className="card" style={{ width: 420, maxWidth: "95vw", padding: 28 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Mark Received</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>{receiveParcel.product_name}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, background: "var(--bg-primary)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
-            <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Expected</div><div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{receiveParcel.quantity}</div></div>
-            <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Now Received</div><div style={{ fontSize: 22, fontWeight: 700, color: "var(--cyan)" }}>{parseInt(receiveParcelQty) || 0}</div></div>
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label className="input-label">Qty Received</label>
-            <input className="input" type="number" min="1" max={receiveParcel.quantity} value={receiveParcelQty} onChange={e => setReceiveParcelQty(e.target.value)} autoFocus />
-          </div>
-          {(() => {
-            const rec = parseInt(receiveParcelQty) || 0;
-            const rem = (receiveParcel.quantity || 1) - rec;
-            if (rem > 0 && rec > 0) return <div style={{ fontSize: 12, color: "var(--amber)", marginBottom: 12 }}>⚠ {rec} will move to <strong>In Warehouse</strong> · {rem} will remain <strong>In Transit</strong></div>;
-            if (rec >= (receiveParcel.quantity || 1) && rec > 0) return <div style={{ fontSize: 12, color: "var(--green)", marginBottom: 12 }}>✓ Full delivery — all {rec} units moving to <strong>In Warehouse</strong></div>;
-            return null;
-          })()}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn btn-secondary" onClick={() => setReceiveParcel(null)}>Cancel</button>
-            <button className="btn btn-primary" style={{ background: "var(--cyan)", color: "#000" }} disabled={saving} onClick={async () => {
-              setSaving(true);
-              const qtyIn = parseInt(receiveParcelQty) || (receiveParcel.quantity || 1);
-              const totalQty = receiveParcel.quantity || 1;
-              const remaining = totalQty - qtyIn;
-              const clientWebhook = client.discord_webhook || webhookUrl;
-              if (remaining > 0) {
-                // Partial: update original row → delivered with qty_received=qtyIn
-                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${receiveParcel.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ status: "delivered", qty_received: qtyIn }) });
-                // Create new row for the remainder still in transit
-                await fetch(`${SUPABASE_URL}/rest/v1/parcels`, { method: "POST", headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveParcel.product_name, asin: receiveParcel.asin, sku: receiveParcel.sku, supplier: receiveParcel.supplier, quantity: remaining, tracking_number: receiveParcel.tracking_number, status: "in_transit", user_id: client.id, date_added: receiveParcel.date_added }) });
-                if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "📬 PARTIAL DELIVERY TO WAREHOUSE", color: 0xffab00, fields: [{ name: "Product", value: receiveParcel.product_name, inline: true }, { name: "Units Received", value: `${qtyIn}`, inline: true }, { name: "Still In Transit", value: `${remaining}`, inline: true }, { name: "SKU", value: receiveParcel.sku || "—", inline: true }], footer: { text: client.full_name || client.email } });
-              } else {
-                // Full delivery
-                await fetch(`${SUPABASE_URL}/rest/v1/parcels?id=eq.${receiveParcel.id}`, { method: "PATCH", headers: { ...supabase.headers(token), "Content-Type": "application/json" }, body: JSON.stringify({ status: "delivered", qty_received: qtyIn }) });
-                if (clientWebhook) await sendDiscordNotification(clientWebhook, null, { title: "📬 DELIVERED TO WAREHOUSE", color: 0x00e5ff, fields: [{ name: "Product", value: receiveParcel.product_name, inline: true }, { name: "Units Received", value: `${qtyIn}`, inline: true }, { name: "SKU", value: receiveParcel.sku || "—", inline: true }], footer: { text: client.full_name || client.email } });
-              }
-              const freshParcels = await fetch(`${SUPABASE_URL}/rest/v1/parcels?user_id=eq.${client.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json());
-              if (Array.isArray(freshParcels)) setLocalParcels(freshParcels);
-              setReceiveParcel(null); setSaving(false); showToast("Marked received!"); setParcelTab("warehouse"); onRefresh();
-            }}>{saving ? "Saving..." : "Confirm"}</button>
-          </div>
-        </div>
-      </div>}
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -5010,8 +3946,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">£/Unit</label><input className="input" type="number" step="0.01" value={shipmentForm.unit_cost} onChange={e => setShipmentForm({ ...shipmentForm, unit_cost: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Boxes</label><input className="input" type="number" value={shipmentForm.box_count} onChange={e => setShipmentForm({ ...shipmentForm, box_count: e.target.value })} /></div>
               <div className="input-group" style={{ margin: 0 }}><label className="input-label">Box Cost (£)</label><input className="input" type="number" step="0.01" value={shipmentForm.box_cost} onChange={e => setShipmentForm({ ...shipmentForm, box_cost: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0 }}><label className="input-label">Other Costs (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={shipmentForm.other_fees} onChange={e => setShipmentForm({ ...shipmentForm, other_fees: e.target.value })} /></div>
-              <div className="input-group" style={{ margin: 0, gridColumn: "span 2" }}><label className="input-label">Other Costs Description</label><input className="input" placeholder="e.g. Bubble wrap, labels..." value={shipmentForm.other_fees_note} onChange={e => setShipmentForm({ ...shipmentForm, other_fees_note: e.target.value })} /></div>
             </div>
             {preppedParcels.length > 0 && (
               <div style={{ marginBottom: 16 }}>
@@ -5139,210 +4073,6 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
 
 
 // Admin - Client Liquidation Tab
-async function lookupAsinTitle(asin) {
-  try {
-    const res = await fetch("https://cccsreyspmpwnfbmegwz.supabase.co/functions/v1/dynamic-endpoint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
-      body: JSON.stringify({ asin })
-    });
-    const data = await res.json();
-    if (data?.title) return data.title;
-  } catch(e) {}
-  return null;
-}
-
-// ── Google Sheets CSV URL for Panayiotis ──────────────────────────────────
-const PANAYIOTIS_ID = "8deef97c-470b-42d1-bc14-6b69f10d6f28";
-const PANAYIOTIS_SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPiFYXDHT1LINku5one25hx1TeC6JojcE4bzDiT75Fthv1wNRYrWDaBludilvdCYQUPziU5k3bs_y-/pub?gid=1782424989&single=true&output=csv";
-
-function parseCSV(text) {
-  const lines = text.split(/\r?\n/);
-  if (lines.length < 2) return [];
-
-  // Parse a single CSV line respecting quoted fields
-  function parseLine(line) {
-    const vals = [];
-    let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQ && line[i+1] === '"') { cur += '"'; i++; } // escaped quote
-        else { inQ = !inQ; }
-      } else if (ch === ',' && !inQ) {
-        vals.push(cur.trim().replace(/^"|"$/g,""));
-        cur = "";
-      } else {
-        cur += ch;
-      }
-    }
-    vals.push(cur.trim().replace(/^"|"$/g,""));
-    return vals;
-  }
-
-  const headers = parseLine(lines[0]);
-
-  // Build a lookup: header name -> index (use LAST occurrence so duplicates handled)
-  const headerIndex = {};
-  headers.forEach((h, i) => { headerIndex[h.trim()] = i; });
-
-  const results = [];
-  for (let li = 1; li < lines.length; li++) {
-    if (!lines[li].trim()) continue;
-    const vals = parseLine(lines[li]);
-
-    // Map by header name — immune to extra columns from unquoted commas in URLs
-    const row = {};
-    Object.entries(headerIndex).forEach(([h, i]) => {
-      row[h] = (vals[i] || "").trim();
-    });
-    results.push(row);
-  }
-  return results;
-}
-
-function parseSheetDate(val) {
-  if (!val || !val.trim()) return null;
-  const v = val.trim();
-  // DD/MM/YYYY or DD/MM/YY
-  const parts = v.split("/");
-  if (parts.length === 3) {
-    let [d, m, y] = parts;
-    if (y.length === 2) y = "20" + y;
-    return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-  }
-  return null;
-}
-
-function isYes(val) {
-  return ["yes","YES","Yes","true","TRUE","1","Y","y"].includes((val || "").trim());
-}
-
-async function syncSheetToSupabase(token, showToast, onRefresh) {
-  try {
-    showToast("Syncing from Google Sheet...");
-    const res = await fetch(PANAYIOTIS_SHEET_CSV);
-    if (!res.ok) throw new Error("Could not fetch sheet");
-    const text = await res.text();
-
-    const rows = parseCSV(text).filter(r => r["Product Name"] && r["Product Name"].trim() && r["UID"] && r["UID"].trim());
-    console.log(`Sheet rows: ${rows.length}`);
-    if (rows.length > 0) {
-      const sample = rows[0];
-      console.log("Sample row keys:", Object.keys(sample));
-      console.log("Sample payout:", sample["Payout"], "| paid:", sample["PAID"]);
-    }
-
-    const ah = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
-
-    let inserted = 0, updated = 0, salesInserted = 0, salesUpdated = 0, salesFailed = 0;
-
-    for (const row of rows) {
-      const uid = row["UID"].trim();
-      const delivered = isYes(row["Delivered"]);
-      const dateDelivered = (row["Date Delivered"] || "").trim();
-      const soldTicked = isYes(row["Sold"]);
-      const rawSalePrice = (row["Sale price"] || "").trim();
-      const salePrice = parseFloat(rawSalePrice.replace(/[^0-9.-]/g,"")) || 0;
-      const hasSale = soldTicked && salePrice > 0;
-
-      const stockPayload = {
-        user_id: PANAYIOTIS_ID,
-        sheet_uid: uid,
-        product_name: (row["Product Name"] || "").trim() || null,
-        asin: (row["ASIN"] || "").trim() || null,
-        sku: (row["SKU"] || "").trim() || null,
-        lpn_number: (row["LPN Number"] || "").trim() || null,
-        condition: (row["Condition"] || "").trim() || null,
-        received: delivered,
-        listed: delivered && !soldTicked,
-        qty_sold: soldTicked ? 1 : 0,
-        date_added: parseSheetDate(row["Date"]) || null,
-        date_received: parseSheetDate(dateDelivered) || null,
-      };
-
-      const checkRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/liquidation_stock?sheet_uid=eq.${encodeURIComponent(uid)}&user_id=eq.${PANAYIOTIS_ID}`,
-        { headers: ah }
-      );
-      const existing = await checkRes.json();
-      let stockId;
-
-      if (Array.isArray(existing) && existing.length > 0) {
-        stockId = existing[0].id;
-        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${stockId}`, {
-          method: "PATCH", headers: ah, body: JSON.stringify(stockPayload)
-        });
-        updated++;
-      } else {
-        const insRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
-          method: "POST", headers: { ...ah, "Prefer": "return=representation" },
-          body: JSON.stringify({ ...stockPayload, quantity: 1 })
-        });
-        const insData = await insRes.json();
-        if (!insRes.ok) { console.error("Stock insert failed:", uid, insData); continue; }
-        stockId = Array.isArray(insData) ? insData[0]?.id : insData?.id;
-        inserted++;
-      }
-
-      if (hasSale && stockId) {
-        const n = s => parseFloat((s || "0").replace(/[^0-9.-]/g,"")) || 0;
-        const ebayFees  = n(row["Ebay Fees"]);
-        const shipping  = n(row["Shipping"]);
-        const netSale   = n(row["Net Sale"]) || (salePrice - ebayFees - shipping);
-        const dbhPct    = n(row["DBH %"]);
-        const dbhFee    = n(row["DBH £"]);
-        const fixedFee  = n(row["Fixed Fees"]) || 0.40;
-        const payout    = n(row["Payout"]);
-        const dateSold  = parseSheetDate(row["Date Sold"]) || parseSheetDate(row["Date listed"]) || null;
-        const payoutDt  = parseSheetDate(row["Payout Date"]) || null;
-        const paid      = isYes(row["PAID"]);
-
-        console.log(`Sale: ${(row["Product Name"]||"").slice(0,30)} | sale=${salePrice} net=${netSale} payout=${payout} paid=${paid}`);
-
-        const salePayload = {
-          stock_id: stockId, user_id: PANAYIOTIS_ID,
-          date_sold: dateSold, qty_sold: 1,
-          sale_price: salePrice, ebay_fees: ebayFees, shipping: shipping,
-          net_sale: netSale, dbh_pct: dbhPct, dbh_fee: dbhFee,
-          fixed_fee: fixedFee, payout: payout,
-          payout_date: payoutDt, paid: paid,
-        };
-
-        const sc = await fetch(
-          `${SUPABASE_URL}/rest/v1/liquidation_sales?stock_id=eq.${stockId}&user_id=eq.${PANAYIOTIS_ID}`,
-          { headers: ah }
-        );
-        const exSales = await sc.json();
-
-        if (Array.isArray(exSales) && exSales.length > 0) {
-          const upd = { ...salePayload };
-          if (exSales[0].paid) delete upd.paid;
-          const pr = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${exSales[0].id}`, {
-            method: "PATCH", headers: ah, body: JSON.stringify(upd)
-          });
-          if (!pr.ok) { const e = await pr.json(); console.error("Sale update failed:", e); salesFailed++; }
-          else salesUpdated++;
-        } else {
-          const pr = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
-            method: "POST", headers: { ...ah, "Prefer": "return=representation" },
-            body: JSON.stringify(salePayload)
-          });
-          if (!pr.ok) { const e = await pr.json(); console.error("Sale insert failed:", e, "payload:", salePayload); salesFailed++; }
-          else salesInserted++;
-        }
-      }
-    }
-
-    console.log(`Done: stock ${inserted} in / ${updated} up | sales ${salesInserted} in / ${salesUpdated} up / ${salesFailed} FAILED`);
-    showToast(`Synced ${inserted + updated} items, ${salesInserted + salesUpdated} sales`);
-    onRefresh();
-  } catch (e) {
-    console.error("Sync error:", e);
-    showToast("Sync failed: " + e.message);
-  }
-}
-
 function AdminClientLiquidation({ client, liquidation, token, showToast, onRefresh }) {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -5351,100 +4081,10 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [activeTab, setActiveTab] = useState("transit");
   const [sales, setSales] = useState([]);
   const [logSaleItem, setLogSaleItem] = useState(null);
-  const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40", ebay_order_id: "" });
+  const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40" });
   const [saleSaving, setSaleSaving] = useState(false);
   const [receiveItem, setReceiveItem] = useState(null);
   const [receiveQty, setReceiveQty] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const [showAddStock, setShowAddStock] = useState(false);
-  const [addStockForm, setAddStockForm] = useState({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" });
-  const [addStockSaving, setAddStockSaving] = useState(false);
-  const isPanayiotis = client.id === PANAYIOTIS_ID;
-
-  const submitAddStock = async () => {
-    if (!addStockForm.product_name) { showToast("Product name is required"); return; }
-    setAddStockSaving(true);
-    try {
-      // Generate DBH SKU
-      const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase().slice(0, 6);
-      const existing = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${client.id}&select=dbh_sku&order=created_at.desc&limit=1`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json());
-      const lastNum = existing?.[0]?.dbh_sku ? parseInt(existing[0].dbh_sku.split("-").pop()) || 0 : 0;
-      const dbh_sku = `DBH-${clientName}-${String(lastNum + 1).padStart(3, "0")}`;
-      const payload = {
-        product_name: addStockForm.product_name,
-        asin: addStockForm.asin || null,
-        lpn_number: addStockForm.lpn_number || null,
-        condition: addStockForm.condition || null,
-        quantity: parseInt(addStockForm.quantity) || 1,
-        cog: addStockForm.cog ? parseFloat(addStockForm.cog) : null,
-        user_id: client.id,
-        dbh_sku,
-        received: false,
-        listed: false,
-        date_added: new Date().toISOString().split("T")[0]
-      };
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
-        method: "POST",
-        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        showToast(`Stock added — ${dbh_sku}`);
-        setShowAddStock(false);
-        setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" });
-        onRefresh();
-      } else {
-        const err = await res.json();
-        showToast("Error: " + (err.message || "Failed to add stock"));
-      }
-    } catch (e) { showToast("Error: " + e.message); }
-    setAddStockSaving(false);
-  };
-
-  // Print DBH SKU label (50x25mm) — opens a pop-up print window
-  const printLabel = (item) => {
-    if (!item.dbh_sku) { showToast("No DBH SKU on this item"); return; }
-    const sku = item.dbh_sku;
-    const productName = (item.product_name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase();
-    const condition = (item.condition || "").toUpperCase();
-    const html = `<!DOCTYPE html><html><head><title>Label ${sku}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-<style>
-  @page { size: 50mm 25mm; margin: 0; }
-  html, body { margin: 0; padding: 0; background: white; font-family: 'Helvetica Neue', Arial, sans-serif; }
-  .label { width: 50mm; height: 25mm; box-sizing: border-box; padding: 1mm 1.5mm; display: flex; flex-direction: column; justify-content: space-between; position: relative; page-break-after: always; }
-  .client { position: absolute; top: 0.8mm; right: 1.5mm; font-size: 1.8mm; color: #1F4E78; font-weight: 700; text-transform: uppercase; }
-  .condition { position: absolute; top: 0.8mm; left: 1.5mm; font-size: 1.8mm; color: #C00000; font-weight: 700; text-transform: uppercase; }
-  .barcode-wrap { text-align: center; margin-top: 0.5mm; }
-  .barcode-wrap svg { width: 100%; height: 8mm; }
-  .sku { text-align: center; font-size: 3.4mm; font-weight: 700; letter-spacing: 0.08mm; color: #000; margin-top: 0.5mm; }
-  .product { font-size: 1.8mm; color: #333; text-align: center; line-height: 1.1; overflow: hidden; max-height: 4mm; }
-  .instruction { margin: 16px; font-family: system-ui; color: #333; font-size: 13px; }
-  @media print { .instruction { display: none; } }
-<\/style></head><body>
-<div class="instruction">Press <b>Cmd+P</b> (or Ctrl+P). In the print dialogue, select paper size <b>50mm x 25mm</b> (or "Custom: 50x25mm"). Ensure margins are "None". Scale should be 100%. Uncheck "Headers and footers".</div>
-<div class="label">
-  ${condition ? `<div class="condition">${condition}</div>` : ''}
-  <div class="client">${clientName}</div>
-  <div class="barcode-wrap"><svg id="bc"></svg></div>
-  <div class="sku">${sku}</div>
-  <div class="product">${productName}</div>
-</div>
-<script>
-  JsBarcode('#bc', '${sku}', { format: 'CODE128', displayValue: false, margin: 0, height: 28, width: 1.2 });
-  setTimeout(() => window.print(), 400);
-<\/script></body></html>`;
-    const w = window.open("", "_blank", "width=500,height=400");
-    if (!w) { showToast("Pop-up blocked — allow pop-ups for this site"); return; }
-    w.document.write(html);
-    w.document.close();
-  };
-
-  // Auto-sync disabled - manual only via Sync Now button
-  useEffect(() => {
-    if (!isPanayiotis) return;
-  }, [isPanayiotis, token]);
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
   useEffect(() => { loadSales(); }, [client.id]);
@@ -5470,7 +4110,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const openLogSale = (item) => {
     setLogSaleItem(item);
     const today = new Date().toISOString().split('T')[0];
-    setSaleForm({ date_sold: today, qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40", ebay_order_id: "" });
+    setSaleForm({ date_sold: today, qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40" });
   };
 
   const submitSale = async () => {
@@ -5485,12 +4125,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       ebay_fees: parseFloat(saleForm.ebay_fees) || 0, shipping: parseFloat(saleForm.shipping) || 0,
       net_sale: parseFloat(c.net.toFixed(2)), dbh_pct: parseFloat((c.pct * 100).toFixed(2)),
       dbh_fee: parseFloat(c.fee.toFixed(2)), fixed_fee: parseFloat(saleForm.fixed_fee) || 0.40,
-      payout: parseFloat(c.payout.toFixed(2)), payout_date: payoutDate.toISOString().split('T')[0], paid: false,
-      ebay_order_id: saleForm.ebay_order_id || null,
-      logged_at: new Date().toISOString(),
-      product_name_snapshot: logSaleItem.product_name || null,
-      asin_snapshot: logSaleItem.asin || null,
-      dbh_sku_snapshot: logSaleItem.dbh_sku || null
+      payout: parseFloat(c.payout.toFixed(2)), payout_date: payoutDate.toISOString().split('T')[0], paid: false
     };
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
       method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
@@ -5502,8 +4137,9 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       body: JSON.stringify({ qty_sold: newQtySold })
     });
     const hw = client.discord_webhook || webhookUrl;
-    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
-    await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
+    showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
+    await loadSales(); onRefresh();
   };
 
   const pending = liquidation.filter(l => !l.sale_price).length;
@@ -5543,8 +4179,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
@@ -5562,22 +4197,6 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   return (
     <>
-      {/* Google Sheet sync banner for Panayiotis */}
-      {isPanayiotis && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: "10px 16px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 10 }}>
-          <span style={{ fontSize: 18 }}>🔄</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--green)" }}>Google Sheet Sync Active</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Auto-syncs every 60 seconds. Stock and sales pulled directly from your Google Sheet.</div>
-          </div>
-          <button
-            onClick={async () => { setSyncing(true); await syncSheetToSupabase(token, showToast, onRefresh); setSyncing(false); }}
-            disabled={syncing}
-            style={{ padding: "6px 14px", background: "var(--green)", color: "#000", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: syncing ? "not-allowed" : "pointer", opacity: syncing ? 0.6 : 1 }}
-          >{syncing ? "Syncing..." : "↻ Sync Now"}</button>
-        </div>
-      )}
-
       {/* Stats */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
         <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
@@ -5586,32 +4205,29 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
           <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
         )}
-        <button onClick={() => setShowAddStock(true)} style={{ marginLeft: "auto", padding: "8px 18px", borderRadius: 8, border: "1px solid var(--cyan)", fontSize: 13, fontWeight: 700, cursor: "pointer", background: "rgba(0,229,255,0.1)", color: "var(--cyan)" }}>+ Add Stock</button>
       </div>
 
       {/* In Transit Tab */}
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{item.dbh_sku || "—"}</td>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
-              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td>
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
-                    <button title="Print DBH SKU label" onClick={() => printLabel(item)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🖨 Label</button>
                     <button style={{ padding: "4px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => { setReceiveItem(item); setReceiveQty(String(item.quantity || 1)); }}>✓ Received</button>
                   </div>}
               </td>
@@ -5624,25 +4240,23 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
           <tbody>{listedItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{item.dbh_sku || "—"}</td>
-              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) { setEditData(prev => ({ ...prev, product_name: title })); showToast("Title found!"); } } }} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
+              <td style={{ fontWeight: 600 }}>{isEdit ? <div style={{ display:"flex", flexDirection:"column", gap:4 }}><input className="inline-input" style={{ width: 160 }} placeholder="Product name" value={data.product_name} onChange={e => setEditData({ ...editData, product_name: e.target.value })} /><input className="inline-input" style={{ width: 120 }} placeholder="ASIN" value={data.asin} onChange={e => setEditData({ ...editData, asin: e.target.value })} /></div> : <div>{item.product_name}<div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.asin}</div></div>}</td>
               <td>{isEdit ? <input className="inline-input" style={{ width: 80 }} value={data.lpn_number} onChange={e => setEditData({ ...editData, lpn_number: e.target.value })} /> : <span className="mono" style={{ fontSize: 12 }}>{item.lpn_number || "—"}</span>}</td>
               <td>{isEdit ? <input type="number" min="1" className="inline-input" style={{ width: 55 }} value={data.quantity} onChange={e => setEditData({ ...editData, quantity: e.target.value })} /> : <span className="mono">{item.quantity || 1}</span>}</td>
               <td><span className="mono" style={{ color: "var(--green)" }}>{item.qty_sold || 0}</span></td>
               <td><span className="mono" style={{ color: remaining <= 0 ? "var(--red)" : "var(--text-primary)", fontWeight: 700 }}>{remaining}</span></td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
-              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
+              <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
               <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : <button onClick={async (e) => { e.stopPropagation(); const newVal = !item.listed; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ listed: newVal }) }); showToast(newVal ? "Marked listed!" : "Unmarked!"); onRefresh(); }} style={{ background: "transparent", border: `1px solid ${item.listed ? "var(--green)" : "var(--border)"}`, color: item.listed ? "var(--green)" : "var(--text-muted)", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{item.listed ? "Yes" : "No"}</button>}</td>
               <td>
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
                     <button className="btn-icon" onClick={() => startEdit(item)}><Icons.Edit /></button>
-                    <button title="Print DBH SKU label" onClick={() => printLabel(item)} style={{ padding: "4px 8px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🖨 Label</button>
                     {remaining > 0 && <button style={{ padding: "4px 10px", background: "var(--orange)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }} onClick={() => openLogSale(item)}>+ Sale</button>}
                   </div>}
               </td>
@@ -5655,13 +4269,12 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales recorded yet.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>eBay Order ID</th><th>Logged At</th><th>Paid</th></tr></thead>
+          <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
           <tbody>{sales.map(s => {
             const stockItem = liquidation.find(l => l.id === s.stock_id);
-            const displayName = s.product_name_snapshot || stockItem?.product_name || "—";
             return <tr key={s.id}>
               <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
-              <td style={{ fontWeight: 600, fontSize: 12 }}>{displayName}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{stockItem?.product_name || "—"}</td>
               <td className="mono">{s.qty_sold}</td>
               <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
               <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.ebay_fees).toFixed(2)}</td>
@@ -5672,68 +4285,15 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
               <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
               <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
-              <td className="mono" style={{ fontSize: 11 }}>{s.ebay_order_id || "—"}</td>
-              <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{s.logged_at ? new Date(s.logged_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
               <td style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
                   {s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--green)", color: "var(--green)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) }); loadSales(); showToast("Marked paid!"); }}>Mark Paid</button>}
-                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); if (s.stock_id && stockItem) { await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); } const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: displayName, inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
+                  <button style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 5, fontSize: 11, cursor: "pointer" }} onClick={async () => { if (!confirm("Mark as refunded? This will delete the sale and reduce qty sold.")) return; const stockItem = liquidation.find(l => l.id === s.stock_id); const newQtySold = Math.max(0, (stockItem?.qty_sold || 0) - (s.qty_sold || 1)); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }); await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${s.stock_id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ qty_sold: newQtySold }) }); const hw = client.discord_webhook || webhookUrl; if (hw) await sendDiscordNotification(hw, null, { title: "🔄 SALE REFUNDED", color: 0xff5252, fields: [{ name: "Product", value: stockItem?.product_name || "Unknown", inline: true }, { name: "Qty Returned", value: `${s.qty_sold || 1}`, inline: true }], footer: { text: "Item returned to listed stock" } }); showToast("Sale refunded!"); loadSales(); onRefresh(); }}>↩ Refund</button>
                 </div>
               </td>
             </tr>;
           })}</tbody>
         </table></div>}
-      </div>}
-
-      {/* Add Stock Modal */}
-      {showAddStock && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-        <div className="card" style={{ width: 480, maxWidth: "95vw", padding: 28, maxHeight: "90vh", overflowY: "auto" }}>
-          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Add Stock</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Adding for: {client.full_name || client.email}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label className="input-label">Product Name *</label>
-              <input className="input" placeholder="e.g. Samsung Galaxy Buds2 Pro" value={addStockForm.product_name} onChange={e => setAddStockForm(p => ({ ...p, product_name: e.target.value }))} onBlur={async e => { const asin = addStockForm.asin.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
-            </div>
-            <div>
-              <label className="input-label">ASIN</label>
-              <input className="input" placeholder="e.g. B09..." value={addStockForm.asin} onChange={e => setAddStockForm(p => ({ ...p, asin: e.target.value }))} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label className="input-label">Condition</label>
-                <select className="input" value={addStockForm.condition} onChange={e => setAddStockForm(p => ({ ...p, condition: e.target.value }))}>
-                  <option value="">— Select —</option>
-                  <option>New</option>
-                  <option>Open Box</option>
-                  <option>Like New</option>
-                  <option>Used</option>
-                  <option>Good</option>
-                  <option>Fair</option>
-                  <option>Poor</option>
-                </select>
-              </div>
-              <div>
-                <label className="input-label">Quantity</label>
-                <input className="input" type="number" min="1" value={addStockForm.quantity} onChange={e => setAddStockForm(p => ({ ...p, quantity: e.target.value }))} />
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label className="input-label">COG (£)</label>
-                <input className="input" type="number" step="0.01" placeholder="0.00" value={addStockForm.cog} onChange={e => setAddStockForm(p => ({ ...p, cog: e.target.value }))} />
-              </div>
-              <div>
-                <label className="input-label">LPN Number</label>
-                <input className="input" placeholder="Optional" value={addStockForm.lpn_number} onChange={e => setAddStockForm(p => ({ ...p, lpn_number: e.target.value }))} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button className="btn btn-primary admin" onClick={submitAddStock} disabled={addStockSaving} style={{ flex: 1 }}>{addStockSaving ? "Adding..." : "Add Stock"}</button>
-              <button className="btn" onClick={() => { setShowAddStock(false); setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" }); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-            </div>
-          </div>
-        </div>
       </div>}
 
       {/* Partial Receive Modal */}
@@ -5757,7 +4317,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               if (remaining > 0) {
                 // Partial receive — update existing item with received qty, create new row for remainder
                 await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true, quantity: qtyReceived }) });
-                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, dbh_sku: receiveItem.dbh_sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
+                await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ product_name: receiveItem.product_name, asin: receiveItem.asin, sku: receiveItem.sku, lpn_number: receiveItem.lpn_number, cog: receiveItem.cog, purchase_price: receiveItem.purchase_price, condition: receiveItem.condition, user_id: client.id, quantity: remaining, received: false, date_added: receiveItem.date_added }) });
               } else {
                 // Full receive
                 await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${receiveItem.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ received: true }) });
@@ -5783,7 +4343,6 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             <div><label className="input-label">eBay Fees (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={sf.ebay_fees} onChange={e => setSaleForm({ ...sf, ebay_fees: e.target.value })} /></div>
             <div><label className="input-label">Shipping (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={sf.shipping} onChange={e => setSaleForm({ ...sf, shipping: e.target.value })} /></div>
             <div><label className="input-label">Fixed Fee (£)</label><input className="input" type="number" step="0.01" value={sf.fixed_fee} onChange={e => setSaleForm({ ...sf, fixed_fee: e.target.value })} /></div>
-            <div style={{ gridColumn: "span 2" }}><label className="input-label">eBay Order ID <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(admin only)</span></label><input className="input" placeholder="e.g. 12-34567-89012" value={sf.ebay_order_id} onChange={e => setSaleForm({ ...sf, ebay_order_id: e.target.value })} /></div>
           </div>
 
           {sf.sale_price && <div style={{ background: "rgba(0,230,118,0.05)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
@@ -5814,14 +4373,6 @@ export default function App() {
 
 function AppRouter() {
   const { user, loading, isAdmin } = useAuth();
-
-  // Detect Supabase password recovery token in URL hash
-  const hash = window.location.hash;
-  const params = new URLSearchParams(hash.replace("#", "?"));
-  const type = params.get("type");
-  const accessToken = params.get("access_token");
-  if (type === "recovery" && accessToken) return <ResetPasswordPage accessToken={accessToken} />;
-
   if (loading) return <div className="loader"><div className="spinner" /></div>;
   if (!user) return <LoginPage />;
   return isAdmin ? <AdminPortal /> : <ClientPortal />;
