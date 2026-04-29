@@ -184,12 +184,12 @@ function getPayoutDate(soldDate) {
   if (!soldDate) return null;
   const d = new Date(soldDate);
   // End of the month AFTER the sale month
-  // e.g. sold in April → end of May; sold in May → end of June
-  const payoutMonth = d.getMonth() + 2; // +1 for next month, +1 because setMonth(0) = Jan
-  const payoutYear = d.getFullYear() + (payoutMonth > 12 ? 1 : 0);
-  const normalisedMonth = payoutMonth > 12 ? payoutMonth - 12 : payoutMonth;
-  // Last day of that month: set to 1st of month after, then subtract 1 day
-  return new Date(payoutYear, normalisedMonth, 0);
+  // e.g. sold in April (month 3) → end of May (month 4)
+  // new Date(year, month+1, 0) = last day of 'month'
+  // So we want last day of (soldMonth + 1): new Date(year, soldMonth + 2, 0)
+  const soldMonth = d.getMonth(); // 0-indexed
+  const soldYear = d.getFullYear();
+  return new Date(soldYear, soldMonth + 2, 0);
 }
 function calculatePayout(item) {
   if (!item.sale_price) return { payout: 0, totalFees: 0 };
