@@ -180,17 +180,7 @@ const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product",
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
 function formatShortDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
-function getPayoutDate(soldDate) {
-  if (!soldDate) return null;
-  const d = new Date(soldDate);
-  // End of the month AFTER the sale month
-  // e.g. sold in April → end of May; sold in May → end of June
-  const payoutMonth = d.getMonth() + 2; // +1 for next month, +1 because setMonth(0) = Jan
-  const payoutYear = d.getFullYear() + (payoutMonth > 12 ? 1 : 0);
-  const normalisedMonth = payoutMonth > 12 ? payoutMonth - 12 : payoutMonth;
-  // Last day of that month: set to 1st of month after, then subtract 1 day
-  return new Date(payoutYear, normalisedMonth, 0);
-}
+function getPayoutDate(soldDate) { if (!soldDate) return null; const d = new Date(soldDate); d.setDate(d.getDate() + 35); return d; }
 function calculatePayout(item) {
   if (!item.sale_price) return { payout: 0, totalFees: 0 };
   const sale = parseFloat(item.sale_price) || 0;
@@ -810,7 +800,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
         <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
       </div>
-      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — paid end of following month</div></div>}
+      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
         <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
@@ -1015,7 +1005,7 @@ function LiquidationFeesPage() {
     <><div className="page-header"><div><div className="page-title">Liquidation Fees</div><div className="page-subtitle">Transparent pricing</div></div></div>
     <div className="page-body">
       <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "15%", d: "10% if ≥£200", i: "💰", vat: false }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦", vat: true }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩", vat: true }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏", vat: true }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p} {f.vat && <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span>}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
-      <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts are made at the end of the month following your sale.</p></div>
+      <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts 35 days after sale to allow for returns.</p></div>
     </div></>
   );
 }
@@ -2126,13 +2116,13 @@ function AdminLiquidationPage({ token, showToast }) {
       const clientWebhook = client?.discord_webhook || webhookUrl;
       if (clientWebhook) {
         const payout = calculatePayout({ ...oldItem, ...dataToSave });
-        const payoutDate = getPayoutDate(dataToSave.date_sold);
+        const payoutDate = new Date(dataToSave.date_sold);
+        payoutDate.setDate(payoutDate.getDate() + 35);
         await sendDiscordNotification(clientWebhook, null, {
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "SKU", value: oldItem?.sku || oldItem?.dbh_sku || "—", inline: true },
             { name: "Condition", value: oldItem?.condition || "—", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
@@ -3348,15 +3338,11 @@ function AdminSubscriptionsPage({ token, showToast }) {
 
   useEffect(() => {
     if (subs.length === 0) return;
-    const today = new Date().toISOString().split("T")[0];
-    const notifKey = `dbh_subs_notified_${today}`;
-    if (localStorage.getItem(notifKey)) return; // already notified today
-    localStorage.setItem(notifKey, "1");
-    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
     subs.forEach(async s => {
       if (!s.next_due_date) return;
       const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
-      const daysUntil = Math.round((due - todayDate) / 86400000);
+      const daysUntil = Math.round((due - today) / 86400000);
       const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
       if (daysUntil === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
       else if (daysUntil === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
@@ -5323,7 +5309,8 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
     setSaleSaving(true);
     const c = calcSale(saleForm);
-    const payoutDate = getPayoutDate(saleForm.date_sold);
+    const payoutDate = new Date(saleForm.date_sold);
+    payoutDate.setDate(payoutDate.getDate() + 35);
     const payload = {
       stock_id: logSaleItem.id, user_id: client.id, date_sold: saleForm.date_sold,
       qty_sold: parseInt(saleForm.qty_sold) || 1, sale_price: parseFloat(saleForm.sale_price),
@@ -5347,7 +5334,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       body: JSON.stringify({ qty_sold: newQtySold })
     });
     const hw = client.discord_webhook || webhookUrl;
-    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "SKU", value: logSaleItem.sku || logSaleItem.dbh_sku || "—", inline: true }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: getPayoutDate(saleForm.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "Paid end of the following month after sale" } });
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
     await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
   };
 
@@ -5382,13 +5369,13 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
         const payout = calculatePayout({ ...oldItem, ...dataToSave });
-        const payoutDate = getPayoutDate(dataToSave.date_sold);
+        const payoutDate = new Date(dataToSave.date_sold);
+        payoutDate.setDate(payoutDate.getDate() + 35);
         await sendDiscordNotification(clientWebhook, null, {
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "SKU", value: oldItem?.sku || oldItem?.dbh_sku || "—", inline: true },
             { name: "Condition", value: oldItem?.condition || "—", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
@@ -5638,7 +5625,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH £</div><div className="mono" style={{ fontWeight: 600, color: "var(--orange)" }}>£{sc.fee.toFixed(2)}</div></div>
             </div>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Payout Date: {sf.date_sold ? getPayoutDate(sf.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Payout Date: {sf.date_sold ? (() => { const d = new Date(sf.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : "—"}</div>
               <div style={{ fontWeight: 800, fontSize: 20, color: "var(--green)" }}>£{sc.payout.toFixed(2)}</div>
             </div>
           </div>}
