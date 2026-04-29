@@ -3886,7 +3886,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
           const m2month = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
           const m2year = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
           const m2 = { month: m2month, year: m2year };
-          const monthName = (m) => new Date(m.year, m.month, 1).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
+          const monthName = (m) => { const lastDay = new Date(m.year, m.month + 1, 0); return lastDay.toLocaleDateString("en-GB", { day: "numeric", month: "short" }); };
           const payoutM1 = clientSales.filter(s => {
             if (!s.payout_date) return false;
             const d = new Date(s.payout_date + "T12:00:00");
