@@ -2134,11 +2134,19 @@ function AdminLiquidationPage({ token, showToast }) {
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
             { name: "SKU", value: oldItem?.sku || oldItem?.dbh_sku || "—", inline: true },
             { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            ...(client?.id === PANAYIOTIS_ID && oldItem?.asin ? [{ name: "ASIN", value: oldItem.asin, inline: true }] : []),
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
           footer: { text: client?.full_name || client?.email }
         });
+        if (client?.id === PANAYIOTIS_ID && oldItem?.asin) {
+          await sendDiscordNotification(clientWebhook, null, {
+            title: "🔍 ASIN",
+            color: 0x0088ff,
+            description: `\`${oldItem.asin}\`\nhttps://www.amazon.co.uk/dp/${oldItem.asin}`,
+          });
+        }
       }
     }
     showToast("Saved!"); setEditingId(null); loadData(); setSaving(false);
@@ -5385,7 +5393,10 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       body: JSON.stringify({ qty_sold: newQtySold })
     });
     const hw = client.discord_webhook || webhookUrl;
-    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "SKU", value: logSaleItem.sku || logSaleItem.dbh_sku || "—", inline: true }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: getPayoutDate(saleForm.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "Paid end of the following month after sale" } });
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "SKU", value: logSaleItem.sku || logSaleItem.dbh_sku || "—", inline: true }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, ...(client?.id === PANAYIOTIS_ID && logSaleItem?.asin ? [{ name: "ASIN", value: logSaleItem.asin, inline: true }] : []), { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: getPayoutDate(saleForm.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "Paid end of the following month after sale" } });
+    if (client?.id === PANAYIOTIS_ID && logSaleItem?.asin) {
+      await sendDiscordNotification(hw, null, { title: "🔍 ASIN", color: 0x0088ff, description: `\`${logSaleItem.asin}\`\nhttps://www.amazon.co.uk/dp/${logSaleItem.asin}` });
+    }
     await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
   };
 
@@ -5428,11 +5439,19 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
             { name: "SKU", value: oldItem?.sku || oldItem?.dbh_sku || "—", inline: true },
             { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            ...(client?.id === PANAYIOTIS_ID && oldItem?.asin ? [{ name: "ASIN", value: oldItem.asin, inline: true }] : []),
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
           footer: { text: client.full_name || client.email }
         });
+        if (client?.id === PANAYIOTIS_ID && oldItem?.asin) {
+          await sendDiscordNotification(clientWebhook, null, {
+            title: "🔍 ASIN",
+            color: 0x0088ff,
+            description: `\`${oldItem.asin}\`\nhttps://www.amazon.co.uk/dp/${oldItem.asin}`,
+          });
+        }
       }
     }
     showToast("Saved!"); setEditingId(null); onRefresh(); setSaving(false);
