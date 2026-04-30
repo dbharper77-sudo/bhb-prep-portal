@@ -2720,7 +2720,7 @@ function AdminTrackerPage() {
     }
     if (token) fetchAuto();
   }, [token, selectedMonth]);
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"revenue", category:"", amount:"", note:"" });
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"profit", category:"", amount:"", note:"" });
   const [timeForm, setTimeForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", hours:"", note:"" });
 
   useEffect(() => { localStorage.setItem(TKEY, JSON.stringify(data)); }, [data]);
