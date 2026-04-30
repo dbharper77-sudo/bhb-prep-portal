@@ -2634,7 +2634,6 @@ const INCOME_STREAMS = [
   { id: "liquidation", label: "Liquidation", icon: "🔄", color: "var(--orange)" },
   { id: "dealsheet",   label: "Deal Sheet",  icon: "📋", color: "#a78bfa" },
   { id: "fba",         label: "FBA",         icon: "🛒", color: "var(--green)" },
-  { id: "evri",        label: "Evri Job",    icon: "🚚", color: "#f97316" },
 ];
 const EXPENSE_CATS = ["Cost of Goods","Software/Subs","Packaging","Fuel/Travel","Other"];
 
@@ -2669,8 +2668,8 @@ function AdminTrackerPage() {
         const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=dbh_fee,date_sold`, { headers });
         const liqSales = await liqRes.json();
 
-        // Deal sheet — pull from deal_subscription_payments (proper payment log)
-        const dealRes = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments?select=amount,paid_date`, { headers });
+        // Deal sheet — pull from deal_subscriptions where last_paid_date is set
+        const dealRes = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=amount,last_paid_date&last_paid_date=not.is.null`, { headers });
         const dealSubs = await dealRes.json();
 
         const calcShip = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees)||0);
@@ -2687,16 +2686,33 @@ function AdminTrackerPage() {
         const liqAllTime = liqItems.reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
         const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
 
-        const dealMonthly = dealItems.filter(s => s.paid_date && getMonthKey(s.paid_date) === selectedMonth).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
-        const dealWeekly = dealItems.filter(s => s.paid_date && getWeekKey(s.paid_date) === curWeekKey).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+        const dealMonthly = dealItems.filter(s => s.last_paid_date && getMonthKey(s.last_paid_date) === selectedMonth).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+        const dealWeekly = dealItems.filter(s => s.last_paid_date && getWeekKey(s.last_paid_date) === curWeekKey).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
         const dealAllTime = dealItems.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
 
         const curYear = new Date().getFullYear();
         const prepYTD = ships.filter(s => (s.date_shipped || s.created_at || "").slice(0,4) === String(curYear)).reduce((a, s) => a + calcShip(s), 0);
         const liqYTD = liqItems.filter(s => s.date_sold && s.date_sold.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
-        const dealYTD = dealItems.filter(s => s.paid_date && s.paid_date.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+        const dealYTD = dealItems.filter(s => s.last_paid_date && s.last_paid_date.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
 
-        setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, dealMonthly, dealWeekly, dealAllTime, dealYTD, prepYTD, liqYTD, loading: false });
+        // Staff costs — Ian £70 + Wenelyn £70 every Friday since 2 Jan 2026
+        const staffWeeklyRate = 140; // £70 Ian + £70 Wenelyn
+        const staffStart = new Date('2026-01-02'); // First Friday 2026
+        function getFridaysBetween(from, to) {
+          let count = 0; let d = new Date(from);
+          while (d <= to) { if (d.getDay() === 5) count++; d.setDate(d.getDate() + 1); }
+          return count;
+        }
+        const periodStartMonthly = new Date(selectedMonth + '-01');
+        const periodEndMonthly = new Date(new Date(periodStartMonthly).setMonth(periodStartMonthly.getMonth() + 1) - 1);
+        const staffMonthly = getFridaysBetween(Math.max(staffStart, periodStartMonthly), periodEndMonthly) * staffWeeklyRate;
+        const curWeekStart = new Date(curWeekKey); const curWeekEnd = new Date(curWeekKey); curWeekEnd.setDate(curWeekEnd.getDate() + 6);
+        const staffWeekly = getFridaysBetween(Math.max(staffStart, curWeekStart), curWeekEnd) * staffWeeklyRate;
+        const yearStart = new Date(`${new Date().getFullYear()}-01-01`);
+        const today2 = new Date();
+        const staffYTD = getFridaysBetween(Math.max(staffStart, yearStart), today2) * staffWeeklyRate;
+
+        setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, dealMonthly, dealWeekly, dealAllTime, dealYTD, prepYTD, liqYTD, staffMonthly, staffWeekly, staffYTD, loading: false });
       } catch(e) {
         console.error("Tracker fetch error:", e);
         setAutoData(d => ({ ...d, loading: false }));
@@ -2739,11 +2755,13 @@ function AdminTrackerPage() {
 
   const ytdYear = new Date().getFullYear();
   const manualCumProfit = data.entries.filter(e=>e.type==="profit"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="cost"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0);
-  const autoCumProfit = (autoData.prepYTD||0) + (autoData.liqYTD||0) + (autoData.dealYTD||0);
+  const autoCumProfit = (autoData.prepYTD||0) + (autoData.liqYTD||0) + (autoData.dealYTD||0) - (autoData.staffYTD||0);
+
+  const staffAutoExp = autoData.loading ? 0 : (period === "weekly" ? (autoData.staffWeekly||0) : period === "ytd" ? (autoData.staffYTD||0) : (autoData.staffMonthly||0));
 
   const totals = {
-    rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0),
-    profit: stats.reduce((a,s)=>a+s.profit,0), hrs: stats.reduce((a,s)=>a+s.hrs,0),
+    rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0) + staffAutoExp,
+    profit: stats.reduce((a,s)=>a+s.profit,0) - staffAutoExp, hrs: stats.reduce((a,s)=>a+s.hrs,0),
     cumProfit: autoCumProfit + manualCumProfit
   };
 
@@ -2837,6 +2855,14 @@ function AdminTrackerPage() {
               </div>
             </div>
           ))}
+          {staffAutoExp > 0 && <div className="card" style={{borderColor:"var(--red)",borderLeftWidth:3}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontWeight:700,fontSize:15,color:"var(--red)",display:"flex",alignItems:"center",gap:6}}>👥 Staff Costs <span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span></div>
+            </div>
+            <div style={{fontSize:24,fontWeight:700,color:"var(--red)",fontFamily:"'Outfit',sans-serif"}}>-£{staffAutoExp.toFixed(2)}</div>
+            <div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Ian £70 + Wenelyn £70 every Friday</div>
+            <div style={{fontSize:11,color:"var(--text-muted)",marginTop:2}}>Since 2 Jan 2026 · Ongoing</div>
+          </div>}
         </div>
 
         <div className="card" style={{overflowX:"auto"}}>
@@ -3271,8 +3297,6 @@ function AdminSubscriptionsPage({ token, showToast }) {
   const [editSub, setEditSub] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
-  const [view, setView] = useState("clients");
-
   const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
 
   const load = async () => {
@@ -3297,7 +3321,7 @@ function AdminSubscriptionsPage({ token, showToast }) {
     const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     subs.forEach(async s => {
       if (!s.next_due_date) return;
-      const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
+      const due = new Date(s.next_due_date + "T12:00:00"); due.setHours(0,0,0,0);
       const days = Math.round((due - todayDate) / 86400000);
       const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
       if (days === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
@@ -3309,17 +3333,15 @@ function AdminSubscriptionsPage({ token, showToast }) {
   const addSub = async () => {
     if (!addForm.user_id) { showToast("Select a client"); return; }
     setSaving(true);
-    const lastPaid = new Date(addForm.last_paid_date);
-    const nextDue = new Date(lastPaid); nextDue.setDate(nextDue.getDate() + 30);
+    const nextDue = new Date(addForm.last_paid_date); nextDue.setDate(nextDue.getDate() + 30);
     await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { ...h, "Prefer": "return=representation" }, body: JSON.stringify({ user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" }) });
-    showToast("Subscription added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load();
-    setSaving(false);
+    showToast("Added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); setSaving(false);
   };
 
   const saveEdit = async () => {
     setEditSaving(true);
     const nextDueStr = editForm.next_due_date || (() => { const d = new Date(editForm.last_paid_date); d.setDate(d.getDate() + 30); return d.toISOString().split("T")[0]; })();
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ amount: parseFloat(editForm.amount) || 90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ amount: parseFloat(editForm.amount)||90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes }) });
     showToast("Updated!"); setEditSub(null); load(); setEditSaving(false);
   };
 
@@ -3328,10 +3350,8 @@ function AdminSubscriptionsPage({ token, showToast }) {
     const today = new Date().toISOString().split("T")[0];
     const nextDue = new Date(); nextDue.setDate(nextDue.getDate() + 30);
     const nextDueStr = nextDue.toISOString().split("T")[0];
-    // Update subscription
     await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
-    // Log payment to deal_subscription_payments table
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments`, { method: "POST", headers: { ...h, "Prefer": "return=minimal" }, body: JSON.stringify({ subscription_id: sub.id, user_id: sub.user_id, amount: parseFloat(sub.amount) || 90, paid_date: today }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments`, { method: "POST", headers: { ...h, "Prefer": "return=minimal" }, body: JSON.stringify({ subscription_id: sub.id, user_id: sub.user_id, amount: parseFloat(sub.amount)||90, paid_date: today }) });
     const name = sub.profiles?.full_name || sub.profiles?.email || "Unknown";
     await sendSubsDiscord({ title: "✅ Payment Received", color: 0x22c55e, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${sub.amount}`, inline: true }, { name: "Next Due", value: new Date(nextDueStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
     showToast(`✅ ${name} marked as paid`); load(); setMarkingId(null);
@@ -3339,8 +3359,7 @@ function AdminSubscriptionsPage({ token, showToast }) {
 
   const deleteSub = async (id) => {
     if (!window.confirm("Remove this subscription?")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: h });
-    load();
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: h }); load();
   };
 
   const getStatus = (sub) => {
@@ -3363,13 +3382,9 @@ function AdminSubscriptionsPage({ token, showToast }) {
 
   return <>
     <div className="page-header">
-      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{subs.length} clients · £{monthly}/mo · £{(monthly * 12).toLocaleString()}/yr projected</div></div>
-      <div style={{ display: "flex", gap: 8 }}>
-        {[["clients","👥 Clients"],["revenue","📊 Revenue"]].map(([v,l]) => <button key={v} onClick={() => setView(v)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${view===v?"var(--orange)":"var(--border)"}`, background: view===v?"rgba(255,145,0,0.15)":"transparent", color: view===v?"var(--orange)":"var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{l}</button>)}
-        <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
-      </div>
+      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{subs.length} clients · £{monthly}/mo · £{(monthly*12).toLocaleString()}/yr projected</div></div>
+      <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
     </div>
-
     <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5,1fr)", marginBottom: 24 }}>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--red)" }}><div className="card-title">Overdue</div><div className="stat-value" style={{ color: "var(--red)" }}>{overdue.length}</div></div>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--amber)" }}><div className="card-title">Due This Week</div><div className="stat-value" style={{ color: "var(--amber)" }}>{dueSoon.length}</div></div>
@@ -3377,22 +3392,19 @@ function AdminSubscriptionsPage({ token, showToast }) {
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthly}</div></div>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{(monthly*12).toLocaleString()}</div></div>
     </div>
-
-    {view === "clients" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-          {["Client","Amount","Last Paid","Next Due","Status","Actions"].map(h => <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}
+          {["Client","Amount","Last Paid","Next Due","Status","Actions"].map(col => <th key={col} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{col}</th>)}
         </tr></thead>
         <tbody>
           {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet</td></tr>}
           {subs.map((s, i) => {
-            const st = getStatus(s);
-            const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-            const biz = s.profiles?.company_name;
+            const st = getStatus(s); const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
             return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
               <td style={{ padding: "13px 16px" }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
-                {biz && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{biz}</div>}
+                {s.profiles?.company_name && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{s.profiles.company_name}</div>}
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.profiles?.email}</div>
                 {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
               </td>
@@ -3411,45 +3423,43 @@ function AdminSubscriptionsPage({ token, showToast }) {
           })}
         </tbody>
       </table>
-    </div>}
-
+    </div>
     {editSub && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div className="card" style={{ width: 440, padding: 28 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Edit Subscription</div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name || editSub.profiles?.email}</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name||editSub.profiles?.email}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={editForm.amount} onChange={e => setEditForm(p=>({...p,amount:e.target.value}))} /></div>
+          <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={editForm.amount} onChange={e=>setEditForm(p=>({...p,amount:e.target.value}))} /></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div><label className="input-label">Last Paid Date</label><input className="input" type="date" value={editForm.last_paid_date} onChange={e => setEditForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
-            <div><label className="input-label">Next Due Date</label><input className="input" type="date" value={editForm.next_due_date} onChange={e => setEditForm(p=>({...p,next_due_date:e.target.value}))} /></div>
+            <div><label className="input-label">Last Paid</label><input className="input" type="date" value={editForm.last_paid_date} onChange={e=>setEditForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
+            <div><label className="input-label">Next Due</label><input className="input" type="date" value={editForm.next_due_date} onChange={e=>setEditForm(p=>({...p,next_due_date:e.target.value}))} /></div>
           </div>
-          <div><label className="input-label">Notes</label><input className="input" value={editForm.notes} onChange={e => setEditForm(p=>({...p,notes:e.target.value}))} /></div>
+          <div><label className="input-label">Notes</label><input className="input" value={editForm.notes} onChange={e=>setEditForm(p=>({...p,notes:e.target.value}))} /></div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving?"Saving...":"Save Changes"}</button>
-            <button onClick={() => setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving?"Saving...":"Save"}</button>
+            <button onClick={()=>setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
           </div>
         </div>
       </div>
     </div>}
-
     {showAdd && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div className="card" style={{ width: 440, padding: 28 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Subscription</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div><label className="input-label">Client</label>
-            <select className="input" value={addForm.user_id} onChange={e => setAddForm(p=>({...p,user_id:e.target.value}))}>
-              <option value="">— Select client —</option>
-              {clients.filter(c => !subs.find(s=>s.user_id===c.id)).map(c => <option key={c.id} value={c.id}>{c.full_name||c.email}{c.company_name?` (${c.company_name})`:""}</option>)}
+            <select className="input" value={addForm.user_id} onChange={e=>setAddForm(p=>({...p,user_id:e.target.value}))}>
+              <option value="">— Select —</option>
+              {clients.filter(c=>!subs.find(s=>s.user_id===c.id)).map(c=><option key={c.id} value={c.id}>{c.full_name||c.email}{c.company_name?` (${c.company_name})`:""}</option>)}
             </select>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={addForm.amount} onChange={e => setAddForm(p=>({...p,amount:e.target.value}))} /></div>
-            <div><label className="input-label">Last Paid Date</label><input className="input" type="date" value={addForm.last_paid_date} onChange={e => setAddForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
+            <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={addForm.amount} onChange={e=>setAddForm(p=>({...p,amount:e.target.value}))} /></div>
+            <div><label className="input-label">Last Paid</label><input className="input" type="date" value={addForm.last_paid_date} onChange={e=>setAddForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
           </div>
-          <div><label className="input-label">Notes (optional)</label><input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e => setAddForm(p=>({...p,notes:e.target.value}))} /></div>
+          <div><label className="input-label">Notes</label><input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e=>setAddForm(p=>({...p,notes:e.target.value}))} /></div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving?"Saving...":"Add Subscription"}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving?"Saving...":"Add"}</button>
+            <button onClick={()=>setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
           </div>
         </div>
       </div>
