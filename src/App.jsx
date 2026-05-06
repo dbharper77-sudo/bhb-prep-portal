@@ -3563,7 +3563,7 @@ function AdminPortal() {
 }
 
 // Admin - All Clients List
-function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
+function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidationSales, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
   const [clientOrder, setClientOrder] = useState([]);
   const [dragId, setDragId] = useState(null);
@@ -3717,6 +3717,15 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const cl = liquidation.filter(l => l.user_id === c.id);
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
+          const clientSales = (liquidationSales || []).filter(s => s.user_id === c.id && !s.paid);
+          const now = new Date();
+          const m1 = { month: now.getMonth(), year: now.getFullYear() };
+          const m2m = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+          const m2y = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+          const m2 = { month: m2m, year: m2y };
+          const lastDay = (m) => new Date(m.year, m.month + 1, 0).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+          const payoutM1 = clientSales.filter(s => { if (!s.payout_date) return false; const d = new Date(s.payout_date + "T12:00:00"); return d.getMonth() === m1.month && d.getFullYear() === m1.year; }).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+          const payoutM2 = clientSales.filter(s => { if (!s.payout_date) return false; const d = new Date(s.payout_date + "T12:00:00"); return d.getMonth() === m2.month && d.getFullYear() === m2.year; }).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
           const today = new Date(); today.setHours(0,0,0,0);
           const paymentDue = (() => {
             if (c.next_payment_date) return new Date(c.next_payment_date) <= today;
@@ -3768,6 +3777,18 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Liq Pending</div>
                 </div>
               </div>
+              {(payoutM1 > 0 || payoutM2 > 0) && (
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  {payoutM1 > 0 && <div style={{ flex: 1, padding: "8px 10px", background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>£{payoutM1.toFixed(2)}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {lastDay(m1)}</div>
+                  </div>}
+                  {payoutM2 > 0 && <div style={{ flex: 1, padding: "8px 10px", background: "rgba(0,229,255,0.06)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--cyan)" }}>£{payoutM2.toFixed(2)}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {lastDay(m2)}</div>
+                  </div>}
+                </div>
+              )}
             </div>
           );
         })}
