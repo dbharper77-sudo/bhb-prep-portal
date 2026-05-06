@@ -180,7 +180,7 @@ const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product",
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
 function formatShortDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
-function getPayoutDate(soldDate) { if (!soldDate) return null; const d = new Date(soldDate); d.setDate(d.getDate() + 35); return d; }
+function getPayoutDate(soldDate) { if (!soldDate) return null; const d = new Date(soldDate); return new Date(d.getFullYear(), d.getMonth() + 2, 0); }
 function calculatePayout(item) {
   if (!item.sale_price) return { payout: 0, totalFees: 0 };
   const sale = parseFloat(item.sale_price) || 0;
