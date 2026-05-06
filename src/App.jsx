@@ -2035,6 +2035,7 @@ function AdminLiquidationPage({ token, showToast }) {
     setLoading(true);
     const [l, c, s] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=user_id,payout,payout_date,paid&order=payout_date.asc`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json())
     ]);
@@ -3478,21 +3479,24 @@ function AdminPortal() {
   const [parcels, setParcels] = useState([]);
   const [shipments, setShipments] = useState([]);
   const [liquidation, setLiquidation] = useState([]);
+  const [liquidationSales, setLiquidationSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const showToast = useCallback(msg => setToast(msg), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [c, p, s, l] = await Promise.all([
+    const [c, p, s, l, ls] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/parcels?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/shipments?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json())
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=user_id,payout,payout_date,paid&order=payout_date.asc`, { headers: supabase.headers(token) }).then(r => r.json())
     ]);
     if (Array.isArray(c)) setClients(c.filter(x => x.email !== ADMIN_EMAIL));
     if (Array.isArray(p)) setParcels(p);
     if (Array.isArray(s)) setShipments(s);
     if (Array.isArray(l)) setLiquidation(l);
+    if (Array.isArray(ls)) setLiquidationSales(ls);
     setLoading(false);
   }, [token]);
 
@@ -3530,7 +3534,7 @@ function AdminPortal() {
         onBack={backToClients}
       />;
     }
-    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
+    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} liquidationSales={liquidationSales} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
   };
 
   return (
