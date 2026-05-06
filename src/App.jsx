@@ -2671,7 +2671,6 @@ function AdminTrackerPage() {
         // Deal sheet — pull from deal_subscription_payments (proper payment log)
         const dealRes = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments?select=amount,paid_date`, { headers });
         const dealSubs = await dealRes.json();
-        const dealSubs = await dealRes.json();
 
         const calcShip = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees)||0);
 
