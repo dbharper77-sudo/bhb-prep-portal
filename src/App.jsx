@@ -3697,8 +3697,11 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
             acc[key] += parseFloat(s.payout) || 0;
             return acc;
           }, {});
-          // Sort dates ascending, take the next 2 upcoming (including past-due)
-          const sortedPayoutDates = Object.keys(payoutsByDate).sort();
+          // Only show payout dates that are on/after the first of the current month
+          const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+          const firstOfThisMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+          const cutoffISO = firstOfThisMonth.toISOString().split("T")[0];
+          const sortedPayoutDates = Object.keys(payoutsByDate).filter(d => d >= cutoffISO).sort();
           const upcomingPayouts = sortedPayoutDates.slice(0, 2).map(date => ({
             date,
             amount: payoutsByDate[date],
@@ -3756,6 +3759,13 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
                     <div key={p.date} style={{ flex: 1, padding: "8px 10px", background: idx === 0 ? "rgba(0,230,118,0.08)" : "rgba(0,229,255,0.06)", border: idx === 0 ? "1px solid rgba(0,230,118,0.2)" : "1px solid rgba(0,229,255,0.15)", borderRadius: 8, textAlign: "center" }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: idx === 0 ? "var(--green)" : "var(--cyan)" }}>£{p.amount.toFixed(2)}</div>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {p.label}</div>
+                      <button onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Mark all £${p.amount.toFixed(2)} due ${p.label} as paid for ${c.full_name || c.email}?`)) return;
+                        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${c.id}&payout_date=eq.${p.date}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) });
+                        showToast(`Marked £${p.amount.toFixed(2)} as paid`);
+                        onRefresh();
+                      }} style={{ marginTop: 6, padding: "3px 8px", background: "transparent", border: `1px solid ${idx === 0 ? "var(--green)" : "var(--cyan)"}`, color: idx === 0 ? "var(--green)" : "var(--cyan)", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>✓ Mark Paid</button>
                     </div>
                   ))}
                 </div>
