@@ -3573,6 +3573,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
   const [dragOverId, setDragOverId] = useState(null);
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const saveSetting = async (key, value) => {
     const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { headers: supabase.headers(token) }).then(r => r.json());
@@ -3629,11 +3630,22 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
     return ordered;
   }, [clients, clientOrder]);
 
-  const filteredClients = sortedClients.filter(c => 
-    c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.company_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredClients = sortedClients.filter(c => {
+    const matchesSearch = c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.company_name?.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (typeFilter === "all") return true;
+    return (c.client_type || "prep") === typeFilter;
+  });
+
+  // Counts per type (excluding search) — for tab labels
+  const typeCounts = sortedClients.reduce((acc, c) => {
+    const t = c.client_type || "prep";
+    acc[t] = (acc[t] || 0) + 1;
+    acc.all = (acc.all || 0) + 1;
+    return acc;
+  }, {});
 
   const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
   const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
@@ -3674,6 +3686,12 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setTypeFilter("all")} className={`btn ${typeFilter === "all" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>All ({typeCounts.all || 0})</button>
+        <button onClick={() => setTypeFilter("prep")} className={`btn ${typeFilter === "prep" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Prep ({typeCounts.prep || 0})</button>
+        <button onClick={() => setTypeFilter("dealsheet")} className={`btn ${typeFilter === "dealsheet" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Deal Sheet ({typeCounts.dealsheet || 0})</button>
+        <button onClick={() => setTypeFilter("liquidation")} className={`btn ${typeFilter === "liquidation" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Liquidation ({typeCounts.liquidation || 0})</button>
+      </div>
       <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <div className="search-bar" style={{ flex: 1 }}><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div style={{ display: "flex", gap: 4 }}>
@@ -3727,7 +3745,18 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
-                <div style={{ display: "flex", gap: 4 }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                  <select value={c.client_type || "prep"} onChange={async (e) => {
+                    e.stopPropagation();
+                    const newType = e.target.value;
+                    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${c.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ client_type: newType }) });
+                    showToast(`Set to ${newType}`);
+                    onRefresh();
+                  }} style={{ padding: "4px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+                    <option value="prep">Prep</option>
+                    <option value="dealsheet">Deal Sheet</option>
+                    <option value="liquidation">Liquidation</option>
+                  </select>
                   <button className="btn-icon" onClick={(e) => toggleArchive(e, c.id)} title={archivedIds.includes(c.id) ? "Unarchive client" : "Archive client"} style={{ color: archivedIds.includes(c.id) ? "var(--cyan)" : "var(--text-muted)", fontSize: 14 }}>{archivedIds.includes(c.id) ? "↩" : "🗂"}</button>
                   <button className="btn-icon btn-danger" onClick={(e) => deleteClient(e, c.id)} title="Delete client"><Icons.Trash /></button>
                 </div>
