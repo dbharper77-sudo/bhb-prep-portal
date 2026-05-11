@@ -3697,10 +3697,10 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
             acc[key] += parseFloat(s.payout) || 0;
             return acc;
           }, {});
-          // Only show payout dates that are on/after the first of the current month
+          // Show payout dates from the first of LAST month onwards (so past-due items remain visible to clean up)
           const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-          const firstOfThisMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-          const cutoffISO = firstOfThisMonth.toISOString().split("T")[0];
+          const firstOfLastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
+          const cutoffISO = firstOfLastMonth.toISOString().split("T")[0];
           const sortedPayoutDates = Object.keys(payoutsByDate).filter(d => d >= cutoffISO).sort();
           const upcomingPayouts = sortedPayoutDates.slice(0, 2).map(date => ({
             date,
@@ -3759,13 +3759,6 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
                     <div key={p.date} style={{ flex: 1, padding: "8px 10px", background: idx === 0 ? "rgba(0,230,118,0.08)" : "rgba(0,229,255,0.06)", border: idx === 0 ? "1px solid rgba(0,230,118,0.2)" : "1px solid rgba(0,229,255,0.15)", borderRadius: 8, textAlign: "center" }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: idx === 0 ? "var(--green)" : "var(--cyan)" }}>£{p.amount.toFixed(2)}</div>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {p.label}</div>
-                      <button onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!confirm(`Mark all £${p.amount.toFixed(2)} due ${p.label} as paid for ${c.full_name || c.email}?`)) return;
-                        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${c.id}&payout_date=eq.${p.date}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) });
-                        showToast(`Marked £${p.amount.toFixed(2)} as paid`);
-                        onRefresh();
-                      }} style={{ marginTop: 6, padding: "3px 8px", background: "transparent", border: `1px solid ${idx === 0 ? "var(--green)" : "var(--cyan)"}`, color: idx === 0 ? "var(--green)" : "var(--cyan)", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>✓ Mark Paid</button>
                     </div>
                   ))}
                 </div>
@@ -5342,7 +5335,39 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>}
 
       {/* Sales Tab */}
-      {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {activeTab === "sales" && (() => {
+        // Build pending payout summary
+        const unpaidSales = sales.filter(s => !s.paid && s.payout_date);
+        const payoutGroups = unpaidSales.reduce((acc, s) => {
+          const key = s.payout_date;
+          if (!acc[key]) acc[key] = { total: 0, count: 0 };
+          acc[key].total += parseFloat(s.payout) || 0;
+          acc[key].count += 1;
+          return acc;
+        }, {});
+        const pendingDates = Object.keys(payoutGroups).sort();
+        return <>
+          {pendingDates.length > 0 && <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Pending Payouts</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {pendingDates.map(date => {
+                const grp = payoutGroups[date];
+                const label = new Date(date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                return <div key={date} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Due {label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{grp.total.toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{grp.count} sale{grp.count === 1 ? "" : "s"}</div>
+                  <button onClick={async () => {
+                    if (!confirm(`Mark all £${grp.total.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}) as paid?`)) return;
+                    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${date}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) });
+                    showToast(`Marked £${grp.total.toFixed(2)} as paid`);
+                    loadSales(); onRefresh();
+                  }} style={{ marginTop: 8, padding: "6px 12px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>✓ Mark All Paid</button>
+                </div>;
+              })}
+            </div>
+          </div>}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales recorded yet.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>eBay Order ID</th><th>Logged At</th><th>Paid</th></tr></thead>
@@ -5373,7 +5398,9 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             </tr>;
           })}</tbody>
         </table></div>}
-      </div>}
+      </div>
+        </>;
+      })()}
 
       {/* Add Stock Modal */}
       {showAddStock && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
