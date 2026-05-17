@@ -3050,13 +3050,27 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
       }));
   }, [liquidation, clientById]);
 
-  // SOLD: all sales rows
+  // Build a stock lookup by id so we can fall back from snapshot fields
+  // (older sales rows may not have product_name_snapshot populated)
+  const stockById = useMemo(() => {
+    const map = {};
+    (liquidation || []).forEach(s => { map[s.id] = s; });
+    return map;
+  }, [liquidation]);
+
+  // SOLD: all sales rows, with fallback to original stock record when snapshots are missing
   const soldItems = useMemo(() => {
-    return (allSales || []).map(s => ({
-      ...s,
-      client: clientById[s.user_id] || null
-    }));
-  }, [allSales, clientById]);
+    return (allSales || []).map(s => {
+      const stockItem = stockById[s.stock_id];
+      return {
+        ...s,
+        client: clientById[s.user_id] || null,
+        display_product: s.product_name_snapshot || stockItem?.product_name || "—",
+        display_sku: s.dbh_sku_snapshot || stockItem?.dbh_sku || "",
+        display_asin: s.asin_snapshot || stockItem?.asin || ""
+      };
+    });
+  }, [allSales, clientById, stockById]);
 
   const filterAndSort = (items, kind) => {
     let out = items;
@@ -3067,24 +3081,39 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i => {
-        const name = (i.product_name || i.product_name_snapshot || "").toLowerCase();
-        const sku = (i.dbh_sku || i.dbh_sku_snapshot || "").toLowerCase();
-        const asin = (i.asin || i.asin_snapshot || "").toLowerCase();
+        const name = (i.product_name || i.display_product || i.product_name_snapshot || "").toLowerCase();
+        const sku = (i.dbh_sku || i.display_sku || i.dbh_sku_snapshot || "").toLowerCase();
+        const asin = (i.asin || i.display_asin || i.asin_snapshot || "").toLowerCase();
         const lpn = (i.lpn_number || "").toLowerCase();
         const clientName = (i.client?.full_name || i.client?.email || "").toLowerCase();
         return name.includes(q) || sku.includes(q) || asin.includes(q) || lpn.includes(q) || clientName.includes(q);
       });
     }
-    if (kind === "listed") {
-      if (sortBy === "newest") out = [...out].sort((a, b) => new Date(b.date_added || b.created_at || 0) - new Date(a.date_added || a.created_at || 0));
-      if (sortBy === "oldest") out = [...out].sort((a, b) => new Date(a.date_added || a.created_at || 0) - new Date(b.date_added || b.created_at || 0));
-      if (sortBy === "client") out = [...out].sort((a, b) => (a.client?.full_name || "").localeCompare(b.client?.full_name || ""));
-      if (sortBy === "name") out = [...out].sort((a, b) => (a.product_name || "").localeCompare(b.product_name || ""));
-    } else {
-      if (sortBy === "newest") out = [...out].sort((a, b) => new Date(b.date_sold || 0) - new Date(a.date_sold || 0));
-      if (sortBy === "oldest") out = [...out].sort((a, b) => new Date(a.date_sold || 0) - new Date(b.date_sold || 0));
-      if (sortBy === "client") out = [...out].sort((a, b) => (a.client?.full_name || "").localeCompare(b.client?.full_name || ""));
-      if (sortBy === "payout") out = [...out].sort((a, b) => (parseFloat(b.payout) || 0) - (parseFloat(a.payout) || 0));
+    // Sort — always handle all options regardless of tab, fall through to newest as default
+    const dateOf = (i) => kind === "listed"
+      ? new Date(i.date_added || i.created_at || 0)
+      : new Date(i.date_sold || 0);
+    const nameOf = (i) => (i.product_name || i.display_product || i.product_name_snapshot || "");
+    switch (sortBy) {
+      case "oldest":
+        out = [...out].sort((a, b) => dateOf(a) - dateOf(b));
+        break;
+      case "client":
+        out = [...out].sort((a, b) => (a.client?.full_name || a.client?.email || "").localeCompare(b.client?.full_name || b.client?.email || ""));
+        break;
+      case "name":
+        out = [...out].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+        break;
+      case "payout":
+        out = [...out].sort((a, b) => (parseFloat(b.payout) || 0) - (parseFloat(a.payout) || 0));
+        break;
+      case "sale":
+        out = [...out].sort((a, b) => (parseFloat(b.sale_price) || 0) - (parseFloat(a.sale_price) || 0));
+        break;
+      case "newest":
+      default:
+        out = [...out].sort((a, b) => dateOf(b) - dateOf(a));
+        break;
     }
     return out;
   };
@@ -3224,8 +3253,8 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
 
         {/* Tabs */}
         <div className="service-tabs" style={{ marginBottom: 20, border: "1px solid var(--border)", borderRadius: 12, padding: 6, maxWidth: 320 }}>
-          <button className={`service-tab ${tab === "listed" ? "active liquidation" : ""}`} onClick={() => setTab("listed")}>📦 Listed ({listedItems.length})</button>
-          <button className={`service-tab ${tab === "sold" ? "active liquidation" : ""}`} onClick={() => setTab("sold")}>💰 Sold ({soldItems.length})</button>
+          <button className={`service-tab ${tab === "listed" ? "active liquidation" : ""}`} onClick={() => { setTab("listed"); setSortBy("newest"); }}>📦 Listed ({listedItems.length})</button>
+          <button className={`service-tab ${tab === "sold" ? "active liquidation" : ""}`} onClick={() => { setTab("sold"); setSortBy("newest"); }}>💰 Sold ({soldItems.length})</button>
         </div>
 
         {/* Filters */}
@@ -3249,8 +3278,9 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
               <option value="client">By client</option>
-              {tab === "listed" && <option value="name">By name</option>}
-              {tab === "sold" && <option value="payout">By payout</option>}
+              <option value="name">By product name</option>
+              {tab === "sold" && <option value="payout">By payout (high→low)</option>}
+              {tab === "sold" && <option value="sale">By sale price (high→low)</option>}
             </select>
           </div>
         </div>
@@ -3298,11 +3328,14 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                 <thead>
                   <tr>
                     <th>Client</th>
-                    <th>Product</th>
                     <th>Date Sold</th>
+                    <th>Product</th>
                     <th>Qty</th>
                     <th>Sale £</th>
-                    <th>DBH Fee</th>
+                    <th>Net Sale</th>
+                    <th>DBH %</th>
+                    <th>DBH £</th>
+                    <th>Fixed</th>
                     <th>Payout</th>
                     <th>Payout Date</th>
                     <th>Paid</th>
@@ -3310,18 +3343,21 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                 </thead>
                 <tbody>
                   {dispSold.length === 0 ? (
-                    <tr><td colSpan={9} className="empty-state"><p>No sales match your filters.</p></td></tr>
+                    <tr><td colSpan={12} className="empty-state"><p>No sales match your filters.</p></td></tr>
                   ) : dispSold.map(s => (
                     <tr key={s.id}>
                       <td><span className="badge badge-pending">{s.client?.full_name || s.client?.email || "—"}</span></td>
-                      <td style={{ maxWidth: 320 }}>{s.product_name_snapshot || "—"}</td>
                       <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
+                      <td style={{ fontWeight: 600, fontSize: 12, maxWidth: 280 }}>{s.display_product}</td>
                       <td className="mono">{s.qty_sold || 1}</td>
                       <td className="mono">£{(parseFloat(s.sale_price) || 0).toFixed(2)}</td>
-                      <td className="mono" style={{ color: "var(--orange)" }}>£{(parseFloat(s.dbh_fee) || 0).toFixed(2)}</td>
-                      <td className="mono" style={{ color: "var(--green)" }}>£{(parseFloat(s.payout) || 0).toFixed(2)}</td>
+                      <td className="mono">£{(parseFloat(s.net_sale) || 0).toFixed(2)}</td>
+                      <td className="mono">{s.dbh_pct ? `${s.dbh_pct}%` : "—"}</td>
+                      <td className="mono" style={{ color: "var(--red)" }}>£{(parseFloat(s.dbh_fee) || 0).toFixed(2)}</td>
+                      <td className="mono" style={{ color: "var(--red)" }}>£{(parseFloat(s.fixed_fee) || 0).toFixed(2)}</td>
+                      <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{(parseFloat(s.payout) || 0).toFixed(2)}</td>
                       <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
-                      <td>{s.paid ? <span className="badge badge-paid">Paid</span> : <span className="badge badge-pending">Pending</span>}</td>
+                      <td style={{ textAlign: "center" }}>{s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <span style={{ color: "var(--amber)", fontSize: 12 }}>Pending</span>}</td>
                     </tr>
                   ))}
                 </tbody>
