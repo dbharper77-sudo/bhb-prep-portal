@@ -3154,20 +3154,18 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
   const totalSoldPayout = soldItems.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
   const totalDbhFees = soldItems.reduce((sum, s) => sum + (parseFloat(s.dbh_fee) || 0), 0);
 
-  // Sale calculation (mirrors the per-client logic)
+  // Sale calculation (mirrors the per-client logic on line ~5590)
+  // Tiers: net >= £200 → 10%, otherwise 15%. Flat £0.40 fixed fee unless overridden.
   const calcSale = (form) => {
     const sale = parseFloat(form.sale_price) || 0;
-    const fees = parseFloat(form.ebay_fees) || 0;
+    const ebay = parseFloat(form.ebay_fees) || 0;
     const ship = parseFloat(form.shipping) || 0;
     const fixed = parseFloat(form.fixed_fee) || 0.40;
-    const net = sale - fees - ship;
-    let pct = 0;
-    if (net <= 25) pct = 0.20;
-    else if (net <= 100) pct = 0.15;
-    else pct = 0.10;
-    const fee = net * pct + fixed;
-    const payout = net - fee;
-    return { net, pct, fee, payout };
+    const net = sale - ebay - ship;
+    const pct = net >= 200 ? 0.10 : 0.15;
+    const fee = net * pct;
+    const payout = net - fee - fixed;
+    return { net, pct, fee, fixed, payout };
   };
 
   const openLogSale = (item) => {
@@ -3414,10 +3412,11 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                 <div className="input-group" style={{ gridColumn: "1 / -1" }}><label className="input-label">eBay Order ID (optional)</label><input className="input" value={saleForm.ebay_order_id} onChange={e => setSaleForm({ ...saleForm, ebay_order_id: e.target.value })} /></div>
               </div>
               {c && saleForm.sale_price && (
-                <div style={{ background: "var(--bg-primary)", borderRadius: 10, padding: 14, marginTop: 8, marginBottom: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, fontSize: 13 }}>
+                <div style={{ background: "var(--bg-primary)", borderRadius: 10, padding: 14, marginTop: 8, marginBottom: 16, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, fontSize: 13 }}>
                   <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Net Sale</div><div className="mono">£{c.net.toFixed(2)}</div></div>
                   <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH %</div><div className="mono">{(c.pct * 100).toFixed(0)}%</div></div>
-                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH Fee</div><div className="mono" style={{ color: "var(--orange)" }}>£{c.fee.toFixed(2)}</div></div>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH £</div><div className="mono" style={{ color: "var(--orange)" }}>£{c.fee.toFixed(2)}</div></div>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Fixed</div><div className="mono" style={{ color: "var(--orange)" }}>£{c.fixed.toFixed(2)}</div></div>
                   <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Payout</div><div className="mono" style={{ color: "var(--green)" }}>£{c.payout.toFixed(2)}</div></div>
                 </div>
               )}
