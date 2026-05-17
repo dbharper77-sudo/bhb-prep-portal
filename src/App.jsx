@@ -3028,9 +3028,27 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
   const [logSaleItem, setLogSaleItem] = useState(null);
   const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40", ebay_order_id: "" });
   const [saleSaving, setSaleSaving] = useState(false);
-  const [allSales, setAllSales] = useState(liquidationSales || []);
+  const [allSales, setAllSales] = useState([]);
+  const [salesLoading, setSalesLoading] = useState(true);
 
-  useEffect(() => { setAllSales(liquidationSales || []); }, [liquidationSales]);
+  // The parent admin component loads liquidation_sales with only 4 columns for performance.
+  // For the Master Stock page we need the full row, so fetch it ourselves.
+  const loadFullSales = async () => {
+    if (!token) return;
+    setSalesLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=*&order=date_sold.desc.nullslast`, {
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setAllSales(data);
+    } catch (e) {
+      console.error("Master stock — load full sales failed:", e);
+    }
+    setSalesLoading(false);
+  };
+
+  useEffect(() => { loadFullSales(); }, [token]);
 
   // Build a quick lookup: user_id -> client object
   const clientById = useMemo(() => {
@@ -3207,6 +3225,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
       }
       showToast("Sale logged!");
       setLogSaleItem(null);
+      await loadFullSales();
       if (onRefresh) await onRefresh();
     } catch (e) {
       console.error("Master stock sale log error:", e);
@@ -3342,7 +3361,9 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                   </tr>
                 </thead>
                 <tbody>
-                  {dispSold.length === 0 ? (
+                  {salesLoading ? (
+                    <tr><td colSpan={12} className="empty-state"><p>Loading sales...</p></td></tr>
+                  ) : dispSold.length === 0 ? (
                     <tr><td colSpan={12} className="empty-state"><p>No sales match your filters.</p></td></tr>
                   ) : dispSold.map(s => (
                     <tr key={s.id}>
