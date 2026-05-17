@@ -3103,8 +3103,9 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
         const sku = (i.dbh_sku || i.display_sku || i.dbh_sku_snapshot || "").toLowerCase();
         const asin = (i.asin || i.display_asin || i.asin_snapshot || "").toLowerCase();
         const lpn = (i.lpn_number || "").toLowerCase();
+        const orderId = (i.ebay_order_id || "").toLowerCase();
         const clientName = (i.client?.full_name || i.client?.email || "").toLowerCase();
-        return name.includes(q) || sku.includes(q) || asin.includes(q) || lpn.includes(q) || clientName.includes(q);
+        return name.includes(q) || sku.includes(q) || asin.includes(q) || lpn.includes(q) || orderId.includes(q) || clientName.includes(q);
       });
     }
     // Sort — always handle all options regardless of tab, fall through to newest as default
@@ -3281,7 +3282,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 12 }}>
             <div className="search-bar" style={{ maxWidth: "none" }}>
               <Icons.Search />
-              <input placeholder="Search product, SKU, ASIN, LPN, or client..." value={search} onChange={e => setSearch(e.target.value)} />
+              <input placeholder="Search product, SKU, ASIN, LPN, order ID, or client..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <select className="input" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
               <option value="all">All clients</option>
@@ -3349,6 +3350,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                     <th>Client</th>
                     <th>Date Sold</th>
                     <th>Product</th>
+                    <th>Order ID</th>
                     <th>Qty</th>
                     <th>Sale £</th>
                     <th>Net Sale</th>
@@ -3362,14 +3364,17 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                 </thead>
                 <tbody>
                   {salesLoading ? (
-                    <tr><td colSpan={12} className="empty-state"><p>Loading sales...</p></td></tr>
+                    <tr><td colSpan={13} className="empty-state"><p>Loading sales...</p></td></tr>
                   ) : dispSold.length === 0 ? (
-                    <tr><td colSpan={12} className="empty-state"><p>No sales match your filters.</p></td></tr>
+                    <tr><td colSpan={13} className="empty-state"><p>No sales match your filters.</p></td></tr>
                   ) : dispSold.map(s => (
                     <tr key={s.id}>
                       <td><span className="badge badge-pending">{s.client?.full_name || s.client?.email || "—"}</span></td>
                       <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
                       <td style={{ fontWeight: 600, fontSize: 12, maxWidth: 280 }}>{s.display_product}</td>
+                      <td className="mono" style={{ fontSize: 11 }}>{s.ebay_order_id ? (
+                        <span title="Click to copy" style={{ cursor: "pointer" }} onClick={() => { navigator.clipboard?.writeText(s.ebay_order_id); showToast("Order ID copied"); }}>{s.ebay_order_id}</span>
+                      ) : "—"}</td>
                       <td className="mono">{s.qty_sold || 1}</td>
                       <td className="mono">£{(parseFloat(s.sale_price) || 0).toFixed(2)}</td>
                       <td className="mono">£{(parseFloat(s.net_sale) || 0).toFixed(2)}</td>
