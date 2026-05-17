@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useCallback } from "react";
+import React, { useState, useEffect, useMemo, createContext, useContext, useCallback } from "react";
 
 const SUPABASE_URL = "https://cccsreyspmpwnfbmegwz.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjY3NyZXlzcG1wd25mYm1lZ3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMDk4MzQsImV4cCI6MjA4NTg4NTgzNH0.dk5dPqk7EXBxHZHOX6_mxNxpheNuHD4SAKGDorCuSa8";
@@ -180,7 +180,12 @@ const ATTENTION_REASONS = ["Damaged", "Gated", "Missing Items", "Wrong Product",
 
 function formatDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
 function formatShortDate(d) { if (!d) return "—"; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
-function getPayoutDate(soldDate) { if (!soldDate) return null; const d = new Date(soldDate); d.setDate(d.getDate() + 35); return d; }
+function getPayoutDate(soldDate) {
+  if (!soldDate) return null;
+  const d = new Date(soldDate);
+  // End of the month AFTER the sale month — e.g. sold April → end of May
+  return new Date(d.getFullYear(), d.getMonth() + 2, 0);
+}
 function calculatePayout(item) {
   if (!item.sale_price) return { payout: 0, totalFees: 0 };
   const sale = parseFloat(item.sale_price) || 0;
@@ -368,60 +373,6 @@ function LiquidationMonthlyChart({ data }) {
 }
 
 // Auth
-function ResetPasswordPage({ accessToken }) {
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-
-  const handleReset = async () => {
-    setError("");
-    if (!password || password.length < 6) return setError("Password must be at least 6 characters");
-    if (password !== confirm) return setError("Passwords don't match");
-    setLoading(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${accessToken}` },
-        body: JSON.stringify({ password })
-      });
-      const data = await res.json();
-      if (data.error || data.error_description) throw new Error(data.error_description || data.error || "Failed to update password");
-      setDone(true);
-      setTimeout(() => { window.location.href = window.location.origin; }, 2500);
-    } catch (e) { setError(e.message); }
-    setLoading(false);
-  };
-
-  return (
-    <div className="auth-wrapper"><div className="auth-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}>
-        <div className="sidebar-logo-icon">DBH</div>
-        <div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div>
-      </div>
-      <div className="auth-title">Set New Password</div>
-      <div className="auth-sub">Choose a new password for your account</div>
-      {done ? (
-        <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>
-          ✓ Password updated! Redirecting to login...
-        </div>
-      ) : <>
-        {error && <div className="auth-error">{error}</div>}
-        <div className="input-group" style={{ marginTop: 16 }}>
-          <label className="input-label">New Password</label>
-          <input className="input" type="password" placeholder="Min 6 characters" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
-        </div>
-        <div className="input-group">
-          <label className="input-label">Confirm Password</label>
-          <input className="input" type="password" placeholder="Repeat new password" value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
-        </div>
-        <button className="btn btn-primary auth-btn" onClick={handleReset} disabled={loading}>{loading ? "Updating..." : "Set New Password"}</button>
-      </>}
-    </div></div>
-  );
-}
-
 function LoginPage() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -800,7 +751,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales }) {
         <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
       </div>
-      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — 35 days after sale</div></div>}
+      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — paid end of following month</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
         <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
@@ -1005,7 +956,7 @@ function LiquidationFeesPage() {
     <><div className="page-header"><div><div className="page-title">Liquidation Fees</div><div className="page-subtitle">Transparent pricing</div></div></div>
     <div className="page-body">
       <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "15%", d: "10% if ≥£200", i: "💰", vat: false }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦", vat: true }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩", vat: true }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏", vat: true }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p} {f.vat && <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span>}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
-      <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts 35 days after sale to allow for returns.</p></div>
+      <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts at end of the following month to allow for returns.</p></div>
     </div></>
   );
 }
@@ -2116,14 +2067,12 @@ function AdminLiquidationPage({ token, showToast }) {
       const clientWebhook = client?.discord_webhook || webhookUrl;
       if (clientWebhook) {
         const payout = calculatePayout({ ...oldItem, ...dataToSave });
-        const payoutDate = new Date(dataToSave.date_sold);
-        payoutDate.setDate(payoutDate.getDate() + 35);
+        const payoutDate = getPayoutDate(dataToSave.date_sold);
         await sendDiscordNotification(clientWebhook, null, {
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
@@ -2689,7 +2638,6 @@ const INCOME_STREAMS = [
   { id: "liquidation", label: "Liquidation", icon: "🔄", color: "var(--orange)" },
   { id: "dealsheet",   label: "Deal Sheet",  icon: "📋", color: "#a78bfa" },
   { id: "fba",         label: "FBA",         icon: "🛒", color: "var(--green)" },
-  { id: "evri",        label: "Evri Job",    icon: "🚚", color: "#f97316" },
 ];
 const EXPENSE_CATS = ["Cost of Goods","Software/Subs","Packaging","Fuel/Travel","Other"];
 
@@ -2724,10 +2672,15 @@ function AdminTrackerPage() {
         const liqRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=dbh_fee,date_sold`, { headers });
         const liqSales = await liqRes.json();
 
+        // Deal sheet — pull from deal_subscription_payments (proper payment log)
+        const dealRes = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments?select=amount,paid_date`, { headers });
+        const dealSubs = await dealRes.json();
+
         const calcShip = s => (parseFloat(s.units_prepped)||0)*(parseFloat(s.unit_cost)||0) + (parseFloat(s.box_count)||0)*(parseFloat(s.box_cost)||0) + (parseFloat(s.other_fees)||0);
 
         const ships = Array.isArray(shipments) ? shipments : [];
         const liqItems = Array.isArray(liqSales) ? liqSales : [];
+        const dealItems = Array.isArray(dealSubs) ? dealSubs : [];
 
         const prepMonthly = ships.filter(s => (s.date_shipped || s.created_at || "").slice(0,7) === selectedMonth).reduce((a, s) => a + calcShip(s), 0);
         const prepAllTime = ships.reduce((a, s) => a + calcShip(s), 0);
@@ -2737,10 +2690,33 @@ function AdminTrackerPage() {
         const liqAllTime = liqItems.reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
         const liqWeekly = liqItems.filter(s => s.date_sold && getWeekKey(s.date_sold) === curWeekKey).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
 
+        const dealMonthly = dealItems.filter(s => s.paid_date && getMonthKey(s.paid_date) === selectedMonth).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+        const dealWeekly = dealItems.filter(s => s.paid_date && getWeekKey(s.paid_date) === curWeekKey).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+        const dealAllTime = dealItems.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+
         const curYear = new Date().getFullYear();
         const prepYTD = ships.filter(s => (s.date_shipped || s.created_at || "").slice(0,4) === String(curYear)).reduce((a, s) => a + calcShip(s), 0);
         const liqYTD = liqItems.filter(s => s.date_sold && s.date_sold.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.dbh_fee) || 0), 0);
-        setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, prepYTD, liqYTD, loading: false });
+        const dealYTD = dealItems.filter(s => s.paid_date && s.paid_date.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+
+        // Staff costs — Ian £70 + Wenelyn £70 every Friday since 2 Jan 2026
+        const staffWeeklyRate = 140; // £70 Ian + £70 Wenelyn
+        const staffStart = new Date('2026-01-02'); // First Friday 2026
+        function getFridaysBetween(from, to) {
+          let count = 0; let d = new Date(from);
+          while (d <= to) { if (d.getDay() === 5) count++; d.setDate(d.getDate() + 1); }
+          return count;
+        }
+        const periodStartMonthly = new Date(selectedMonth + '-01');
+        const periodEndMonthly = new Date(new Date(periodStartMonthly).setMonth(periodStartMonthly.getMonth() + 1) - 1);
+        const staffMonthly = getFridaysBetween(Math.max(staffStart, periodStartMonthly), periodEndMonthly) * staffWeeklyRate;
+        const curWeekStart = new Date(curWeekKey); const curWeekEnd = new Date(curWeekKey); curWeekEnd.setDate(curWeekEnd.getDate() + 6);
+        const staffWeekly = getFridaysBetween(Math.max(staffStart, curWeekStart), curWeekEnd) * staffWeeklyRate;
+        const yearStart = new Date(`${new Date().getFullYear()}-01-01`);
+        const today2 = new Date();
+        const staffYTD = getFridaysBetween(Math.max(staffStart, yearStart), today2) * staffWeeklyRate;
+
+        setAutoData({ prepMonthly, prepWeekly, prepAllTime, liqMonthly, liqWeekly, liqAllTime, dealMonthly, dealWeekly, dealAllTime, dealYTD, prepYTD, liqYTD, staffMonthly, staffWeekly, staffYTD, loading: false });
       } catch(e) {
         console.error("Tracker fetch error:", e);
         setAutoData(d => ({ ...d, loading: false }));
@@ -2748,7 +2724,7 @@ function AdminTrackerPage() {
     }
     if (token) fetchAuto();
   }, [token, selectedMonth]);
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"revenue", category:"", amount:"", note:"" });
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", type:"profit", category:"", amount:"", note:"" });
   const [timeForm, setTimeForm] = useState({ date: new Date().toISOString().slice(0,10), stream:"prep", hours:"", note:"" });
 
   useEffect(() => { localStorage.setItem(TKEY, JSON.stringify(data)); }, [data]);
@@ -2776,17 +2752,20 @@ function AdminTrackerPage() {
     let autoRev = 0;
     if (s.id === "prep" && !autoData.loading) autoRev = period === "weekly" ? (autoData.prepWeekly||0) : period === "ytd" ? (autoData.prepYTD||0) : (autoData.prepMonthly||0);
     if (s.id === "liquidation" && !autoData.loading) autoRev = period === "weekly" ? (autoData.liqWeekly||0) : period === "ytd" ? (autoData.liqYTD||0) : (autoData.liqMonthly||0);
+    if (s.id === "dealsheet" && !autoData.loading) autoRev = period === "weekly" ? (autoData.dealWeekly||0) : period === "ytd" ? (autoData.dealYTD||0) : (autoData.dealMonthly||0);
     const rev = autoRev + manualRev;
     return { ...s, rev, exp, profit: rev-exp, hrs, rate: hrs>0?(rev-exp)/hrs:0, isAuto: autoRev > 0 };
   });
 
   const ytdYear = new Date().getFullYear();
   const manualCumProfit = data.entries.filter(e=>e.type==="profit"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0) - data.entries.filter(e=>e.type==="cost"&&e.date.slice(0,4)===String(ytdYear)).reduce((a,e)=>a+Number(e.amount),0);
-  const autoCumProfit = (autoData.prepYTD||0) + (autoData.liqYTD||0);
+  const autoCumProfit = (autoData.prepYTD||0) + (autoData.liqYTD||0) + (autoData.dealYTD||0) - (autoData.staffYTD||0);
+
+  const staffAutoExp = autoData.loading ? 0 : (period === "weekly" ? (autoData.staffWeekly||0) : period === "ytd" ? (autoData.staffYTD||0) : (autoData.staffMonthly||0));
 
   const totals = {
-    rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0),
-    profit: stats.reduce((a,s)=>a+s.profit,0), hrs: stats.reduce((a,s)=>a+s.hrs,0),
+    rev: stats.reduce((a,s)=>a+s.rev,0), exp: stats.reduce((a,s)=>a+s.exp,0) + staffAutoExp,
+    profit: stats.reduce((a,s)=>a+s.profit,0) - staffAutoExp, hrs: stats.reduce((a,s)=>a+s.hrs,0),
     cumProfit: autoCumProfit + manualCumProfit
   };
 
@@ -2880,6 +2859,14 @@ function AdminTrackerPage() {
               </div>
             </div>
           ))}
+          {staffAutoExp > 0 && <div className="card" style={{borderColor:"var(--red)",borderLeftWidth:3}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontWeight:700,fontSize:15,color:"var(--red)",display:"flex",alignItems:"center",gap:6}}>👥 Staff Costs <span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span></div>
+            </div>
+            <div style={{fontSize:24,fontWeight:700,color:"var(--red)",fontFamily:"'Outfit',sans-serif"}}>-£{staffAutoExp.toFixed(2)}</div>
+            <div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Ian £70 + Wenelyn £70 every Friday</div>
+            <div style={{fontSize:11,color:"var(--text-muted)",marginTop:2}}>Since 2 Jan 2026 · Ongoing</div>
+          </div>}
         </div>
 
         <div className="card" style={{overflowX:"auto"}}>
@@ -3031,6 +3018,359 @@ function AdminTrackerPage() {
     </div>
   );
 }
+// ============ MASTER STOCK (all clients combined) ============
+function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, showToast, onRefresh }) {
+  const [tab, setTab] = useState("listed"); // "listed" | "sold"
+  const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [conditionFilter, setConditionFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+  const [logSaleItem, setLogSaleItem] = useState(null);
+  const [saleForm, setSaleForm] = useState({ date_sold: "", qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40", ebay_order_id: "" });
+  const [saleSaving, setSaleSaving] = useState(false);
+  const [allSales, setAllSales] = useState(liquidationSales || []);
+
+  useEffect(() => { setAllSales(liquidationSales || []); }, [liquidationSales]);
+
+  // Build a quick lookup: user_id -> client object
+  const clientById = useMemo(() => {
+    const map = {};
+    (clients || []).forEach(c => { map[c.id] = c; });
+    return map;
+  }, [clients]);
+
+  // LISTED: items that have been received and still have qty available
+  const listedItems = useMemo(() => {
+    return (liquidation || [])
+      .filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0)
+      .map(i => ({
+        ...i,
+        client: clientById[i.user_id] || null,
+        qty_available: (i.quantity || 1) - (i.qty_sold || 0)
+      }));
+  }, [liquidation, clientById]);
+
+  // SOLD: all sales rows
+  const soldItems = useMemo(() => {
+    return (allSales || []).map(s => ({
+      ...s,
+      client: clientById[s.user_id] || null
+    }));
+  }, [allSales, clientById]);
+
+  const filterAndSort = (items, kind) => {
+    let out = items;
+    if (clientFilter !== "all") out = out.filter(i => i.user_id === clientFilter);
+    if (kind === "listed" && conditionFilter !== "all") {
+      out = out.filter(i => (i.condition || "").toLowerCase() === conditionFilter.toLowerCase());
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter(i => {
+        const name = (i.product_name || i.product_name_snapshot || "").toLowerCase();
+        const sku = (i.dbh_sku || i.dbh_sku_snapshot || "").toLowerCase();
+        const asin = (i.asin || i.asin_snapshot || "").toLowerCase();
+        const lpn = (i.lpn_number || "").toLowerCase();
+        const clientName = (i.client?.full_name || i.client?.email || "").toLowerCase();
+        return name.includes(q) || sku.includes(q) || asin.includes(q) || lpn.includes(q) || clientName.includes(q);
+      });
+    }
+    if (kind === "listed") {
+      if (sortBy === "newest") out = [...out].sort((a, b) => new Date(b.date_added || b.created_at || 0) - new Date(a.date_added || a.created_at || 0));
+      if (sortBy === "oldest") out = [...out].sort((a, b) => new Date(a.date_added || a.created_at || 0) - new Date(b.date_added || b.created_at || 0));
+      if (sortBy === "client") out = [...out].sort((a, b) => (a.client?.full_name || "").localeCompare(b.client?.full_name || ""));
+      if (sortBy === "name") out = [...out].sort((a, b) => (a.product_name || "").localeCompare(b.product_name || ""));
+    } else {
+      if (sortBy === "newest") out = [...out].sort((a, b) => new Date(b.date_sold || 0) - new Date(a.date_sold || 0));
+      if (sortBy === "oldest") out = [...out].sort((a, b) => new Date(a.date_sold || 0) - new Date(b.date_sold || 0));
+      if (sortBy === "client") out = [...out].sort((a, b) => (a.client?.full_name || "").localeCompare(b.client?.full_name || ""));
+      if (sortBy === "payout") out = [...out].sort((a, b) => (parseFloat(b.payout) || 0) - (parseFloat(a.payout) || 0));
+    }
+    return out;
+  };
+
+  const dispListed = useMemo(() => filterAndSort(listedItems, "listed"), [listedItems, search, clientFilter, conditionFilter, sortBy]);
+  const dispSold = useMemo(() => filterAndSort(soldItems, "sold"), [soldItems, search, clientFilter, sortBy]);
+
+  // Distinct conditions across listed items
+  const conditions = useMemo(() => {
+    const set = new Set();
+    listedItems.forEach(i => { if (i.condition) set.add(i.condition); });
+    return Array.from(set).sort();
+  }, [listedItems]);
+
+  // Top-line stats
+  const totalListedUnits = listedItems.reduce((sum, i) => sum + i.qty_available, 0);
+  const totalListedValue = listedItems.reduce((sum, i) => sum + (parseFloat(i.cog) || 0) * i.qty_available, 0);
+  const totalSoldRevenue = soldItems.reduce((sum, s) => sum + (parseFloat(s.sale_price) || 0), 0);
+  const totalSoldPayout = soldItems.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const totalDbhFees = soldItems.reduce((sum, s) => sum + (parseFloat(s.dbh_fee) || 0), 0);
+
+  // Sale calculation (mirrors the per-client logic)
+  const calcSale = (form) => {
+    const sale = parseFloat(form.sale_price) || 0;
+    const fees = parseFloat(form.ebay_fees) || 0;
+    const ship = parseFloat(form.shipping) || 0;
+    const fixed = parseFloat(form.fixed_fee) || 0.40;
+    const net = sale - fees - ship;
+    let pct = 0;
+    if (net <= 25) pct = 0.20;
+    else if (net <= 100) pct = 0.15;
+    else pct = 0.10;
+    const fee = net * pct + fixed;
+    const payout = net - fee;
+    return { net, pct, fee, payout };
+  };
+
+  const openLogSale = (item) => {
+    setLogSaleItem(item);
+    const today = new Date().toISOString().split('T')[0];
+    setSaleForm({ date_sold: today, qty_sold: 1, sale_price: "", ebay_fees: "", shipping: "", fixed_fee: "0.40", ebay_order_id: "" });
+  };
+
+  const submitSale = async () => {
+    if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
+    setSaleSaving(true);
+    const c = calcSale(saleForm);
+    const payoutDate = getPayoutDate(saleForm.date_sold);
+    const payload = {
+      stock_id: logSaleItem.id, user_id: logSaleItem.user_id, date_sold: saleForm.date_sold,
+      qty_sold: parseInt(saleForm.qty_sold) || 1, sale_price: parseFloat(saleForm.sale_price),
+      ebay_fees: parseFloat(saleForm.ebay_fees) || 0, shipping: parseFloat(saleForm.shipping) || 0,
+      net_sale: parseFloat(c.net.toFixed(2)), dbh_pct: parseFloat((c.pct * 100).toFixed(2)),
+      dbh_fee: parseFloat(c.fee.toFixed(2)), fixed_fee: parseFloat(saleForm.fixed_fee) || 0.40,
+      payout: parseFloat(c.payout.toFixed(2)), payout_date: payoutDate.toISOString().split('T')[0], paid: false,
+      ebay_order_id: saleForm.ebay_order_id || null,
+      logged_at: new Date().toISOString(),
+      product_name_snapshot: logSaleItem.product_name || null,
+      asin_snapshot: logSaleItem.asin || null,
+      dbh_sku_snapshot: logSaleItem.dbh_sku || null
+    };
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(payload)
+      });
+      const newQtySold = (logSaleItem.qty_sold || 0) + (parseInt(saleForm.qty_sold) || 1);
+      await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${logSaleItem.id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ qty_sold: newQtySold })
+      });
+      // Optional client Discord notification
+      const hw = logSaleItem.client?.discord_webhook;
+      if (hw) {
+        try {
+          await sendDiscordNotification(hw, null, {
+            title: "💰 ITEM SOLD",
+            color: 0x22c55e,
+            fields: [
+              { name: "Product", value: logSaleItem.product_name || "Item", inline: false },
+              { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true },
+              { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true },
+              { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true },
+              { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
+            ],
+            footer: { text: "Payout at end of following month to allow for returns" }
+          });
+        } catch (e) { /* notify failure non-fatal */ }
+      }
+      showToast("Sale logged!");
+      setLogSaleItem(null);
+      if (onRefresh) await onRefresh();
+    } catch (e) {
+      console.error("Master stock sale log error:", e);
+      showToast("Failed to log sale");
+    }
+    setSaleSaving(false);
+  };
+
+  const c = logSaleItem ? calcSale(saleForm) : null;
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title" style={{ color: "var(--orange)" }}>📦 Master Stock</div>
+          <div className="page-subtitle">All clients' stock and sales in one view — log a sale here and it updates the client's card automatically</div>
+        </div>
+      </div>
+
+      <div className="page-body">
+        {/* Top stats */}
+        <div className="stats-grid">
+          <div className="card stat-card admin">
+            <div className="card-title">Listed Units</div>
+            <div className="stat-value">{totalListedUnits}</div>
+            <div className="stat-label">{listedItems.length} unique items</div>
+          </div>
+          <div className="card stat-card admin">
+            <div className="card-title">Listed COG Value</div>
+            <div className="stat-value">£{totalListedValue.toFixed(0)}</div>
+            <div className="stat-label">at cost</div>
+          </div>
+          <div className="card stat-card admin">
+            <div className="card-title">Total Sold Revenue</div>
+            <div className="stat-value">£{totalSoldRevenue.toFixed(0)}</div>
+            <div className="stat-label">{soldItems.length} sales</div>
+          </div>
+          <div className="card stat-card admin">
+            <div className="card-title">DBH Fees Earned</div>
+            <div className="stat-value">£{totalDbhFees.toFixed(0)}</div>
+            <div className="stat-label">£{totalSoldPayout.toFixed(0)} paid to clients</div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="service-tabs" style={{ marginBottom: 20, border: "1px solid var(--border)", borderRadius: 12, padding: 6, maxWidth: 320 }}>
+          <button className={`service-tab ${tab === "listed" ? "active liquidation" : ""}`} onClick={() => setTab("listed")}>📦 Listed ({listedItems.length})</button>
+          <button className={`service-tab ${tab === "sold" ? "active liquidation" : ""}`} onClick={() => setTab("sold")}>💰 Sold ({soldItems.length})</button>
+        </div>
+
+        {/* Filters */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 12 }}>
+            <div className="search-bar" style={{ maxWidth: "none" }}>
+              <Icons.Search />
+              <input placeholder="Search product, SKU, ASIN, LPN, or client..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <select className="input" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
+              <option value="all">All clients</option>
+              {(clients || []).map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}</option>)}
+            </select>
+            {tab === "listed" && (
+              <select className="input" value={conditionFilter} onChange={e => setConditionFilter(e.target.value)}>
+                <option value="all">All conditions</option>
+                {conditions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <select className="input" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="client">By client</option>
+              {tab === "listed" && <option value="name">By name</option>}
+              {tab === "sold" && <option value="payout">By payout</option>}
+            </select>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          {tab === "listed" ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Product</th>
+                    <th>DBH SKU</th>
+                    <th>ASIN</th>
+                    <th>Condition</th>
+                    <th>Qty</th>
+                    <th>COG</th>
+                    <th>Listed</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dispListed.length === 0 ? (
+                    <tr><td colSpan={9} className="empty-state"><p>No listed stock matches your filters.</p></td></tr>
+                  ) : dispListed.map(item => (
+                    <tr key={item.id}>
+                      <td><span className="badge badge-pending">{item.client?.full_name || item.client?.email || "—"}</span></td>
+                      <td style={{ maxWidth: 320 }}>{item.product_name || "—"}</td>
+                      <td className="mono" style={{ fontSize: 12 }}>{item.dbh_sku || "—"}</td>
+                      <td className="mono" style={{ fontSize: 12 }}>{item.asin || "—"}</td>
+                      <td style={{ fontSize: 13 }}>{item.condition || "—"}</td>
+                      <td className="mono" style={{ color: "var(--green)" }}>{item.qty_available}</td>
+                      <td className="mono">{item.cog ? `£${parseFloat(item.cog).toFixed(2)}` : "—"}</td>
+                      <td>{item.listed ? <span className="badge badge-sold">Yes</span> : <span className="badge badge-pending">No</span>}</td>
+                      <td><button className="btn btn-primary admin" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => openLogSale(item)}>Log Sale</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Product</th>
+                    <th>Date Sold</th>
+                    <th>Qty</th>
+                    <th>Sale £</th>
+                    <th>DBH Fee</th>
+                    <th>Payout</th>
+                    <th>Payout Date</th>
+                    <th>Paid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dispSold.length === 0 ? (
+                    <tr><td colSpan={9} className="empty-state"><p>No sales match your filters.</p></td></tr>
+                  ) : dispSold.map(s => (
+                    <tr key={s.id}>
+                      <td><span className="badge badge-pending">{s.client?.full_name || s.client?.email || "—"}</span></td>
+                      <td style={{ maxWidth: 320 }}>{s.product_name_snapshot || "—"}</td>
+                      <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
+                      <td className="mono">{s.qty_sold || 1}</td>
+                      <td className="mono">£{(parseFloat(s.sale_price) || 0).toFixed(2)}</td>
+                      <td className="mono" style={{ color: "var(--orange)" }}>£{(parseFloat(s.dbh_fee) || 0).toFixed(2)}</td>
+                      <td className="mono" style={{ color: "var(--green)" }}>£{(parseFloat(s.payout) || 0).toFixed(2)}</td>
+                      <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
+                      <td>{s.paid ? <span className="badge badge-paid">Paid</span> : <span className="badge badge-pending">Pending</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Log Sale Modal */}
+        {logSaleItem && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }} onClick={() => !saleSaving && setLogSaleItem(null)}>
+            <div className="card" style={{ maxWidth: 560, width: "100%" }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                <div>
+                  <div className="card-title">💰 Log Sale</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>{logSaleItem.product_name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Client: {logSaleItem.client?.full_name || logSaleItem.client?.email} · SKU: {logSaleItem.dbh_sku || "—"} · Available: {logSaleItem.qty_available}</div>
+                </div>
+                <button className="btn-icon" onClick={() => !saleSaving && setLogSaleItem(null)}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="input-group"><label className="input-label">Date Sold</label><input type="date" className="input" style={{ colorScheme: "dark" }} value={saleForm.date_sold} onChange={e => setSaleForm({ ...saleForm, date_sold: e.target.value })} /></div>
+                <div className="input-group"><label className="input-label">Qty Sold</label><input type="number" min="1" max={logSaleItem.qty_available} className="input" value={saleForm.qty_sold} onChange={e => setSaleForm({ ...saleForm, qty_sold: e.target.value })} /></div>
+                <div className="input-group"><label className="input-label">Sale Price (£)</label><input type="number" step="0.01" className="input" value={saleForm.sale_price} onChange={e => setSaleForm({ ...saleForm, sale_price: e.target.value })} /></div>
+                <div className="input-group"><label className="input-label">eBay Fees (£)</label><input type="number" step="0.01" className="input" value={saleForm.ebay_fees} onChange={e => setSaleForm({ ...saleForm, ebay_fees: e.target.value })} /></div>
+                <div className="input-group"><label className="input-label">Shipping (£)</label><input type="number" step="0.01" className="input" value={saleForm.shipping} onChange={e => setSaleForm({ ...saleForm, shipping: e.target.value })} /></div>
+                <div className="input-group"><label className="input-label">Fixed Fee (£)</label><input type="number" step="0.01" className="input" value={saleForm.fixed_fee} onChange={e => setSaleForm({ ...saleForm, fixed_fee: e.target.value })} /></div>
+                <div className="input-group" style={{ gridColumn: "1 / -1" }}><label className="input-label">eBay Order ID (optional)</label><input className="input" value={saleForm.ebay_order_id} onChange={e => setSaleForm({ ...saleForm, ebay_order_id: e.target.value })} /></div>
+              </div>
+              {c && saleForm.sale_price && (
+                <div style={{ background: "var(--bg-primary)", borderRadius: 10, padding: 14, marginTop: 8, marginBottom: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, fontSize: 13 }}>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Net Sale</div><div className="mono">£{c.net.toFixed(2)}</div></div>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH %</div><div className="mono">{(c.pct * 100).toFixed(0)}%</div></div>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH Fee</div><div className="mono" style={{ color: "var(--orange)" }}>£{c.fee.toFixed(2)}</div></div>
+                  <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>Payout</div><div className="mono" style={{ color: "var(--green)" }}>£{c.payout.toFixed(2)}</div></div>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn-secondary" onClick={() => setLogSaleItem(null)} disabled={saleSaving}>Cancel</button>
+                <button className="btn btn-primary admin" onClick={submitSale} disabled={saleSaving}>{saleSaving ? "Saving..." : "Log Sale"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminEbayListingsPage({ token, showToast }) {
   const EBAY_CREDS_KEY = "dbh_ebay_creds";
   const [creds, setCreds] = useState(() => { try { return JSON.parse(localStorage.getItem(EBAY_CREDS_KEY) || "null"); } catch { return null; } });
@@ -3299,15 +3639,8 @@ function AdminEbayListingsPage({ token, showToast }) {
 }
 
 const SUBS_WEBHOOK = "https://discord.com/api/webhooks/1498614616991993866/v2sukCKrdc22FarEeDxU3boFoil7CWNohuDBpWFzHm1v-UMuOs5ohXOrN6_T3udw9FHK";
-
 async function sendSubsDiscord(embed) {
-  try {
-    await fetch(SUBS_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-  } catch (e) { console.error("Subs webhook error", e); }
+  try { await fetch(SUBS_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embeds: [embed] }) }); } catch(e) { console.error(e); }
 }
 
 function AdminSubscriptionsPage({ token, showToast }) {
@@ -3321,16 +3654,16 @@ function AdminSubscriptionsPage({ token, showToast }) {
   const [editSub, setEditSub] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
-  const [view, setView] = useState("clients"); // "clients" | "revenue"
+  const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
 
   const load = async () => {
     setLoading(true);
-    const [subsRes, clientsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=*,profiles(full_name,email,company_name)&order=next_due_date.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/profiles?deals_access=eq.true&select=id,full_name,email,company_name&order=full_name.asc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
+    const [sr, cr] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?select=*,profiles(full_name,email,company_name)&order=next_due_date.asc`, { headers: h }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?deals_access=eq.true&select=id,full_name,email,company_name&order=full_name.asc`, { headers: h }).then(r => r.json())
     ]);
-    setSubs(Array.isArray(subsRes) ? subsRes : []);
-    setClients(Array.isArray(clientsRes) ? clientsRes : []);
+    setSubs(Array.isArray(sr) ? sr : []);
+    setClients(Array.isArray(cr) ? cr : []);
     setLoading(false);
   };
 
@@ -3338,45 +3671,35 @@ function AdminSubscriptionsPage({ token, showToast }) {
 
   useEffect(() => {
     if (subs.length === 0) return;
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date().toISOString().split("T")[0];
+    const notifKey = `dbh_subs_notified_${today}`;
+    if (localStorage.getItem(notifKey)) return;
+    localStorage.setItem(notifKey, "1");
+    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     subs.forEach(async s => {
       if (!s.next_due_date) return;
-      const due = new Date(s.next_due_date); due.setHours(0,0,0,0);
-      const daysUntil = Math.round((due - today) / 86400000);
+      const due = new Date(s.next_due_date + "T12:00:00"); due.setHours(0,0,0,0);
+      const days = Math.round((due - todayDate) / 86400000);
       const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-      if (daysUntil === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      else if (daysUntil === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due", value: "Today", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-      else if (daysUntil < 0) await sendSubsDiscord({ title: "🔴 Payment Overdue", color: 0xdc2626, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Overdue By", value: `${Math.abs(daysUntil)} days`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+      if (days === 3) await sendSubsDiscord({ title: "⚠️ Payment Due Soon", color: 0xf59e0b, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Due In", value: "3 days", inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+      else if (days === 0) await sendSubsDiscord({ title: "📅 Payment Due Today", color: 0xef4444, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
+      else if (days < 0) await sendSubsDiscord({ title: "🔴 Payment Overdue", color: 0xdc2626, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${s.amount}`, inline: true }, { name: "Overdue By", value: `${Math.abs(days)} days`, inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
     });
   }, [subs]);
 
   const addSub = async () => {
     if (!addForm.user_id) { showToast("Select a client"); return; }
     setSaving(true);
-    const lastPaid = new Date(addForm.last_paid_date);
-    const nextDue = new Date(lastPaid); nextDue.setDate(nextDue.getDate() + 30);
-    const payload = { user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" };
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(payload) });
-    if (res.ok) { showToast("Subscription added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); }
-    else showToast("Error saving");
-    setSaving(false);
+    const nextDue = new Date(addForm.last_paid_date); nextDue.setDate(nextDue.getDate() + 30);
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions`, { method: "POST", headers: { ...h, "Prefer": "return=representation" }, body: JSON.stringify({ user_id: addForm.user_id, amount: parseFloat(addForm.amount) || 90, last_paid_date: addForm.last_paid_date, next_due_date: nextDue.toISOString().split("T")[0], notes: addForm.notes, status: "active" }) });
+    showToast("Added!"); setShowAdd(false); setAddForm({ user_id: "", amount: 90, last_paid_date: new Date().toISOString().split("T")[0], notes: "" }); load(); setSaving(false);
   };
 
   const saveEdit = async () => {
     setEditSaving(true);
-    const lastPaid = new Date(editForm.last_paid_date);
-    const nextDue = new Date(editForm.next_due_date || editForm.last_paid_date);
-    // if they changed last_paid and not next_due, recalc next_due
-    const nextDueStr = editForm.next_due_date || (() => { const d = new Date(lastPaid); d.setDate(d.getDate() + 30); return d.toISOString().split("T")[0]; })();
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, {
-      method: "PATCH",
-      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: parseFloat(editForm.amount) || 90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes })
-    });
-    showToast("Subscription updated!");
-    setEditSub(null);
-    load();
-    setEditSaving(false);
+    const nextDueStr = editForm.next_due_date || (() => { const d = new Date(editForm.last_paid_date); d.setDate(d.getDate() + 30); return d.toISOString().split("T")[0]; })();
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${editSub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ amount: parseFloat(editForm.amount)||90, last_paid_date: editForm.last_paid_date, next_due_date: nextDueStr, notes: editForm.notes }) });
+    showToast("Updated!"); setEditSub(null); load(); setEditSaving(false);
   };
 
   const markPaid = async (sub) => {
@@ -3384,227 +3707,116 @@ function AdminSubscriptionsPage({ token, showToast }) {
     const today = new Date().toISOString().split("T")[0];
     const nextDue = new Date(); nextDue.setDate(nextDue.getDate() + 30);
     const nextDueStr = nextDue.toISOString().split("T")[0];
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ last_paid_date: today, next_due_date: nextDueStr, status: "active" }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscription_payments`, { method: "POST", headers: { ...h, "Prefer": "return=minimal" }, body: JSON.stringify({ subscription_id: sub.id, user_id: sub.user_id, amount: parseFloat(sub.amount)||90, paid_date: today }) });
     const name = sub.profiles?.full_name || sub.profiles?.email || "Unknown";
     await sendSubsDiscord({ title: "✅ Payment Received", color: 0x22c55e, fields: [{ name: "Client", value: name, inline: true }, { name: "Amount", value: `£${sub.amount}`, inline: true }, { name: "Next Due", value: new Date(nextDueStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "DBH Deal Sheet Subscriptions" } });
-    showToast(`✅ ${name} marked as paid — renewed 30 days`);
-    load(); setMarkingId(null);
+    showToast(`✅ ${name} marked as paid`); load(); setMarkingId(null);
   };
 
   const deleteSub = async (id) => {
     if (!window.confirm("Remove this subscription?")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
-    load();
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: h }); load();
   };
 
   const getStatus = (sub) => {
     if (!sub.next_due_date) return { label: "No date", color: "var(--text-muted)", days: null };
     const today = new Date(); today.setHours(0,0,0,0);
-    const due = new Date(sub.next_due_date); due.setHours(0,0,0,0);
+    const due = new Date(sub.next_due_date + "T12:00:00"); due.setHours(0,0,0,0);
     const days = Math.round((due - today) / 86400000);
     if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "var(--red)", days };
     if (days === 0) return { label: "Due today", color: "var(--red)", days };
-    if (days <= 3) return { label: `Due in ${days}d`, color: "var(--amber)", days };
     if (days <= 7) return { label: `Due in ${days}d`, color: "var(--amber)", days };
     return { label: `Due in ${days}d`, color: "var(--green)", days };
   };
 
-  const overdue = subs.filter(s => getStatus(s).days !== null && getStatus(s).days < 0);
-  const dueSoon = subs.filter(s => getStatus(s).days !== null && getStatus(s).days >= 0 && getStatus(s).days <= 7);
-  const upcoming = subs.filter(s => getStatus(s).days !== null && getStatus(s).days > 7);
-  const monthlyRevenue = subs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
-  const annualRevenue = monthlyRevenue * 12;
-
-  // Revenue chart — last 6 months based on last_paid_date
-  const revenueByMonth = (() => {
-    const months = {};
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(); d.setMonth(d.getMonth() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-      const label = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
-      months[key] = { label, total: 0, count: 0 };
-    }
-    subs.forEach(s => {
-      if (!s.last_paid_date) return;
-      const key = s.last_paid_date.slice(0, 7);
-      if (months[key]) { months[key].total += parseFloat(s.amount) || 0; months[key].count++; }
-    });
-    return Object.values(months);
-  })();
-  const maxRevenue = Math.max(...revenueByMonth.map(m => m.total), 1);
+  const overdue = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days < 0; });
+  const dueSoon = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days >= 0 && st.days <= 7; });
+  const upcoming = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days > 7; });
+  const monthly = subs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
 
   if (loading) return <div className="loader"><div className="spinner" /></div>;
 
   return <>
     <div className="page-header">
-      <div>
-        <div className="page-title">Deal Sheet Subscriptions</div>
-        <div className="page-subtitle">{subs.length} clients · £{monthlyRevenue}/mo · £{annualRevenue.toLocaleString()}/yr projected</div>
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          {[["clients", "👥 Clients"], ["revenue", "📊 Revenue"]].map(([v, l]) => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${view === v ? "var(--orange)" : "var(--border)"}`, background: view === v ? "rgba(255,145,0,0.15)" : "transparent", color: view === v ? "var(--orange)" : "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{l}</button>
-          ))}
-        </div>
-        <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
-      </div>
+      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{subs.length} clients · £{monthly}/mo · £{(monthly*12).toLocaleString()}/yr projected</div></div>
+      <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
     </div>
-
     <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5,1fr)", marginBottom: 24 }}>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--red)" }}><div className="card-title">Overdue</div><div className="stat-value" style={{ color: "var(--red)" }}>{overdue.length}</div></div>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--amber)" }}><div className="card-title">Due This Week</div><div className="stat-value" style={{ color: "var(--amber)" }}>{dueSoon.length}</div></div>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--green)" }}><div className="card-title">All Good</div><div className="stat-value" style={{ color: "var(--green)" }}>{upcoming.length}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthlyRevenue}</div></div>
-      <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{annualRevenue.toLocaleString()}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthly}</div></div>
+      <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{(monthly*12).toLocaleString()}</div></div>
     </div>
-
-    {view === "revenue" && <>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>Revenue — Last 6 Months</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 160 }}>
-          {revenueByMonth.map((m, i) => (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan)" }}>{m.total > 0 ? `£${m.total}` : ""}</div>
-              <div style={{ width: "100%", background: m.total > 0 ? "var(--cyan)" : "var(--border)", borderRadius: "6px 6px 0 0", height: `${Math.max((m.total / maxRevenue) * 120, m.total > 0 ? 8 : 2)}px`, transition: "height 0.3s", opacity: m.total > 0 ? 1 : 0.3 }} />
-              <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{m.label}</div>
-              {m.count > 0 && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{m.count} client{m.count > 1 ? "s" : ""}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "16px 16px 12px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>Revenue Breakdown</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-            {["Client", "Business", "Monthly Fee", "Last Paid", "Paid This Year (est.)"].map(h => <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {subs.map((s, i) => {
-              const paidThisYear = s.last_paid_date && new Date(s.last_paid_date).getFullYear() === new Date().getFullYear() ? (s.amount * Math.floor((new Date() - new Date(s.last_paid_date)) / (30 * 86400000) + 1)) : 0;
-              return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <td style={{ padding: "11px 16px", fontWeight: 600, fontSize: 13 }}>{s.profiles?.full_name || s.profiles?.email}</td>
-                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.profiles?.company_name || "—"}</td>
-                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace" }}>£{s.amount}</td>
-                <td style={{ padding: "11px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}</td>
-                <td style={{ padding: "11px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{Math.max(paidThisYear, s.amount)}</td>
-              </tr>;
-            })}
-            <tr style={{ borderTop: "2px solid var(--border)" }}>
-              <td colSpan={2} style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13 }}>TOTAL</td>
-              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--cyan)" }}>£{monthlyRevenue}/mo</td>
-              <td />
-              <td style={{ padding: "12px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", color: "var(--green)" }}>£{annualRevenue}/yr</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </>}
-
-    {view === "clients" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid var(--border)" }}>
-            {["Client", "Amount", "Last Paid", "Next Due", "Status", "Actions"].map(h => (
-              <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
+        <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+          {["Client","Amount","Last Paid","Next Due","Status","Actions"].map(col => <th key={col} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{col}</th>)}
+        </tr></thead>
         <tbody>
-          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet — add your first client</td></tr>}
+          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet</td></tr>}
           {subs.map((s, i) => {
-            const st = getStatus(s);
-            const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
-            const biz = s.profiles?.company_name;
-            return (
-              <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
-                  {biz && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{biz}</div>}
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.profiles?.email}</div>
-                  {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
-                </td>
-                <td style={{ padding: "13px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace", fontSize: 14 }}>£{s.amount}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.next_due_date ? new Date(s.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                <td style={{ padding: "13px 16px" }}>
-                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span>
-                </td>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => markPaid(s)} disabled={markingId === s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId === s.id ? "..." : "✓ Paid"}</button>
-                    <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date || "", next_due_date: s.next_due_date || "", notes: s.notes || "" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✏️</button>
-                    <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>✕</button>
-                  </div>
-                </td>
-              </tr>
-            );
+            const st = getStatus(s); const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
+            return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+              <td style={{ padding: "13px 16px" }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
+                {s.profiles?.company_name && <div style={{ fontSize: 12, color: "var(--cyan)", marginTop: 1 }}>{s.profiles.company_name}</div>}
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.profiles?.email}</div>
+                {s.notes && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{s.notes}</div>}
+              </td>
+              <td style={{ padding: "13px 16px", fontWeight: 700, fontFamily: "JetBrains Mono,monospace" }}>£{s.amount}</td>
+              <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.last_paid_date ? new Date(s.last_paid_date+"T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+              <td style={{ padding: "13px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{s.next_due_date ? new Date(s.next_due_date+"T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+              <td style={{ padding: "13px 16px" }}><span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span></td>
+              <td style={{ padding: "13px 16px" }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => markPaid(s)} disabled={markingId===s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId===s.id?"...":"✓ Paid"}</button>
+                  <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date||"", next_due_date: s.next_due_date||"", notes: s.notes||"" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer" }}>✏️</button>
+                  <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>✕</button>
+                </div>
+              </td>
+            </tr>;
           })}
         </tbody>
       </table>
-    </div>}
-
-    {/* Edit Modal */}
+    </div>
     {editSub && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div className="card" style={{ width: 440, padding: 28 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Edit Subscription</div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name || editSub.profiles?.email}</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{editSub.profiles?.full_name||editSub.profiles?.email}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label className="input-label">Amount (£)</label>
-            <input className="input" type="number" value={editForm.amount} onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))} />
-          </div>
+          <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={editForm.amount} onChange={e=>setEditForm(p=>({...p,amount:e.target.value}))} /></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label className="input-label">Last Paid Date</label>
-              <input className="input" type="date" value={editForm.last_paid_date} onChange={e => setEditForm(p => ({ ...p, last_paid_date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="input-label">Next Due Date</label>
-              <input className="input" type="date" value={editForm.next_due_date} onChange={e => setEditForm(p => ({ ...p, next_due_date: e.target.value }))} />
-            </div>
+            <div><label className="input-label">Last Paid</label><input className="input" type="date" value={editForm.last_paid_date} onChange={e=>setEditForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
+            <div><label className="input-label">Next Due</label><input className="input" type="date" value={editForm.next_due_date} onChange={e=>setEditForm(p=>({...p,next_due_date:e.target.value}))} /></div>
           </div>
-          <div>
-            <label className="input-label">Notes</label>
-            <input className="input" placeholder="e.g. Pays via bank transfer" value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving ? "Saving..." : "Save Changes"}</button>
-            <button onClick={() => setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+          <div><label className="input-label">Notes</label><input className="input" value={editForm.notes} onChange={e=>setEditForm(p=>({...p,notes:e.target.value}))} /></div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-primary admin" onClick={saveEdit} disabled={editSaving} style={{ flex: 1 }}>{editSaving?"Saving...":"Save"}</button>
+            <button onClick={()=>setEditSub(null)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
           </div>
         </div>
       </div>
     </div>}
-
-    {/* Add Modal */}
     {showAdd && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div className="card" style={{ width: 440, padding: 28 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Subscription</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label className="input-label">Client</label>
-            <select className="input" value={addForm.user_id} onChange={e => setAddForm(p => ({ ...p, user_id: e.target.value }))}>
-              <option value="">— Select client —</option>
-              {clients.filter(c => !subs.find(s => s.user_id === c.id)).map(c => <option key={c.id} value={c.id}>{c.full_name || c.email}{c.company_name ? ` (${c.company_name})` : ""}</option>)}
+          <div><label className="input-label">Client</label>
+            <select className="input" value={addForm.user_id} onChange={e=>setAddForm(p=>({...p,user_id:e.target.value}))}>
+              <option value="">— Select —</option>
+              {clients.filter(c=>!subs.find(s=>s.user_id===c.id)).map(c=><option key={c.id} value={c.id}>{c.full_name||c.email}{c.company_name?` (${c.company_name})`:""}</option>)}
             </select>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label className="input-label">Amount (£)</label>
-              <input className="input" type="number" value={addForm.amount} onChange={e => setAddForm(p => ({ ...p, amount: e.target.value }))} />
-            </div>
-            <div>
-              <label className="input-label">Last Paid Date</label>
-              <input className="input" type="date" value={addForm.last_paid_date} onChange={e => setAddForm(p => ({ ...p, last_paid_date: e.target.value }))} />
-            </div>
+            <div><label className="input-label">Amount (£)</label><input className="input" type="number" value={addForm.amount} onChange={e=>setAddForm(p=>({...p,amount:e.target.value}))} /></div>
+            <div><label className="input-label">Last Paid</label><input className="input" type="date" value={addForm.last_paid_date} onChange={e=>setAddForm(p=>({...p,last_paid_date:e.target.value}))} /></div>
           </div>
-          <div>
-            <label className="input-label">Notes (optional)</label>
-            <input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))} />
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Add Subscription"}</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
+          <div><label className="input-label">Notes</label><input className="input" placeholder="e.g. Pays via bank transfer" value={addForm.notes} onChange={e=>setAddForm(p=>({...p,notes:e.target.value}))} /></div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-primary admin" onClick={addSub} disabled={saving} style={{ flex: 1 }}>{saving?"Saving...":"Add"}</button>
+            <button onClick={()=>setShowAdd(false)} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
           </div>
         </div>
       </div>
@@ -3623,21 +3835,24 @@ function AdminPortal() {
   const [parcels, setParcels] = useState([]);
   const [shipments, setShipments] = useState([]);
   const [liquidation, setLiquidation] = useState([]);
+  const [liquidationSales, setLiquidationSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const showToast = useCallback(msg => setToast(msg), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [c, p, s, l] = await Promise.all([
+    const [c, p, s, l, ls] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/parcels?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/shipments?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json())
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=user_id,payout,payout_date,paid&order=payout_date.asc`, { headers: supabase.headers(token) }).then(r => r.json())
     ]);
     if (Array.isArray(c)) setClients(c.filter(x => x.email !== ADMIN_EMAIL));
     if (Array.isArray(p)) setParcels(p);
     if (Array.isArray(s)) setShipments(s);
     if (Array.isArray(l)) setLiquidation(l);
+    if (Array.isArray(ls)) setLiquidationSales(ls);
     setLoading(false);
   }, [token]);
 
@@ -3648,6 +3863,7 @@ function AdminPortal() {
 
   const adminNav = [
     { id: "clients", label: "All Clients", icon: Icons.Users },
+    { id: "masterstock", label: "Master Stock", icon: Icons.Package },
     { id: "deals", label: "DBH Deals", icon: Icons.List },
     { id: "tracker", label: "Income Tracker", icon: Icons.BarChart },
     { id: "subscriptions", label: "Subscriptions", icon: Icons.CreditCard },
@@ -3661,6 +3877,7 @@ function AdminPortal() {
     if (page === "tracker") return <AdminTrackerPage />;
     if (page === "ebay") return <AdminEbayListingsPage token={token} showToast={showToast} />;
     if (page === "subscriptions") return <AdminSubscriptionsPage token={token} showToast={showToast} />;
+    if (page === "masterstock") return <AdminMasterStockPage clients={clients} liquidation={liquidation} liquidationSales={liquidationSales} token={token} showToast={showToast} onRefresh={loadData} />;
     if (page === "client" && selectedClient) {
       return <AdminClientPage 
         client={selectedClient} 
@@ -3675,7 +3892,7 @@ function AdminPortal() {
         onBack={backToClients}
       />;
     }
-    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
+    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} liquidationSales={liquidationSales} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
   };
 
   return (
@@ -3704,33 +3921,14 @@ function AdminPortal() {
 }
 
 // Admin - All Clients List
-function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectClient, loading, token, onRefresh, showToast }) {
+function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidationSales, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
   const [clientOrder, setClientOrder] = useState([]);
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeTab, setActiveTab] = useState("active");
-  const [clientTypeTab, setClientTypeTab] = useState("all");
-  const [clientTypes, setClientTypes] = useState({});
-
-  useEffect(() => {
-    // Load client types from Supabase profiles
-    const types = {};
-    clients.forEach(c => { if (c.client_type) types[c.id] = c.client_type; });
-    setClientTypes(types);
-  }, [clients]);
-
-  const updateClientType = async (e, clientId, newType) => {
-    e.stopPropagation();
-    setClientTypes(prev => ({ ...prev, [clientId]: newType }));
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${clientId}`, {
-      method: "PATCH",
-      headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" },
-      body: JSON.stringify({ client_type: newType })
-    });
-    showToast("Client type updated!");
-  };
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const saveSetting = async (key, value) => {
     const existing = await fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.${key}`, { headers: supabase.headers(token) }).then(r => r.json());
@@ -3791,10 +3989,18 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
     const matchesSearch = c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       c.email?.toLowerCase().includes(search.toLowerCase()) ||
       c.company_name?.toLowerCase().includes(search.toLowerCase());
-    const type = clientTypes[c.id] || c.client_type || "prep";
-    const matchesType = clientTypeTab === "all" || type === clientTypeTab;
-    return matchesSearch && matchesType;
+    if (!matchesSearch) return false;
+    if (typeFilter === "all") return true;
+    return (c.client_type || "prep") === typeFilter;
   });
+
+  // Counts per type (excluding search) — for tab labels
+  const typeCounts = sortedClients.reduce((acc, c) => {
+    const t = c.client_type || "prep";
+    acc[t] = (acc[t] || 0) + 1;
+    acc.all = (acc.all || 0) + 1;
+    return acc;
+  }, {});
 
   const handleDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
   const handleDragOver = (e, id) => { e.preventDefault(); setDragOverId(id); };
@@ -3832,18 +4038,14 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
   const displayClients = activeTab === "active" ? activeClients : archivedClients;
 
   if (loading) return <div className="loader"><div className="spinner" /></div>;
-  const allCount = sortedClients.filter(c => !archivedIds.includes(c.id)).length;
-  const prepCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "prep").length;
-  const dealsCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "deals").length;
-  const liquidationCount = sortedClients.filter(c => !archivedIds.includes(c.id) && (clientTypes[c.id] || c.client_type || "prep") === "liquidation").length;
-
   return (
     <><div className="page-header"><div><div className="page-title">All Clients</div><div className="page-subtitle">{clients.length} clients</div></div></div>
     <div className="page-body">
-      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-        {[["all", `All (${allCount})`], ["prep", `Prep (${prepCount})`], ["deals", `Deal Sheet (${dealsCount})`], ["liquidation", `Liquidation (${liquidationCount})`]].map(([val, label]) => (
-          <button key={val} onClick={() => setClientTypeTab(val)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: clientTypeTab === val ? "1px solid var(--orange)" : "1px solid var(--border)", background: clientTypeTab === val ? "rgba(255,145,0,0.15)" : "transparent", color: clientTypeTab === val ? "var(--orange)" : "var(--text-secondary)", fontFamily: "Outfit,sans-serif" }}>{label}</button>
-        ))}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setTypeFilter("all")} className={`btn ${typeFilter === "all" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>All ({typeCounts.all || 0})</button>
+        <button onClick={() => setTypeFilter("prep")} className={`btn ${typeFilter === "prep" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Prep ({typeCounts.prep || 0})</button>
+        <button onClick={() => setTypeFilter("dealsheet")} className={`btn ${typeFilter === "dealsheet" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Deal Sheet ({typeCounts.dealsheet || 0})</button>
+        <button onClick={() => setTypeFilter("liquidation")} className={`btn ${typeFilter === "liquidation" ? "btn-primary" : "btn-secondary"}`} style={{ padding: "8px 18px", fontSize: 13 }}>Liquidation ({typeCounts.liquidation || 0})</button>
       </div>
       <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <div className="search-bar" style={{ flex: 1 }}><Icons.Search /><input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} /></div>
@@ -3860,6 +4062,24 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
           const cl = liquidation.filter(l => l.user_id === c.id);
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
+          const clientSales = (liquidationSales || []).filter(s => s.user_id === c.id && !s.paid && s.payout_date);
+          // Group unpaid sales by payout_date and sum each
+          const payoutsByDate = clientSales.reduce((acc, s) => {
+            const key = s.payout_date;
+            if (!acc[key]) acc[key] = 0;
+            acc[key] += parseFloat(s.payout) || 0;
+            return acc;
+          }, {});
+          // Show payout dates from the first of LAST month onwards (so past-due items remain visible to clean up)
+          const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+          const firstOfLastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
+          const cutoffISO = firstOfLastMonth.toISOString().split("T")[0];
+          const sortedPayoutDates = Object.keys(payoutsByDate).filter(d => d >= cutoffISO).sort();
+          const upcomingPayouts = sortedPayoutDates.slice(0, 2).map(date => ({
+            date,
+            amount: payoutsByDate[date],
+            label: new Date(date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+          }));
           const today = new Date(); today.setHours(0,0,0,0);
           const paymentDue = (() => {
             if (c.next_payment_date) return new Date(c.next_payment_date) <= today;
@@ -3876,15 +4096,20 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{c.full_name || "No Name"}</div>
                     {paymentDue && <span style={{ padding: "2px 8px", background: "rgba(255,82,82,0.15)", color: "var(--red)", borderRadius: 12, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,82,82,0.3)" }}>⚠ PAYMENT DUE</span>}
-                    {(() => { const t = clientTypes[c.id] || c.client_type || "prep"; const colors = { prep: "var(--cyan)", deals: "var(--green)", liquidation: "var(--orange)" }; const labels = { prep: "Prep", deals: "Deal Sheet", liquidation: "Liquidation" }; return <span style={{ padding: "2px 8px", background: `${colors[t]}22`, color: colors[t], borderRadius: 12, fontSize: 11, fontWeight: 700, border: `1px solid ${colors[t]}44` }}>{labels[t] || t}</span>; })()}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{c.email}</div>
                   {c.company_name && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{c.company_name}</div>}
                 </div>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <select onClick={e => e.stopPropagation()} onChange={e => updateClientType(e, c.id, e.target.value)} value={clientTypes[c.id] || c.client_type || "prep"} style={{ padding: "5px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-secondary)", fontSize: 12, fontFamily: "Outfit,sans-serif", cursor: "pointer" }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                  <select value={c.client_type || "prep"} onChange={async (e) => {
+                    e.stopPropagation();
+                    const newType = e.target.value;
+                    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${c.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ client_type: newType }) });
+                    showToast(`Set to ${newType}`);
+                    onRefresh();
+                  }} style={{ padding: "4px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
                     <option value="prep">Prep</option>
-                    <option value="deals">Deal Sheet</option>
+                    <option value="dealsheet">Deal Sheet</option>
                     <option value="liquidation">Liquidation</option>
                   </select>
                   <button className="btn-icon" onClick={(e) => toggleArchive(e, c.id)} title={archivedIds.includes(c.id) ? "Unarchive client" : "Archive client"} style={{ color: archivedIds.includes(c.id) ? "var(--cyan)" : "var(--text-muted)", fontSize: 14 }}>{archivedIds.includes(c.id) ? "↩" : "🗂"}</button>
@@ -3912,6 +4137,16 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, onSelectCl
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Liq Pending</div>
                 </div>
               </div>
+              {upcomingPayouts.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  {upcomingPayouts.map((p, idx) => (
+                    <div key={p.date} style={{ flex: 1, padding: "8px 10px", background: idx === 0 ? "rgba(0,230,118,0.08)" : "rgba(0,229,255,0.06)", border: idx === 0 ? "1px solid rgba(0,230,118,0.2)" : "1px solid rgba(0,229,255,0.15)", borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: idx === 0 ? "var(--green)" : "var(--cyan)" }}>£{p.amount.toFixed(2)}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {p.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -4534,7 +4769,10 @@ function AdminClientPrep({ client, parcels: initialParcels, shipments: initialSh
     const qtyReceived = parseInt(editData.qty_received) || parseInt(oldItem?.qty_received) || parseInt(oldItem?.quantity) || 1;
     const totalExpected = parseInt(oldItem?.quantity) || 1;
     if (editData.status === "prepped" && oldItem?.status !== "prepped") {
-      // Always show partial prep modal so admin can specify how many are being prepped
+      if (oldItem?.status === "partial_delivery" || oldItem?.status === "delivered") {
+        await doSaveEdit({ ...editData, status: "prepped" });
+        return;
+      }
       setPartialPrepItem({ ...oldItem, quantity: totalExpected, qty_received: qtyReceived });
       setPartialPrepQty(String(qtyReceived));
       return;
@@ -5197,11 +5435,11 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     if (!addStockForm.product_name) { showToast("Product name is required"); return; }
     setAddStockSaving(true);
     try {
-      // Generate DBH SKU
       const clientName = (client.full_name || client.email || "").split(" ")[0].toUpperCase().slice(0, 6);
       const existing = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${client.id}&select=dbh_sku&order=created_at.desc&limit=1`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json());
       const lastNum = existing?.[0]?.dbh_sku ? parseInt(existing[0].dbh_sku.split("-").pop()) || 0 : 0;
-      const dbh_sku = `DBH-${clientName}-${String(lastNum + 1).padStart(3, "0")}`;
+      const today = new Date().toISOString().split("T")[0].replace(/-/g, "").slice(2);
+      const dbh_sku = `${today}-${clientName}-${String(lastNum + 1).padStart(3, "0")}`;
       const payload = {
         product_name: addStockForm.product_name,
         asin: addStockForm.asin || null,
@@ -5309,8 +5547,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
     setSaleSaving(true);
     const c = calcSale(saleForm);
-    const payoutDate = new Date(saleForm.date_sold);
-    payoutDate.setDate(payoutDate.getDate() + 35);
+    const payoutDate = getPayoutDate(saleForm.date_sold);
     const payload = {
       stock_id: logSaleItem.id, user_id: client.id, date_sold: saleForm.date_sold,
       qty_sold: parseInt(saleForm.qty_sold) || 1, sale_price: parseFloat(saleForm.sale_price),
@@ -5334,7 +5571,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       body: JSON.stringify({ qty_sold: newQtySold })
     });
     const hw = client.discord_webhook || webhookUrl;
-    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Condition", value: logSaleItem.condition || "—", inline: true }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: (() => { const d = new Date(saleForm.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })(), inline: true }], footer: { text: "Payout in 35 days to allow for returns" } });
+    if (hw) await sendDiscordNotification(hw, null, { title: "💰 ITEM SOLD", color: 0x22c55e, fields: [{ name: "Product", value: logSaleItem.product_name, inline: false }, { name: "Sale Price", value: `£${parseFloat(saleForm.sale_price).toFixed(2)}`, inline: true }, { name: "Qty Sold", value: `${saleForm.qty_sold}`, inline: true }, { name: "Your Payout", value: `£${c.payout.toFixed(2)}`, inline: true }, { name: "Payout Date", value: getPayoutDate(saleForm.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }], footer: { text: "Payout at end of following month to allow for returns" } });
     await loadSales(); onRefresh(); showToast("Sale logged!"); setLogSaleItem(null); setSaleSaving(false);
   };
 
@@ -5369,14 +5606,12 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       const clientWebhook = client.discord_webhook || webhookUrl;
       if (clientWebhook) {
         const payout = calculatePayout({ ...oldItem, ...dataToSave });
-        const payoutDate = new Date(dataToSave.date_sold);
-        payoutDate.setDate(payoutDate.getDate() + 35);
+        const payoutDate = getPayoutDate(dataToSave.date_sold);
         await sendDiscordNotification(clientWebhook, null, {
           title: "💰 SOLD",
           color: 0x22c55e,
           fields: [
-            { name: "Product", value: oldItem?.product_name || "Unknown", inline: false },
-            { name: "Condition", value: oldItem?.condition || "—", inline: true },
+            { name: "Product", value: oldItem?.product_name || "Unknown", inline: true },
             { name: "Payout", value: `£${payout.payout.toFixed(2)}`, inline: true },
             { name: "Payout Date", value: payoutDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), inline: true }
           ],
@@ -5484,7 +5719,39 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>}
 
       {/* Sales Tab */}
-      {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {activeTab === "sales" && (() => {
+        // Build pending payout summary
+        const unpaidSales = sales.filter(s => !s.paid && s.payout_date);
+        const payoutGroups = unpaidSales.reduce((acc, s) => {
+          const key = s.payout_date;
+          if (!acc[key]) acc[key] = { total: 0, count: 0 };
+          acc[key].total += parseFloat(s.payout) || 0;
+          acc[key].count += 1;
+          return acc;
+        }, {});
+        const pendingDates = Object.keys(payoutGroups).sort();
+        return <>
+          {pendingDates.length > 0 && <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Pending Payouts</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {pendingDates.map(date => {
+                const grp = payoutGroups[date];
+                const label = new Date(date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                return <div key={date} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Due {label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{grp.total.toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{grp.count} sale{grp.count === 1 ? "" : "s"}</div>
+                  <button onClick={async () => {
+                    if (!confirm(`Mark all £${grp.total.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}) as paid?`)) return;
+                    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${date}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) });
+                    showToast(`Marked £${grp.total.toFixed(2)} as paid`);
+                    loadSales(); onRefresh();
+                  }} style={{ marginTop: 8, padding: "6px 12px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>✓ Mark All Paid</button>
+                </div>;
+              })}
+            </div>
+          </div>}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales recorded yet.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>eBay Fees</th><th>Shipping</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>eBay Order ID</th><th>Logged At</th><th>Paid</th></tr></thead>
@@ -5515,54 +5782,34 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
             </tr>;
           })}</tbody>
         </table></div>}
-      </div>}
+      </div>
+        </>;
+      })()}
 
       {/* Add Stock Modal */}
       {showAddStock && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-        <div className="card" style={{ width: 480, maxWidth: "95vw", padding: 28, maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="card" style={{ width: 480, maxWidth: "95vw", padding: 28 }}>
           <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Add Stock</div>
           <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Adding for: {client.full_name || client.email}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label className="input-label">Product Name *</label>
-              <input className="input" placeholder="e.g. Samsung Galaxy Buds2 Pro" value={addStockForm.product_name} onChange={e => setAddStockForm(p => ({ ...p, product_name: e.target.value }))} onBlur={async e => { const asin = addStockForm.asin.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
-            </div>
-            <div>
-              <label className="input-label">ASIN</label>
-              <input className="input" placeholder="e.g. B09..." value={addStockForm.asin} onChange={e => setAddStockForm(p => ({ ...p, asin: e.target.value }))} onBlur={async e => { const asin = e.target.value.trim(); if (asin && asin.length >= 10 && !addStockForm.product_name) { showToast("Looking up product..."); const title = await lookupAsinTitle(asin); if (title) setAddStockForm(p => ({ ...p, product_name: title })); } }} />
-            </div>
+            <div><label className="input-label">Product Name *</label><input className="input" placeholder="e.g. Samsung Galaxy Buds2 Pro" value={addStockForm.product_name} onChange={e => setAddStockForm(p => ({ ...p, product_name: e.target.value }))} /></div>
+            <div><label className="input-label">ASIN</label><input className="input" placeholder="e.g. B09..." value={addStockForm.asin} onChange={e => setAddStockForm(p => ({ ...p, asin: e.target.value }))} /></div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label className="input-label">Condition</label>
+              <div><label className="input-label">Condition</label>
                 <select className="input" value={addStockForm.condition} onChange={e => setAddStockForm(p => ({ ...p, condition: e.target.value }))}>
                   <option value="">— Select —</option>
-                  <option>New</option>
-                  <option>Open Box</option>
-                  <option>Like New</option>
-                  <option>Used</option>
-                  <option>Good</option>
-                  <option>Fair</option>
-                  <option>Poor</option>
+                  <option>New</option><option>Open Box</option><option>Like New</option><option>Used</option><option>Good</option><option>Fair</option><option>Poor</option>
                 </select>
               </div>
-              <div>
-                <label className="input-label">Quantity</label>
-                <input className="input" type="number" min="1" value={addStockForm.quantity} onChange={e => setAddStockForm(p => ({ ...p, quantity: e.target.value }))} />
-              </div>
+              <div><label className="input-label">Quantity</label><input className="input" type="number" min="1" value={addStockForm.quantity} onChange={e => setAddStockForm(p => ({ ...p, quantity: e.target.value }))} /></div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label className="input-label">COG (£)</label>
-                <input className="input" type="number" step="0.01" placeholder="0.00" value={addStockForm.cog} onChange={e => setAddStockForm(p => ({ ...p, cog: e.target.value }))} />
-              </div>
-              <div>
-                <label className="input-label">LPN Number</label>
-                <input className="input" placeholder="Optional" value={addStockForm.lpn_number} onChange={e => setAddStockForm(p => ({ ...p, lpn_number: e.target.value }))} />
-              </div>
+              <div><label className="input-label">COG (£)</label><input className="input" type="number" step="0.01" placeholder="0.00" value={addStockForm.cog} onChange={e => setAddStockForm(p => ({ ...p, cog: e.target.value }))} /></div>
+              <div><label className="input-label">LPN Number</label><input className="input" placeholder="Optional" value={addStockForm.lpn_number} onChange={e => setAddStockForm(p => ({ ...p, lpn_number: e.target.value }))} /></div>
             </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
               <button className="btn btn-primary admin" onClick={submitAddStock} disabled={addStockSaving} style={{ flex: 1 }}>{addStockSaving ? "Adding..." : "Add Stock"}</button>
-              <button className="btn" onClick={() => { setShowAddStock(false); setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" }); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+              <button onClick={() => { setShowAddStock(false); setAddStockForm({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "" }); }} style={{ padding: "10px 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Cancel</button>
             </div>
           </div>
         </div>
@@ -5625,7 +5872,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <div><div style={{ color: "var(--text-muted)", fontSize: 11 }}>DBH £</div><div className="mono" style={{ fontWeight: 600, color: "var(--orange)" }}>£{sc.fee.toFixed(2)}</div></div>
             </div>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Payout Date: {sf.date_sold ? (() => { const d = new Date(sf.date_sold); d.setDate(d.getDate()+35); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : "—"}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Payout Date: {sf.date_sold ? getPayoutDate(sf.date_sold).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</div>
               <div style={{ fontWeight: 800, fontSize: 20, color: "var(--green)" }}>£{sc.payout.toFixed(2)}</div>
             </div>
           </div>}
@@ -5646,15 +5893,8 @@ export default function App() {
 
 function AppRouter() {
   const { user, loading, isAdmin } = useAuth();
-
-  // Detect Supabase password recovery token in URL hash
-  const hash = window.location.hash;
-  const params = new URLSearchParams(hash.replace("#", "?"));
-  const type = params.get("type");
-  const accessToken = params.get("access_token");
-  if (type === "recovery" && accessToken) return <ResetPasswordPage accessToken={accessToken} />;
-
   if (loading) return <div className="loader"><div className="spinner" /></div>;
   if (!user) return <LoginPage />;
   return isAdmin ? <AdminPortal /> : <ClientPortal />;
 }
+
