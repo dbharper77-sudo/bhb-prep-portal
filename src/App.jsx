@@ -5630,7 +5630,54 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [showAddStock, setShowAddStock] = useState(false);
   const [addStockForm, setAddStockForm] = useState({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "", sheet_uid: "" });
   const [addStockSaving, setAddStockSaving] = useState(false);
+  const [returnsList, setReturnsList] = useState([]);
+  const [returnsForm, setReturnsForm] = useState({ month: new Date().toISOString().slice(0, 7), count: "" });
+  const [savingReturns, setSavingReturns] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
+
+  const loadReturns = async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?user_id=eq.${client.id}&order=month.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) setReturnsList(data);
+    } catch (e) { console.error(e); }
+  };
+
+  const saveReturns = async () => {
+    if (!returnsForm.month || returnsForm.count === "") return;
+    setSavingReturns(true);
+    const count = parseInt(returnsForm.count) || 0;
+    const existing = returnsList.find(x => x.month === returnsForm.month);
+    try {
+      if (existing) {
+        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?id=eq.${existing.id}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ count })
+        });
+      } else {
+        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: client.id, month: returnsForm.month, count })
+        });
+      }
+      showToast("Returns saved!");
+      setReturnsForm({ month: new Date().toISOString().slice(0, 7), count: "" });
+      loadReturns();
+    } catch (e) { showToast("Error saving returns"); }
+    setSavingReturns(false);
+  };
+
+  const deleteReturns = async (id) => {
+    if (!confirm("Delete this returns entry?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+    showToast("Deleted!");
+    loadReturns();
+  };
+
+  const returnsTotal = returnsList.reduce((s, r) => s + (r.count || 0), 0);
+  const returnsDeduction = returnsTotal * RETURN_COST_PER_UNIT;
 
   const deleteStockItem = async (item) => {
     const label = item.product_name || item.dbh_sku || "this item";
@@ -5736,7 +5783,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   }, [isPanayiotis, token]);
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
-  useEffect(() => { loadSales(); }, [client.id]);
+  useEffect(() => { loadSales(); loadReturns(); }, [client.id]);
 
   const loadSales = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&order=date_sold.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
@@ -5869,6 +5916,63 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
         <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
         <div className="card stat-card liquidation"><div className="card-title">Total Payouts</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalSalesPayout.toFixed(2)}</div></div>
+      </div>
+
+      {/* Returns Tracker */}
+      <div className="card" style={{ marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.05),transparent)", borderColor: "rgba(255,145,0,0.2)" }}>
+        <div className="card-title" style={{ color: "var(--orange)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>📦 Returns Tracker</span>
+          <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>£{RETURN_COST_PER_UNIT.toFixed(2)} per return (label out + back)</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+          <div className="card stat-card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Returns</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--amber)" }}>{returnsTotal}</div>
+          </div>
+          <div className="card stat-card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Deduction</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div>
+          </div>
+          <div className="card stat-card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Months Logged</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{returnsList.length}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+            <label className="input-label">Month</label>
+            <input className="input" type="month" style={{ colorScheme: "dark" }} value={returnsForm.month} onChange={e => setReturnsForm({ ...returnsForm, month: e.target.value })} />
+          </div>
+          <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+            <label className="input-label">Number of Returns</label>
+            <input className="input" type="number" min="0" placeholder="0" value={returnsForm.count} onChange={e => setReturnsForm({ ...returnsForm, count: e.target.value })} />
+          </div>
+          <button className="btn btn-primary liquidation" onClick={saveReturns} disabled={savingReturns || !returnsForm.month || returnsForm.count === ""}>
+            {savingReturns ? "Saving..." : (returnsList.find(x => x.month === returnsForm.month) ? "Update" : "Add")}
+          </button>
+        </div>
+        {returnsList.length > 0 && (
+          <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>History</div>
+            {returnsList.map(r => {
+              const [y, m] = (r.month || "").split("-");
+              const monthLabel = y && m ? new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : r.month;
+              return (
+                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{monthLabel}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.count} return{r.count === 1 ? "" : "s"}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span className="mono" style={{ fontWeight: 700, color: "var(--red)" }}>−£{((r.count || 0) * RETURN_COST_PER_UNIT).toFixed(2)}</span>
+                    <button className="btn-icon" onClick={() => setReturnsForm({ month: r.month, count: r.count.toString() })} title="Edit"><Icons.Edit /></button>
+                    <button className="btn-icon btn-danger" onClick={() => deleteReturns(r.id)} title="Delete"><Icons.Trash /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
