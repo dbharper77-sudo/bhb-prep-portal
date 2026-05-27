@@ -4264,23 +4264,27 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
           const inbound = cp.filter(p => ["in_transit", "delivered"].includes(p.status)).length;
           const pendingLiq = cl.filter(l => !l.sale_price).length;
           const clientSales = (liquidationSales || []).filter(s => s.user_id === c.id && !s.paid && s.payout_date);
-          // Group unpaid sales by payout_date and sum each
-          const payoutsByDate = clientSales.reduce((acc, s) => {
-            const key = s.payout_date;
-            if (!acc[key]) acc[key] = 0;
-            acc[key] += parseFloat(s.payout) || 0;
+          // Group unpaid sales by MONTH (one payout per calendar month — end of month)
+          const payoutsByMonth = clientSales.reduce((acc, s) => {
+            const monthKey = (s.payout_date || "").slice(0, 7); // "2026-06"
+            if (!acc[monthKey]) acc[monthKey] = 0;
+            acc[monthKey] += parseFloat(s.payout) || 0;
             return acc;
           }, {});
-          // Show payout dates from the first of LAST month onwards (so past-due items remain visible to clean up)
+          // Show payouts from LAST month onwards (so past-due items remain visible to clean up)
           const todayDate = new Date(); todayDate.setHours(0,0,0,0);
           const firstOfLastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
-          const cutoffISO = firstOfLastMonth.toISOString().split("T")[0];
-          const sortedPayoutDates = Object.keys(payoutsByDate).filter(d => d >= cutoffISO).sort();
-          const upcomingPayouts = sortedPayoutDates.slice(0, 2).map(date => ({
-            date,
-            amount: payoutsByDate[date],
-            label: new Date(date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-          }));
+          const cutoffMonth = firstOfLastMonth.toISOString().slice(0, 7);
+          const sortedPayoutMonths = Object.keys(payoutsByMonth).filter(mk => mk >= cutoffMonth).sort();
+          const upcomingPayouts = sortedPayoutMonths.slice(0, 2).map(monthKey => {
+            const [y, m] = monthKey.split("-").map(Number);
+            const lastDay = new Date(y, m, 0);
+            return {
+              date: monthKey,
+              amount: payoutsByMonth[monthKey],
+              label: lastDay.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+            };
+          });
           const today = new Date(); today.setHours(0,0,0,0);
           const paymentDue = (() => {
             if (c.next_payment_date) return new Date(c.next_payment_date) <= today;
@@ -5633,6 +5637,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [returnsList, setReturnsList] = useState([]);
   const [returnsForm, setReturnsForm] = useState({ month: new Date().toISOString().slice(0, 7), count: "" });
   const [savingReturns, setSavingReturns] = useState(false);
+  const [returnsOpen, setReturnsOpen] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
 
   const loadReturns = async () => {
@@ -5919,59 +5924,71 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>
 
       {/* Returns Tracker */}
-      <div className="card" style={{ marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.05),transparent)", borderColor: "rgba(255,145,0,0.2)" }}>
-        <div className="card-title" style={{ color: "var(--orange)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>📦 Returns Tracker</span>
-          <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>£{RETURN_COST_PER_UNIT.toFixed(2)} per return (label out + back)</span>
+      <div className="card" style={{ marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.05),transparent)", borderColor: "rgba(255,145,0,0.2)", padding: returnsOpen ? undefined : "14px 18px" }}>
+        <div onClick={() => setReturnsOpen(o => !o)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--orange)" }}>📦 Returns Tracker</span>
+            {returnsTotal > 0 && (
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                {returnsTotal} return{returnsTotal === 1 ? "" : "s"} • <span style={{ color: "var(--red)", fontWeight: 700 }}>−£{returnsDeduction.toFixed(2)}</span>
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: 18, color: "var(--text-muted)", transition: "transform 0.15s", transform: returnsOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▸</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
-          <div className="card stat-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Returns</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--amber)" }}>{returnsTotal}</div>
-          </div>
-          <div className="card stat-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Deduction</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div>
-          </div>
-          <div className="card stat-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Months Logged</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{returnsList.length}</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
-            <label className="input-label">Month</label>
-            <input className="input" type="month" style={{ colorScheme: "dark" }} value={returnsForm.month} onChange={e => setReturnsForm({ ...returnsForm, month: e.target.value })} />
-          </div>
-          <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
-            <label className="input-label">Number of Returns</label>
-            <input className="input" type="number" min="0" placeholder="0" value={returnsForm.count} onChange={e => setReturnsForm({ ...returnsForm, count: e.target.value })} />
-          </div>
-          <button className="btn btn-primary liquidation" onClick={saveReturns} disabled={savingReturns || !returnsForm.month || returnsForm.count === ""}>
-            {savingReturns ? "Saving..." : (returnsList.find(x => x.month === returnsForm.month) ? "Update" : "Add")}
-          </button>
-        </div>
-        {returnsList.length > 0 && (
-          <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>History</div>
-            {returnsList.map(r => {
-              const [y, m] = (r.month || "").split("-");
-              const monthLabel = y && m ? new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : r.month;
-              return (
-                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{monthLabel}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.count} return{r.count === 1 ? "" : "s"}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span className="mono" style={{ fontWeight: 700, color: "var(--red)" }}>−£{((r.count || 0) * RETURN_COST_PER_UNIT).toFixed(2)}</span>
-                    <button className="btn-icon" onClick={() => setReturnsForm({ month: r.month, count: r.count.toString() })} title="Edit"><Icons.Edit /></button>
-                    <button className="btn-icon btn-danger" onClick={() => deleteReturns(r.id)} title="Delete"><Icons.Trash /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {returnsOpen && (
+          <>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>£{RETURN_COST_PER_UNIT.toFixed(2)} per return (label out + back)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+              <div className="card stat-card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Returns</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--amber)" }}>{returnsTotal}</div>
+              </div>
+              <div className="card stat-card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Deduction</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div>
+              </div>
+              <div className="card stat-card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Months Logged</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{returnsList.length}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+                <label className="input-label">Month</label>
+                <input className="input" type="month" style={{ colorScheme: "dark" }} value={returnsForm.month} onChange={e => setReturnsForm({ ...returnsForm, month: e.target.value })} />
+              </div>
+              <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+                <label className="input-label">Number of Returns</label>
+                <input className="input" type="number" min="0" placeholder="0" value={returnsForm.count} onChange={e => setReturnsForm({ ...returnsForm, count: e.target.value })} />
+              </div>
+              <button className="btn btn-primary liquidation" onClick={saveReturns} disabled={savingReturns || !returnsForm.month || returnsForm.count === ""}>
+                {savingReturns ? "Saving..." : (returnsList.find(x => x.month === returnsForm.month) ? "Update" : "Add")}
+              </button>
+            </div>
+            {returnsList.length > 0 && (
+              <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>History</div>
+                {returnsList.map(r => {
+                  const [y, m] = (r.month || "").split("-");
+                  const monthLabel = y && m ? new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : r.month;
+                  return (
+                    <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{monthLabel}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.count} return{r.count === 1 ? "" : "s"}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span className="mono" style={{ fontWeight: 700, color: "var(--red)" }}>−£{((r.count || 0) * RETURN_COST_PER_UNIT).toFixed(2)}</span>
+                        <button className="btn-icon" onClick={() => setReturnsForm({ month: r.month, count: r.count.toString() })} title="Edit"><Icons.Edit /></button>
+                        <button className="btn-icon btn-danger" onClick={() => deleteReturns(r.id)} title="Delete"><Icons.Trash /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -6045,30 +6062,39 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
       {/* Sales Tab */}
       {activeTab === "sales" && (() => {
-        // Build pending payout summary
+        // Build pending payout summary — grouped by MONTH (one payout per calendar month)
         const unpaidSales = sales.filter(s => !s.paid && s.payout_date);
         const payoutGroups = unpaidSales.reduce((acc, s) => {
-          const key = s.payout_date;
-          if (!acc[key]) acc[key] = { total: 0, count: 0 };
-          acc[key].total += parseFloat(s.payout) || 0;
-          acc[key].count += 1;
+          // bucket by YYYY-MM of the payout_date
+          const monthKey = (s.payout_date || "").slice(0, 7); // "2026-06"
+          if (!acc[monthKey]) acc[monthKey] = { total: 0, count: 0, dates: new Set() };
+          acc[monthKey].total += parseFloat(s.payout) || 0;
+          acc[monthKey].count += 1;
+          acc[monthKey].dates.add(s.payout_date);
           return acc;
         }, {});
-        const pendingDates = Object.keys(payoutGroups).sort();
+        const pendingMonths = Object.keys(payoutGroups).sort();
         return <>
-          {pendingDates.length > 0 && <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          {pendingMonths.length > 0 && <div className="card" style={{ padding: 20, marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Pending Payouts</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {pendingDates.map(date => {
-                const grp = payoutGroups[date];
-                const label = new Date(date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-                return <div key={date} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
+              {pendingMonths.map(monthKey => {
+                const grp = payoutGroups[monthKey];
+                const [y, m] = monthKey.split("-").map(Number);
+                // last day of that month
+                const lastDay = new Date(y, m, 0);
+                const label = lastDay.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                const datesInGroup = Array.from(grp.dates);
+                return <div key={monthKey} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Due {label}</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{grp.total.toFixed(2)}</div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{grp.count} sale{grp.count === 1 ? "" : "s"}</div>
                   <button onClick={async () => {
                     if (!confirm(`Mark all £${grp.total.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}) as paid?`)) return;
-                    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${date}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) });
+                    // PATCH every distinct payout_date in this month group
+                    await Promise.all(datesInGroup.map(d =>
+                      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${d}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
+                    ));
                     showToast(`Marked £${grp.total.toFixed(2)} as paid`);
                     loadSales(); onRefresh();
                   }} style={{ marginTop: 8, padding: "6px 12px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>✓ Mark All Paid</button>
