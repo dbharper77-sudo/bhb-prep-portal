@@ -5634,55 +5634,81 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const [showAddStock, setShowAddStock] = useState(false);
   const [addStockForm, setAddStockForm] = useState({ product_name: "", asin: "", lpn_number: "", condition: "", quantity: 1, cog: "", sheet_uid: "" });
   const [addStockSaving, setAddStockSaving] = useState(false);
-  const [returnsList, setReturnsList] = useState([]);
-  const [returnsForm, setReturnsForm] = useState({ month: new Date().toISOString().slice(0, 7), count: "" });
-  const [savingReturns, setSavingReturns] = useState(false);
-  const [returnsOpen, setReturnsOpen] = useState(false);
+  const [adjustments, setAdjustments] = useState([]);
+  const [adjForm, setAdjForm] = useState({ month: new Date().toISOString().slice(0, 7), type: "return", count: "", amount: "", description: "" });
+  const [savingAdj, setSavingAdj] = useState(false);
+  const [adjOpen, setAdjOpen] = useState(false);
   const isPanayiotis = client.id === PANAYIOTIS_ID;
 
-  const loadReturns = async () => {
+  const ADJ_TYPES = {
+    return: { label: "Return (£7.10 each)", auto: true },
+    partial_refund: { label: "Partial Refund", auto: false },
+    full_refund: { label: "Full Refund", auto: false },
+    other: { label: "Other", auto: false }
+  };
+
+  // Compute the £ amount of a single adjustment row
+  const adjAmount = (a) => {
+    if (a.type === "return") return (a.count || 0) * RETURN_COST_PER_UNIT;
+    return parseFloat(a.amount) || 0;
+  };
+
+  const loadAdjustments = async () => {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?user_id=eq.${client.id}&order=month.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?user_id=eq.${client.id}&order=month.desc,created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
       const data = await res.json();
-      if (Array.isArray(data)) setReturnsList(data);
+      if (Array.isArray(data)) setAdjustments(data);
     } catch (e) { console.error(e); }
   };
 
-  const saveReturns = async () => {
-    if (!returnsForm.month || returnsForm.count === "") return;
-    setSavingReturns(true);
-    const count = parseInt(returnsForm.count) || 0;
-    const existing = returnsList.find(x => x.month === returnsForm.month);
+  const saveAdjustment = async () => {
+    const isReturn = adjForm.type === "return";
+    if (!adjForm.month) return;
+    if (isReturn && adjForm.count === "") return;
+    if (!isReturn && adjForm.amount === "") return;
+    setSavingAdj(true);
+    const body = {
+      user_id: client.id,
+      month: adjForm.month,
+      type: adjForm.type,
+      count: isReturn ? (parseInt(adjForm.count) || 0) : 0,
+      amount: isReturn ? 0 : (parseFloat(adjForm.amount) || 0),
+      description: adjForm.description || null
+    };
     try {
-      if (existing) {
-        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?id=eq.${existing.id}`, {
+      if (adjForm.id) {
+        await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?id=eq.${adjForm.id}`, {
           method: "PATCH",
           headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ count })
+          body: JSON.stringify(body)
         });
       } else {
         await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns`, {
           method: "POST",
           headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: client.id, month: returnsForm.month, count })
+          body: JSON.stringify(body)
         });
       }
-      showToast("Returns saved!");
-      setReturnsForm({ month: new Date().toISOString().slice(0, 7), count: "" });
-      loadReturns();
-    } catch (e) { showToast("Error saving returns"); }
-    setSavingReturns(false);
+      showToast("Saved!");
+      setAdjForm({ month: new Date().toISOString().slice(0, 7), type: "return", count: "", amount: "", description: "" });
+      loadAdjustments();
+    } catch (e) { showToast("Error saving"); }
+    setSavingAdj(false);
   };
 
-  const deleteReturns = async (id) => {
-    if (!confirm("Delete this returns entry?")) return;
+  const deleteAdjustment = async (id) => {
+    if (!confirm("Delete this entry?")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
     showToast("Deleted!");
-    loadReturns();
+    loadAdjustments();
   };
 
-  const returnsTotal = returnsList.reduce((s, r) => s + (r.count || 0), 0);
-  const returnsDeduction = returnsTotal * RETURN_COST_PER_UNIT;
+  const editAdjustment = (a) => {
+    setAdjForm({ id: a.id, month: a.month, type: a.type || "return", count: (a.count || 0).toString(), amount: (a.amount || 0).toString(), description: a.description || "" });
+    setAdjOpen(true);
+  };
+
+  const adjTotal = adjustments.reduce((s, a) => s + adjAmount(a), 0);
 
   const deleteStockItem = async (item) => {
     const label = item.product_name || item.dbh_sku || "this item";
@@ -5788,7 +5814,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   }, [isPanayiotis, token]);
 
   useEffect(() => { fetch(`${SUPABASE_URL}/rest/v1/settings?key=eq.discord_webhook_url`, { headers: supabase.headers(token) }).then(r => r.json()).then(d => { if (d?.[0]?.value) setWebhookUrl(d[0].value); }); }, []);
-  useEffect(() => { loadSales(); loadReturns(); }, [client.id]);
+  useEffect(() => { loadSales(); loadAdjustments(); }, [client.id]);
 
   const loadSales = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&order=date_sold.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
@@ -5923,71 +5949,99 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
         <div className="card stat-card liquidation"><div className="card-title">Total Payouts</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{totalSalesPayout.toFixed(2)}</div></div>
       </div>
 
-      {/* Returns Tracker */}
-      <div className="card" style={{ marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.05),transparent)", borderColor: "rgba(255,145,0,0.2)", padding: returnsOpen ? undefined : "14px 18px" }}>
-        <div onClick={() => setReturnsOpen(o => !o)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
+      {/* Adjustments / Deductions */}
+      <div className="card" style={{ marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.05),transparent)", borderColor: "rgba(255,145,0,0.2)", padding: adjOpen ? undefined : "14px 18px" }}>
+        <div onClick={() => setAdjOpen(o => !o)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--orange)" }}>📦 Returns Tracker</span>
-            {returnsTotal > 0 && (
+            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--orange)" }}>💷 Adjustments & Deductions</span>
+            {adjTotal > 0 && (
               <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                {returnsTotal} return{returnsTotal === 1 ? "" : "s"} • <span style={{ color: "var(--red)", fontWeight: 700 }}>−£{returnsDeduction.toFixed(2)}</span>
+                {adjustments.length} entr{adjustments.length === 1 ? "y" : "ies"} • <span style={{ color: "var(--red)", fontWeight: 700 }}>−£{adjTotal.toFixed(2)}</span>
               </span>
             )}
           </div>
-          <span style={{ fontSize: 18, color: "var(--text-muted)", transition: "transform 0.15s", transform: returnsOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▸</span>
+          <span style={{ fontSize: 18, color: "var(--text-muted)", transition: "transform 0.15s", transform: adjOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▸</span>
         </div>
-        {returnsOpen && (
+        {adjOpen && (
           <>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>£{RETURN_COST_PER_UNIT.toFixed(2)} per return (label out + back)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
-              <div className="card stat-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Returns</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--amber)" }}>{returnsTotal}</div>
-              </div>
-              <div className="card stat-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Deduction</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div>
-              </div>
-              <div className="card stat-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Months Logged</div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{returnsList.length}</div>
-              </div>
-            </div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>Log returns, refunds and other costs. Each comes off the chosen month's payout. Returns auto-cost £{RETURN_COST_PER_UNIT.toFixed(2)} each (label out + back).</div>
+            {/* Form */}
             <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+              <div className="input-group" style={{ flex: "1 1 150px", marginBottom: 0 }}>
+                <label className="input-label">Type</label>
+                <select className="input" value={adjForm.type} onChange={e => setAdjForm({ ...adjForm, type: e.target.value })}>
+                  {Object.entries(ADJ_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+              </div>
+              <div className="input-group" style={{ flex: "1 1 140px", marginBottom: 0 }}>
                 <label className="input-label">Month</label>
-                <input className="input" type="month" style={{ colorScheme: "dark" }} value={returnsForm.month} onChange={e => setReturnsForm({ ...returnsForm, month: e.target.value })} />
+                <input className="input" type="month" style={{ colorScheme: "dark" }} value={adjForm.month} onChange={e => setAdjForm({ ...adjForm, month: e.target.value })} />
               </div>
-              <div className="input-group" style={{ flex: "1 1 160px", marginBottom: 0 }}>
-                <label className="input-label">Number of Returns</label>
-                <input className="input" type="number" min="0" placeholder="0" value={returnsForm.count} onChange={e => setReturnsForm({ ...returnsForm, count: e.target.value })} />
+              {adjForm.type === "return" ? (
+                <div className="input-group" style={{ flex: "1 1 120px", marginBottom: 0 }}>
+                  <label className="input-label">Qty Returns</label>
+                  <input className="input" type="number" min="0" placeholder="0" value={adjForm.count} onChange={e => setAdjForm({ ...adjForm, count: e.target.value })} />
+                </div>
+              ) : (
+                <div className="input-group" style={{ flex: "1 1 120px", marginBottom: 0 }}>
+                  <label className="input-label">Amount (£)</label>
+                  <input className="input" type="number" min="0" step="0.01" placeholder="0.00" value={adjForm.amount} onChange={e => setAdjForm({ ...adjForm, amount: e.target.value })} />
+                </div>
+              )}
+              <div className="input-group" style={{ flex: "2 1 200px", marginBottom: 0 }}>
+                <label className="input-label">Note (optional)</label>
+                <input className="input" placeholder="e.g. eBay order #123" value={adjForm.description} onChange={e => setAdjForm({ ...adjForm, description: e.target.value })} />
               </div>
-              <button className="btn btn-primary liquidation" onClick={saveReturns} disabled={savingReturns || !returnsForm.month || returnsForm.count === ""}>
-                {savingReturns ? "Saving..." : (returnsList.find(x => x.month === returnsForm.month) ? "Update" : "Add")}
+              <button className="btn btn-primary liquidation" onClick={saveAdjustment} disabled={savingAdj || !adjForm.month || (adjForm.type === "return" ? adjForm.count === "" : adjForm.amount === "")}>
+                {savingAdj ? "Saving..." : (adjForm.id ? "Update" : "Add")}
               </button>
+              {adjForm.id && <button onClick={() => setAdjForm({ month: new Date().toISOString().slice(0, 7), type: "return", count: "", amount: "", description: "" })} style={{ padding: "10px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>}
             </div>
-            {returnsList.length > 0 && (
-              <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-                <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>History</div>
-                {returnsList.map(r => {
-                  const [y, m] = (r.month || "").split("-");
-                  const monthLabel = y && m ? new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : r.month;
-                  return (
-                    <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{monthLabel}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.count} return{r.count === 1 ? "" : "s"}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span className="mono" style={{ fontWeight: 700, color: "var(--red)" }}>−£{((r.count || 0) * RETURN_COST_PER_UNIT).toFixed(2)}</span>
-                        <button className="btn-icon" onClick={() => setReturnsForm({ month: r.month, count: r.count.toString() })} title="Edit"><Icons.Edit /></button>
-                        <button className="btn-icon btn-danger" onClick={() => deleteReturns(r.id)} title="Delete"><Icons.Trash /></button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {/* Live preview of this entry's £ */}
+            {adjForm.type === "return" && adjForm.count !== "" && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>= −£{((parseInt(adjForm.count) || 0) * RETURN_COST_PER_UNIT).toFixed(2)} ({adjForm.count} × £{RETURN_COST_PER_UNIT.toFixed(2)})</div>
             )}
+            {/* History grouped by month */}
+            {adjustments.length > 0 && (() => {
+              const byMonth = adjustments.reduce((acc, a) => { (acc[a.month] = acc[a.month] || []).push(a); return acc; }, {});
+              const months = Object.keys(byMonth).sort().reverse();
+              return (
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>History</div>
+                  {months.map(mk => {
+                    const [y, m] = mk.split("-");
+                    const monthLabel = y && m ? new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : mk;
+                    const rows = byMonth[mk];
+                    const monthTotal = rows.reduce((s, a) => s + adjAmount(a), 0);
+                    return (
+                      <div key={mk} style={{ marginBottom: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+                          <span>{monthLabel}</span>
+                          <span style={{ color: "var(--red)" }}>−£{monthTotal.toFixed(2)}</span>
+                        </div>
+                        {rows.map(a => {
+                          const typeLabel = (ADJ_TYPES[a.type] || ADJ_TYPES.other).label.replace(" (£7.10 each)", "");
+                          const detail = a.type === "return" ? `${a.count} return${a.count === 1 ? "" : "s"}` : typeLabel;
+                          return (
+                            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0 6px 12px", borderBottom: "1px solid var(--border)" }}>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{a.type === "return" ? "📦 Return" : typeLabel}</div>
+                                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{detail}{a.description ? ` — ${a.description}` : ""}</div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span className="mono" style={{ fontWeight: 700, color: "var(--red)" }}>−£{adjAmount(a).toFixed(2)}</span>
+                                <button className="btn-icon" onClick={() => editAdjustment(a)} title="Edit"><Icons.Edit /></button>
+                                <button className="btn-icon btn-danger" onClick={() => deleteAdjustment(a.id)} title="Delete"><Icons.Trash /></button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
@@ -6085,17 +6139,21 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 const lastDay = new Date(y, m, 0);
                 const label = lastDay.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
                 const datesInGroup = Array.from(grp.dates);
+                // Deductions logged for this month
+                const monthAdj = adjustments.filter(a => a.month === monthKey).reduce((s, a) => s + adjAmount(a), 0);
+                const net = grp.total - monthAdj;
                 return <div key={monthKey} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Due {label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{grp.total.toFixed(2)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{net.toFixed(2)}</div>
+                  {monthAdj > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>£{grp.total.toFixed(2)} − <span style={{ color: "var(--red)" }}>£{monthAdj.toFixed(2)} deductions</span></div>}
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{grp.count} sale{grp.count === 1 ? "" : "s"}</div>
                   <button onClick={async () => {
-                    if (!confirm(`Mark all £${grp.total.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}) as paid?`)) return;
+                    if (!confirm(`Mark all £${net.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}${monthAdj > 0 ? `, after £${monthAdj.toFixed(2)} deductions` : ""}) as paid?`)) return;
                     // PATCH every distinct payout_date in this month group
                     await Promise.all(datesInGroup.map(d =>
                       fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${d}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
                     ));
-                    showToast(`Marked £${grp.total.toFixed(2)} as paid`);
+                    showToast(`Marked £${net.toFixed(2)} as paid`);
                     loadSales(); onRefresh();
                   }} style={{ marginTop: 8, padding: "6px 12px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>✓ Mark All Paid</button>
                 </div>;
