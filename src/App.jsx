@@ -6086,7 +6086,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th>Listed</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th></th></tr></thead>
           <tbody>{listedItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
@@ -6099,7 +6099,6 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
               <td><span className="mono" style={{ color: remaining <= 0 ? "var(--red)" : "var(--text-primary)", fontWeight: 700 }}>{remaining}</span></td>
               <td>{isEdit ? <input type="number" step="0.01" className="inline-input" style={{ width: 65 }} value={data.cog} onChange={e => setEditData({ ...editData, cog: e.target.value })} /> : (item.cog ? <span className="mono" style={{ color: "var(--orange)" }}>£{parseFloat(item.cog).toFixed(2)}</span> : "—")}</td>
               <td>{isEdit ? <select className="inline-select" style={{ width: 80 }} value={data.condition} onChange={e => setEditData({ ...editData, condition: e.target.value })}><option value="">—</option><option>New</option><option>Open Box</option><option>Used</option><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option></select> : <span style={{ fontSize: 12 }}>{item.condition || "—"}</span>}</td>
-              <td style={{ textAlign: "center" }}>{isEdit ? <input type="checkbox" checked={data.listed} onChange={e => setEditData({ ...editData, listed: e.target.checked })} /> : <button onClick={async (e) => { e.stopPropagation(); const newVal = !item.listed; await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ listed: newVal }) }); showToast(newVal ? "Marked listed!" : "Unmarked!"); onRefresh(); }} style={{ background: "transparent", border: `1px solid ${item.listed ? "var(--green)" : "var(--border)"}`, color: item.listed ? "var(--green)" : "var(--text-muted)", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{item.listed ? "Yes" : "No"}</button>}</td>
               <td>
                 {isEdit ? <div style={{ display: "flex", gap: 4 }}><button className="btn-icon" onClick={saveEdit} disabled={saving}><Icons.Save /></button><button className="btn-icon btn-danger" onClick={() => setEditingId(null)}><Icons.X /></button></div>
                 : <div style={{ display: "flex", gap: 4 }}>
