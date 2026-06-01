@@ -3855,6 +3855,7 @@ function AdminSubscriptionsPage({ token, showToast }) {
   const [editSub, setEditSub] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
+  const [view, setView] = useState("active"); // "active" | "archived"
   const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
 
   const load = async () => {
@@ -3878,6 +3879,7 @@ function AdminSubscriptionsPage({ token, showToast }) {
     localStorage.setItem(notifKey, "1");
     const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     subs.forEach(async s => {
+      if (s.archived) return;
       if (!s.next_due_date) return;
       const due = new Date(s.next_due_date + "T12:00:00"); due.setHours(0,0,0,0);
       const days = Math.round((due - todayDate) / 86400000);
@@ -3916,8 +3918,22 @@ function AdminSubscriptionsPage({ token, showToast }) {
   };
 
   const deleteSub = async (id) => {
-    if (!window.confirm("Remove this subscription?")) return;
+    if (!window.confirm("Remove this subscription? This will permanently delete it.")) return;
     await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${id}`, { method: "DELETE", headers: h }); load();
+  };
+
+  const archiveSub = async (sub) => {
+    const name = sub.profiles?.full_name || sub.profiles?.email || "this subscriber";
+    if (!window.confirm(`Archive ${name}?\n\nThey'll be moved to the Archived tab and won't count toward overdue / monthly revenue. Their payment history stays on the Income Tracker.`)) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ archived: true, status: "archived" }) });
+    showToast(`📦 Archived ${name}`); load();
+  };
+
+  const unarchiveSub = async (sub) => {
+    const name = sub.profiles?.full_name || sub.profiles?.email || "this subscriber";
+    if (!window.confirm(`Restore ${name} to active subscriptions?`)) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/deal_subscriptions?id=eq.${sub.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ archived: false, status: "active" }) });
+    showToast(`↩ Restored ${name}`); load();
   };
 
   const getStatus = (sub) => {
@@ -3931,16 +3947,19 @@ function AdminSubscriptionsPage({ token, showToast }) {
     return { label: `Due in ${days}d`, color: "var(--green)", days };
   };
 
-  const overdue = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days < 0; });
-  const dueSoon = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days >= 0 && st.days <= 7; });
-  const upcoming = subs.filter(s => { const st = getStatus(s); return st.days !== null && st.days > 7; });
-  const monthly = subs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
+  const activeSubs = subs.filter(s => !s.archived);
+  const archivedSubs = subs.filter(s => s.archived);
+  const displaySubs = view === "active" ? activeSubs : archivedSubs;
+  const overdue = activeSubs.filter(s => { const st = getStatus(s); return st.days !== null && st.days < 0; });
+  const dueSoon = activeSubs.filter(s => { const st = getStatus(s); return st.days !== null && st.days >= 0 && st.days <= 7; });
+  const upcoming = activeSubs.filter(s => { const st = getStatus(s); return st.days !== null && st.days > 7; });
+  const monthly = activeSubs.reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
 
   if (loading) return <div className="loader"><div className="spinner" /></div>;
 
   return <>
     <div className="page-header">
-      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{subs.length} clients · £{monthly}/mo · £{(monthly*12).toLocaleString()}/yr projected</div></div>
+      <div><div className="page-title">Deal Sheet Subscriptions</div><div className="page-subtitle">{activeSubs.length} active · £{monthly}/mo · £{(monthly*12).toLocaleString()}/yr projected{archivedSubs.length > 0 ? ` · ${archivedSubs.length} archived` : ""}</div></div>
       <button className="btn btn-primary admin" onClick={() => setShowAdd(true)}>+ Add Client</button>
     </div>
     <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5,1fr)", marginBottom: 24 }}>
@@ -3950,14 +3969,18 @@ function AdminSubscriptionsPage({ token, showToast }) {
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--cyan)" }}><div className="card-title">Monthly Revenue</div><div className="stat-value" style={{ color: "var(--cyan)", fontSize: 22 }}>£{monthly}</div></div>
       <div className="card stat-card" style={{ borderLeft: "3px solid var(--orange)" }}><div className="card-title">Annual Projected</div><div className="stat-value" style={{ color: "var(--orange)", fontSize: 22 }}>£{(monthly*12).toLocaleString()}</div></div>
     </div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <button onClick={() => setView("active")} style={{ padding: "8px 16px", background: view === "active" ? "var(--orange)" : "transparent", color: view === "active" ? "#000" : "var(--text-secondary)", border: `1px solid ${view === "active" ? "var(--orange)" : "var(--border)"}`, borderRadius: 8, cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: 13 }}>Active ({activeSubs.length})</button>
+      <button onClick={() => setView("archived")} style={{ padding: "8px 16px", background: view === "archived" ? "var(--text-muted)" : "transparent", color: view === "archived" ? "#000" : "var(--text-secondary)", border: `1px solid ${view === "archived" ? "var(--text-muted)" : "var(--border)"}`, borderRadius: 8, cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: 13 }}>📦 Archived ({archivedSubs.length})</button>
+    </div>
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
           {["Client","Amount","Last Paid","Next Due","Status","Actions"].map(col => <th key={col} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{col}</th>)}
         </tr></thead>
         <tbody>
-          {subs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No subscriptions yet</td></tr>}
-          {subs.map((s, i) => {
+          {displaySubs.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>{view === "active" ? "No active subscriptions" : "No archived subscriptions"}</td></tr>}
+          {displaySubs.map((s, i) => {
             const st = getStatus(s); const name = s.profiles?.full_name || s.profiles?.email || "Unknown";
             return <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
               <td style={{ padding: "13px 16px" }}>
@@ -3972,9 +3995,14 @@ function AdminSubscriptionsPage({ token, showToast }) {
               <td style={{ padding: "13px 16px" }}><span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}>{st.label}</span></td>
               <td style={{ padding: "13px 16px" }}>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => markPaid(s)} disabled={markingId===s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId===s.id?"...":"✓ Paid"}</button>
-                  <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date||"", next_due_date: s.next_due_date||"", notes: s.notes||"" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer" }}>✏️</button>
-                  <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>✕</button>
+                  {view === "active" ? (<>
+                    <button onClick={() => markPaid(s)} disabled={markingId===s.id} style={{ padding: "6px 12px", background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 7, color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>{markingId===s.id?"...":"✓ Paid"}</button>
+                    <button onClick={() => { setEditSub(s); setEditForm({ amount: s.amount, last_paid_date: s.last_paid_date||"", next_due_date: s.next_due_date||"", notes: s.notes||"" }); }} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-secondary)", fontSize: 12, cursor: "pointer" }} title="Edit">✏️</button>
+                    <button onClick={() => archiveSub(s)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }} title="Archive (keep history, hide from active)">📦</button>
+                  </>) : (<>
+                    <button onClick={() => unarchiveSub(s)} style={{ padding: "6px 12px", background: "rgba(0,229,255,0.15)", border: "1px solid rgba(0,229,255,0.3)", borderRadius: 7, color: "var(--cyan)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit,sans-serif" }} title="Restore to active">↩ Unarchive</button>
+                    <button onClick={() => deleteSub(s.id)} style={{ padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--red)", fontSize: 12, cursor: "pointer" }} title="Delete permanently">✕</button>
+                  </>)}
                 </div>
               </td>
             </tr>;
