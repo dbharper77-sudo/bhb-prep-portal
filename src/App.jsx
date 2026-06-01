@@ -4037,23 +4037,26 @@ function AdminPortal() {
   const [shipments, setShipments] = useState([]);
   const [liquidation, setLiquidation] = useState([]);
   const [liquidationSales, setLiquidationSales] = useState([]);
+  const [liquidationAdjustments, setLiquidationAdjustments] = useState([]);
   const [loading, setLoading] = useState(true);
   const showToast = useCallback(msg => setToast(msg), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [c, p, s, l, ls] = await Promise.all([
+    const [c, p, s, l, ls, la] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/parcels?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/shipments?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?select=*&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=user_id,payout,payout_date,paid&order=payout_date.asc`, { headers: supabase.headers(token) }).then(r => r.json())
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?select=user_id,payout,payout_date,paid&order=payout_date.asc`, { headers: supabase.headers(token) }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?select=user_id,month,type,count,amount`, { headers: supabase.headers(token) }).then(r => r.json()).catch(() => [])
     ]);
     if (Array.isArray(c)) setClients(c.filter(x => x.email !== ADMIN_EMAIL));
     if (Array.isArray(p)) setParcels(p);
     if (Array.isArray(s)) setShipments(s);
     if (Array.isArray(l)) setLiquidation(l);
     if (Array.isArray(ls)) setLiquidationSales(ls);
+    if (Array.isArray(la)) setLiquidationAdjustments(la);
     setLoading(false);
   }, [token]);
 
@@ -4093,7 +4096,7 @@ function AdminPortal() {
         onBack={backToClients}
       />;
     }
-    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} liquidationSales={liquidationSales} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
+    return <AdminClientsPage clients={clients} parcels={parcels} shipments={shipments} liquidation={liquidation} liquidationSales={liquidationSales} liquidationAdjustments={liquidationAdjustments} onSelectClient={selectClient} loading={loading} token={token} onRefresh={loadData} showToast={showToast} />;
   };
 
   return (
@@ -4122,7 +4125,7 @@ function AdminPortal() {
 }
 
 // Admin - All Clients List
-function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidationSales, onSelectClient, loading, token, onRefresh, showToast }) {
+function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidationSales, liquidationAdjustments, onSelectClient, loading, token, onRefresh, showToast }) {
   const [search, setSearch] = useState("");
   const [clientOrder, setClientOrder] = useState([]);
   const [dragId, setDragId] = useState(null);
@@ -4271,6 +4274,14 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
             acc[monthKey] += parseFloat(s.payout) || 0;
             return acc;
           }, {});
+          // Sum this client's adjustments per month (returns @ £7.10/each + refunds/other £ amounts)
+          const clientAdjsByMonth = (liquidationAdjustments || []).filter(a => a.user_id === c.id).reduce((acc, a) => {
+            const mk = a.month;
+            if (!mk) return acc;
+            const amt = a.type === "return" ? (a.count || 0) * RETURN_COST_PER_UNIT : (parseFloat(a.amount) || 0);
+            acc[mk] = (acc[mk] || 0) + amt;
+            return acc;
+          }, {});
           // Show payouts from LAST month onwards (so past-due items remain visible to clean up)
           const todayDate = new Date(); todayDate.setHours(0,0,0,0);
           const firstOfLastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
@@ -4279,9 +4290,13 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
           const upcomingPayouts = sortedPayoutMonths.slice(0, 2).map(monthKey => {
             const [y, m] = monthKey.split("-").map(Number);
             const lastDay = new Date(y, m, 0);
+            const gross = payoutsByMonth[monthKey];
+            const deduction = clientAdjsByMonth[monthKey] || 0;
             return {
               date: monthKey,
-              amount: payoutsByMonth[monthKey],
+              amount: Math.max(0, gross - deduction),
+              gross,
+              deduction,
               label: lastDay.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
             };
           });
@@ -4348,6 +4363,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
                     <div key={p.date} style={{ flex: 1, padding: "8px 10px", background: idx === 0 ? "rgba(0,230,118,0.08)" : "rgba(0,229,255,0.06)", border: idx === 0 ? "1px solid rgba(0,230,118,0.2)" : "1px solid rgba(0,229,255,0.15)", borderRadius: 8, textAlign: "center" }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: idx === 0 ? "var(--green)" : "var(--cyan)" }}>£{p.amount.toFixed(2)}</div>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Due {p.label}</div>
+                      {p.deduction > 0 && <div style={{ fontSize: 9, color: "var(--red)", marginTop: 2 }}>−£{p.deduction.toFixed(2)} adj</div>}
                     </div>
                   ))}
                 </div>
