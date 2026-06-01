@@ -6136,10 +6136,11 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
         const payoutGroups = unpaidSales.reduce((acc, s) => {
           // bucket by YYYY-MM of the payout_date
           const monthKey = (s.payout_date || "").slice(0, 7); // "2026-06"
-          if (!acc[monthKey]) acc[monthKey] = { total: 0, count: 0, dates: new Set() };
+          if (!acc[monthKey]) acc[monthKey] = { total: 0, count: 0, dates: new Set(), sales: [] };
           acc[monthKey].total += parseFloat(s.payout) || 0;
           acc[monthKey].count += 1;
           acc[monthKey].dates.add(s.payout_date);
+          acc[monthKey].sales.push(s);
           return acc;
         }, {});
         const pendingMonths = Object.keys(payoutGroups).sort();
@@ -6157,20 +6158,63 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
                 // Deductions logged for this month
                 const monthAdj = adjustments.filter(a => a.month === monthKey).reduce((s, a) => s + adjAmount(a), 0);
                 const net = grp.total - monthAdj;
-                return <div key={monthKey} style={{ flex: "1 1 200px", minWidth: 200, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
+                return <div key={monthKey} style={{ flex: "1 1 220px", minWidth: 220, padding: "12px 14px", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 10 }}>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Due {label}</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>£{net.toFixed(2)}</div>
                   {monthAdj > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>£{grp.total.toFixed(2)} − <span style={{ color: "var(--red)" }}>£{monthAdj.toFixed(2)} deductions</span></div>}
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{grp.count} sale{grp.count === 1 ? "" : "s"}</div>
-                  <button onClick={async () => {
-                    if (!confirm(`Mark all £${net.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}${monthAdj > 0 ? `, after £${monthAdj.toFixed(2)} deductions` : ""}) as paid?`)) return;
-                    // PATCH every distinct payout_date in this month group
-                    await Promise.all(datesInGroup.map(d =>
-                      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${d}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
-                    ));
-                    showToast(`Marked £${net.toFixed(2)} as paid`);
-                    loadSales(); onRefresh();
-                  }} style={{ marginTop: 8, padding: "6px 12px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>✓ Mark All Paid</button>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button onClick={async () => {
+                      if (!confirm(`Mark all £${net.toFixed(2)} due ${label} (${grp.count} sale${grp.count === 1 ? "" : "s"}${monthAdj > 0 ? `, after £${monthAdj.toFixed(2)} deductions` : ""}) as paid?`)) return;
+                      // PATCH every distinct payout_date in this month group
+                      await Promise.all(datesInGroup.map(d =>
+                        fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${d}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
+                      ));
+                      showToast(`Marked £${net.toFixed(2)} as paid`);
+                      loadSales(); onRefresh();
+                    }} style={{ flex: 1, padding: "6px 8px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✓ Mark All Paid</button>
+                    <button onClick={async () => {
+                      const input = prompt(`Part Pay for ${label}\n\nGross: £${grp.total.toFixed(2)}${monthAdj > 0 ? ` (less £${monthAdj.toFixed(2)} deductions = £${net.toFixed(2)})` : ""}\n\nEnter the amount you want to pay (£):`);
+                      if (!input) return;
+                      const target = parseFloat(input.replace(/[£,]/g, ""));
+                      if (isNaN(target) || target <= 0) { alert("Please enter a valid amount."); return; }
+                      if (target >= net) {
+                        if (!confirm(`£${target.toFixed(2)} covers the full payout (£${net.toFixed(2)}). Mark everything as paid?`)) return;
+                        await Promise.all(datesInGroup.map(d =>
+                          fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${client.id}&payout_date=eq.${d}&paid=eq.false`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
+                        ));
+                        showToast(`Marked £${net.toFixed(2)} as paid`);
+                        loadSales(); onRefresh();
+                        return;
+                      }
+                      // Sort sales oldest first (by date_sold then payout_date) so older sales clear first
+                      const candidates = [...grp.sales].sort((a, b) => {
+                        const ad = a.date_sold || a.payout_date || "";
+                        const bd = b.date_sold || b.payout_date || "";
+                        return ad.localeCompare(bd);
+                      });
+                      // Greedy: include sale if running total + sale.payout <= target
+                      let running = 0;
+                      const toMark = [];
+                      for (const s of candidates) {
+                        const p = parseFloat(s.payout) || 0;
+                        if (running + p <= target) { toMark.push(s); running += p; }
+                      }
+                      if (toMark.length === 0) {
+                        alert(`No sale fits under £${target.toFixed(2)}. The smallest unpaid sale this month is £${Math.min(...candidates.map(s => parseFloat(s.payout) || 0)).toFixed(2)}.`);
+                        return;
+                      }
+                      const remaining = net - running;
+                      const monthName = lastDay.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+                      if (!confirm(`PART PAY ${monthName}\n\n✓ Mark £${running.toFixed(2)} as paid (${toMark.length} sale${toMark.length === 1 ? "" : "s"})\n⏳ £${remaining.toFixed(2)} remains pending\n\nYou will pay the client: £${running.toFixed(2)}\n\nProceed?`)) return;
+                      // PATCH each sale id individually
+                      await Promise.all(toMark.map(s =>
+                        fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?id=eq.${s.id}`, { method: "PATCH", headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ paid: true }) })
+                      ));
+                      showToast(`Part paid £${running.toFixed(2)} — £${remaining.toFixed(2)} carried over`);
+                      loadSales(); onRefresh();
+                    }} style={{ flex: 1, padding: "6px 8px", background: "transparent", border: "1px solid var(--amber)", color: "var(--amber)", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>£ Part Pay</button>
+                  </div>
                 </div>;
               })}
             </div>
