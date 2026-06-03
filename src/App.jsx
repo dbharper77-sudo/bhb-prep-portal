@@ -2840,28 +2840,33 @@ function AdminTrackerPage() {
         const dealYTD = dealItems.filter(s => s.paid_date && s.paid_date.slice(0,4) === String(curYear)).reduce((a, s) => a + (parseFloat(s.amount) || 0), 0);
 
         // Staff costs:
-        //   Ian — £70 every Friday from 2 Jan 2026 up to and including last payment on 16 May 2026
-        //   Wenelyn — £100 every Monday from 23 May 2026 onwards
+        //   Ian — £70 every Friday from 2 Jan 2026 up to and including last Friday 15 May 2026
+        //   Wenelyn (old) — £70 every Friday from 2 Jan 2026 up to and including last Friday 22 May 2026
+        //   Wenelyn (new) — £100 every Monday from 25 May 2026 onwards
         const ianStart = new Date('2026-01-02');     // First Friday of 2026
-        const ianEnd   = new Date('2026-05-16');     // Last payment (Friday)
+        const ianEnd   = new Date('2026-05-15');     // Last Friday paid (you stopped paying after 16 May)
         const ianRate  = 70;
-        const wenStart = new Date('2026-05-23');     // First Monday she started
-        const wenRate  = 100;
+        const wenOldStart = new Date('2026-01-02');  // First Friday of 2026
+        const wenOldEnd   = new Date('2026-05-22');  // Last Friday before switch to Mondays
+        const wenOldRate  = 70;
+        const wenNewStart = new Date('2026-05-25');  // First Monday on new £100/wk
+        const wenNewRate  = 100;
         function countDaysBetween(from, to, dayOfWeek) {
           if (to < from) return 0;
           let count = 0; const d = new Date(from);
           while (d <= to) { if (d.getDay() === dayOfWeek) count++; d.setDate(d.getDate() + 1); }
           return count;
         }
+        function clampedCount(from, to, periodFrom, periodTo, dayOfWeek) {
+          const f = periodFrom > from ? periodFrom : from;
+          const t = periodTo < to ? periodTo : to;
+          return t < f ? 0 : countDaysBetween(f, t, dayOfWeek);
+        }
         function staffCostBetween(from, to) {
-          // Ian: Fridays clamped to [ianStart, ianEnd]
-          const ianFrom = from < ianStart ? ianStart : from;
-          const ianTo   = to > ianEnd ? ianEnd : to;
-          const ianPaid = ianTo < ianFrom ? 0 : countDaysBetween(ianFrom, ianTo, 5) * ianRate;
-          // Wenelyn: Mondays from wenStart onwards
-          const wenFrom = from < wenStart ? wenStart : from;
-          const wenPaid = to < wenFrom ? 0 : countDaysBetween(wenFrom, to, 1) * wenRate;
-          return ianPaid + wenPaid;
+          const ianPaid    = clampedCount(ianStart,    ianEnd,    from, to, 5) * ianRate;
+          const wenOldPaid = clampedCount(wenOldStart, wenOldEnd, from, to, 5) * wenOldRate;
+          const wenNewPaid = clampedCount(wenNewStart, new Date('2099-12-31'), from, to, 1) * wenNewRate;
+          return ianPaid + wenOldPaid + wenNewPaid;
         }
         const periodStartMonthly = new Date(selectedMonth + '-01');
         const periodEndMonthly = new Date(new Date(periodStartMonthly).setMonth(periodStartMonthly.getMonth() + 1) - 1);
@@ -3020,8 +3025,8 @@ function AdminTrackerPage() {
               <div style={{fontWeight:700,fontSize:15,color:"var(--red)",display:"flex",alignItems:"center",gap:6}}>👥 Staff Costs <span style={{fontSize:10,background:"var(--green)",color:"#000",padding:"1px 6px",borderRadius:20,fontWeight:700}}>AUTO</span></div>
             </div>
             <div style={{fontSize:24,fontWeight:700,color:"var(--red)",fontFamily:"'Outfit',sans-serif"}}>-£{staffAutoExp.toFixed(2)}</div>
-            <div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Wenelyn £100 every Monday</div>
-            <div style={{fontSize:11,color:"var(--text-muted)",marginTop:2}}>Since 23 May 2026 · Ian £70 Fri to 16 May 2026</div>
+            <div style={{fontSize:12,color:"var(--text-muted)",marginTop:6}}>Wenelyn £100/Mon</div>
+            <div style={{fontSize:11,color:"var(--text-muted)",marginTop:2}}>Ian £70/Fri to 15 May · Wenelyn switched 25 May</div>
           </div>}
         </div>
 
