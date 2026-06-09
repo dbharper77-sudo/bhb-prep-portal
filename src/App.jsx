@@ -824,6 +824,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
 }
 
 function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onRefresh, showToast }) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("transit");
   const [editingId, setEditingId] = useState(null);
   const [editQty, setEditQty] = useState("");
@@ -857,7 +858,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
+        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"],["removals","📋 Removals"]].map(([k,l]) =>
           <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
         )}
       </div>
@@ -949,6 +950,10 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
             </tr>;
           })}</tbody>
         </table></div>}
+      </div>}
+      {/* Removals */}
+      {activeTab === "removals" && <div>
+        {user?.id ? <RemovalsTab userId={user.id} token={token} isAdmin={false} showToast={showToast} /> : <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading user info...</div>}
       </div>}
     </div></>
   );
@@ -2060,6 +2065,486 @@ function AdminPrepPage({ token, showToast }) {
 }
 
 const RETURN_COST_PER_UNIT = 7.10; // £3.55 outbound + £3.55 return label
+
+// ============================================================================
+// REMOVALS SYSTEM — added 10 June 2026
+// ============================================================================
+// New data model: one removals row per Amazon removal order, one removal_units
+// row per physical unit (one per LPN). Lives alongside the old liquidation_stock
+// and liquidation_sales tables — does not replace them.
+
+const RETURN_REASONS = [
+  "DEFECTIVE", "DAMAGED_BY_FC", "UNWANTED_ITEM", "QUALITY_UNACCEPTABLE",
+  "NOT_COMPATIBLE", "NO_REASON_GIVEN", "ORDERED_WRONG", "FOUND_BETTER_PRICE",
+  "UNAUTHORIZED_PURCHASE"
+];
+
+const CONDITIONS = ["NEW", "OPEN_BOX", "USED", "UNSEALED", "BROKEN", "MISSING_PARTS"];
+
+const UNIT_STATUSES = ["received", "listed", "sold", "returned", "written_off"];
+
+// Parse Amazon's CSV reports. We detect by column headers — accepts any of:
+//   - Removal Order Detail (17 cols)
+//   - Removal Shipment Detail (10 cols, has tracking)
+//   - Customer Returns Report (per-unit, has LPN + reason)
+function parseAmazonRemovalCSV(text) {
+  // Simple CSV parser (handles quoted fields with commas)
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { error: "CSV has no data rows" };
+  const parseLine = (line) => {
+    const out = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === "," && !inQ) { out.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    out.push(cur);
+    return out;
+  };
+  const headers = parseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const rows = lines.slice(1).map(parseLine).filter(r => r.some(c => c.trim()));
+  // Detect report type
+  const hasLPN = headers.includes("lpn");
+  const hasTracking = headers.includes("tracking-number");
+  const hasReturnReason = headers.some(h => h.includes("reason"));
+  let reportType = "unknown";
+  if (hasLPN && hasReturnReason) reportType = "customer_returns";
+  else if (hasTracking) reportType = "removal_shipment";
+  else if (headers.includes("requested-quantity")) reportType = "removal_order";
+  // Map each row to a normalised object
+  const colIdx = (name) => headers.indexOf(name);
+  const get = (row, name) => { const i = colIdx(name); return i >= 0 ? (row[i] || "").trim() : ""; };
+  const parsed = rows.map(r => ({
+    request_date: (get(r, "request-date") || "").slice(0, 10),
+    order_id: get(r, "order-id"),
+    sku: get(r, "sku"),
+    fnsku: get(r, "fnsku"),
+    asin: get(r, "asin"),
+    lpn: get(r, "lpn") || get(r, "lpn-number"),
+    disposition: get(r, "disposition"),
+    return_reason: get(r, "reason") || get(r, "return-reason"),
+    customer_comments: get(r, "customer-comments"),
+    shipped_quantity: parseInt(get(r, "shipped-quantity") || "0", 10) || 0,
+    shipment_date: (get(r, "shipment-date") || "").slice(0, 10),
+    carrier: get(r, "carrier"),
+    tracking_number: get(r, "tracking-number"),
+    removal_order_type: get(r, "removal-order-type") || get(r, "order-type"),
+    product_name: get(r, "product-name") || get(r, "title")
+  })).filter(r => r.order_id);
+  return { reportType, headers, rows: parsed };
+}
+
+function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToast }) {
+  const [file, setFile] = useState(null);
+  const [parsed, setParsed] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" };
+
+  if (!open) return null;
+
+  const handleFile = async (f) => {
+    if (!f) return;
+    setFile(f);
+    const text = await f.text();
+    const result = parseAmazonRemovalCSV(text);
+    setParsed(result);
+  };
+
+  const handleUpload = async () => {
+    if (!parsed || !parsed.rows || parsed.rows.length === 0) return;
+    setUploading(true);
+    try {
+      // Group rows by removal order_id
+      const groups = {};
+      for (const r of parsed.rows) {
+        if (!groups[r.order_id]) groups[r.order_id] = [];
+        groups[r.order_id].push(r);
+      }
+      let removalsCreated = 0, unitsCreated = 0, updated = 0;
+      for (const orderId of Object.keys(groups)) {
+        const grpRows = groups[orderId];
+        const first = grpRows[0];
+        // Check if removal already exists for this user+order_id
+        const existRes = await fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&removal_order_id=eq.${encodeURIComponent(orderId)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+        const existRows = await existRes.json();
+        let removalId;
+        if (Array.isArray(existRows) && existRows.length > 0) {
+          removalId = existRows[0].id;
+        } else {
+          // Create new removal
+          const newRem = {
+            user_id: userId,
+            removal_order_id: orderId,
+            request_date: first.request_date || null,
+            removal_order_type: first.removal_order_type || null,
+            status: "active"
+          };
+          const cRes = await fetch(`${SUPABASE_URL}/rest/v1/removals`, { method: "POST", headers: h, body: JSON.stringify(newRem) });
+          const created = await cRes.json();
+          removalId = Array.isArray(created) ? created[0].id : created.id;
+          removalsCreated++;
+        }
+        // For each row, create N units (one per shipped_quantity), OR if LPN provided, one unit per LPN row
+        for (const r of grpRows) {
+          if (parsed.reportType === "customer_returns" || r.lpn) {
+            // Per-unit row already (one LPN = one unit)
+            // Check if a unit with this LPN already exists for this removal
+            if (r.lpn) {
+              const existU = await fetch(`${SUPABASE_URL}/rest/v1/removal_units?removal_id=eq.${removalId}&lpn=eq.${encodeURIComponent(r.lpn)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+              const existURows = await existU.json();
+              if (Array.isArray(existURows) && existURows.length > 0) {
+                // Update with any new data
+                const patch = {};
+                if (r.asin) patch.asin = r.asin;
+                if (r.product_name) patch.product_name = r.product_name;
+                if (r.return_reason) patch.return_reason = r.return_reason;
+                if (r.customer_comments) patch.customer_comments = r.customer_comments;
+                if (r.tracking_number) patch.tracking_number = r.tracking_number;
+                if (r.carrier) patch.carrier = r.carrier;
+                if (r.shipment_date) patch.shipment_date = r.shipment_date;
+                if (Object.keys(patch).length > 0) {
+                  await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${existURows[0].id}`, { method: "PATCH", headers: h, body: JSON.stringify(patch) });
+                  updated++;
+                }
+                continue;
+              }
+            }
+            await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
+              removal_id: removalId, user_id: userId,
+              lpn: r.lpn || null, asin: r.asin || null, fnsku: r.fnsku || null, sku: r.sku || null,
+              product_name: r.product_name || null, return_reason: r.return_reason || null,
+              customer_comments: r.customer_comments || null, disposition: r.disposition || null,
+              tracking_number: r.tracking_number || null, carrier: r.carrier || null,
+              shipment_date: r.shipment_date || null, status: "received"
+            }) });
+            unitsCreated++;
+          } else {
+            // Removal Order/Shipment Detail: create N units from shipped_quantity
+            const qty = r.shipped_quantity || 1;
+            for (let i = 0; i < qty; i++) {
+              await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
+                removal_id: removalId, user_id: userId,
+                sku: r.sku || null, fnsku: r.fnsku || null, asin: r.asin || null,
+                disposition: r.disposition || null, tracking_number: r.tracking_number || null,
+                carrier: r.carrier || null, shipment_date: r.shipment_date || null,
+                status: "received"
+              }) });
+              unitsCreated++;
+            }
+          }
+        }
+      }
+      showToast(`✓ ${removalsCreated} removal(s) created · ${unitsCreated} units added · ${updated} updated`);
+      onComplete && onComplete();
+      setFile(null); setParsed(null);
+      onClose();
+    } catch (e) {
+      console.error(e);
+      showToast(`❌ Upload failed: ${e.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 800, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>📥 Upload Removal CSV</div>
+        <button onClick={onClose} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 24, cursor: "pointer" }}>×</button>
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.6 }}>
+        Upload any of these Amazon reports from Seller Central → Reports → Fulfillment:<br/>
+        • <b>Removal Order Detail</b> — creates removals + placeholder units<br/>
+        • <b>Removal Shipment Detail</b> — adds tracking + shipment dates<br/>
+        • <b>Customer Returns Report</b> — adds LPNs, ASINs, return reasons<br/>
+        Upload all three over time to fully populate. The portal will merge data as it arrives.
+      </div>
+      <input type="file" accept=".csv,.tsv,.txt" onChange={e => handleFile(e.target.files?.[0])} style={{ padding: 12, background: "var(--bg-secondary)", border: "1px dashed var(--border)", borderRadius: 8, width: "100%", color: "var(--text-secondary)", marginBottom: 12 }} />
+      {parsed && parsed.rows && <div>
+        <div style={{ padding: 10, background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+          <div><b>Report type:</b> {parsed.reportType === "removal_order" ? "Removal Order Detail" : parsed.reportType === "removal_shipment" ? "Removal Shipment Detail" : parsed.reportType === "customer_returns" ? "Customer Returns Report" : "Unknown — best-effort import"}</div>
+          <div><b>Rows found:</b> {parsed.rows.length}</div>
+          <div><b>Unique removal orders:</b> {new Set(parsed.rows.map(r => r.order_id)).size}</div>
+          <div><b>Total units (sum of shipped-quantity):</b> {parsed.rows.reduce((s, r) => s + (r.shipped_quantity || (r.lpn ? 1 : 0)), 0)}</div>
+        </div>
+        <div style={{ maxHeight: 240, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12 }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+            <thead style={{ background: "var(--bg-secondary)", position: "sticky", top: 0 }}>
+              <tr>
+                <th style={{ padding: 6, textAlign: "left" }}>Order ID</th>
+                <th style={{ padding: 6, textAlign: "left" }}>SKU</th>
+                <th style={{ padding: 6, textAlign: "left" }}>FNSKU</th>
+                <th style={{ padding: 6, textAlign: "left" }}>LPN</th>
+                <th style={{ padding: 6 }}>Qty</th>
+                <th style={{ padding: 6, textAlign: "left" }}>Reason / Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parsed.rows.slice(0, 100).map((r, i) => <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={{ padding: 6 }}>{r.order_id}</td>
+                <td style={{ padding: 6 }}>{r.sku?.slice(0, 18)}</td>
+                <td style={{ padding: 6 }}>{r.fnsku}</td>
+                <td style={{ padding: 6 }}>{r.lpn}</td>
+                <td style={{ padding: 6, textAlign: "center" }}>{r.shipped_quantity || (r.lpn ? 1 : 0)}</td>
+                <td style={{ padding: 6 }}>{r.return_reason || r.disposition}</td>
+              </tr>)}
+            </tbody>
+          </table>
+          {parsed.rows.length > 100 && <div style={{ padding: 8, textAlign: "center", color: "var(--text-muted)", fontSize: 11 }}>+ {parsed.rows.length - 100} more rows</div>}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+          <button onClick={handleUpload} disabled={uploading} style={{ padding: "10px 18px", background: uploading ? "var(--text-muted)" : "var(--green)", color: "#000", border: "none", borderRadius: 8, cursor: uploading ? "wait" : "pointer", fontWeight: 700, fontFamily: "inherit" }}>{uploading ? "Uploading..." : `Import ${parsed.rows.length} row(s)`}</button>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+// Shared Removals Tab — used in both client and admin views.
+// Props:
+//   userId: the client whose removals to show
+//   token: auth token
+//   isAdmin: enables edit/mark-sold/delete actions
+//   showToast: toast fn
+function RemovalsTab({ userId, token, isAdmin, showToast }) {
+  const [removals, setRemovals] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [editUnit, setEditUnit] = useState(null);
+  const [editUnitForm, setEditUnitForm] = useState({});
+  const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+
+  const load = async () => {
+    setLoading(true);
+    const [rRes, uRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&order=request_date.desc.nullslast,created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${userId}&order=created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
+    ]);
+    if (Array.isArray(rRes)) setRemovals(rRes);
+    if (Array.isArray(uRes)) setUnits(uRes);
+    setLoading(false);
+  };
+
+  useEffect(() => { if (userId && token) load(); }, [userId, token]);
+
+  // Aggregate unit counts per removal
+  const unitStatsFor = (removalId) => {
+    const ru = units.filter(u => u.removal_id === removalId);
+    return {
+      total: ru.length,
+      received: ru.filter(u => u.received_by_dbh).length,
+      listed: ru.filter(u => u.status === "listed").length,
+      sold: ru.filter(u => u.status === "sold").length,
+      soldRevenue: ru.filter(u => u.status === "sold").reduce((s, u) => s + (parseFloat(u.sale_price) || 0), 0),
+      units: ru
+    };
+  };
+
+  const visibleRemovals = removals.filter(r => showHidden ? true : r.status !== "hidden");
+
+  const updateUnit = async (unitId, patch) => {
+    // Compute derived fields if sale-related fields change
+    const finalPatch = { ...patch };
+    if (patch.sale_price !== undefined || patch.ebay_fees !== undefined || patch.shipping_cost !== undefined) {
+      const current = units.find(u => u.id === unitId) || {};
+      const sale = parseFloat(patch.sale_price !== undefined ? patch.sale_price : current.sale_price) || 0;
+      const fees = parseFloat(patch.ebay_fees !== undefined ? patch.ebay_fees : current.ebay_fees) || 0;
+      const ship = parseFloat(patch.shipping_cost !== undefined ? patch.shipping_cost : current.shipping_cost) || 0;
+      const net = sale - fees - ship;
+      const pct = net >= 200 ? 15 : 20;
+      const commission = net * pct / 100;
+      const fixed = parseFloat(current.fixed_fee) || 0.40;
+      finalPatch.net_sale = net;
+      finalPatch.commission_pct = pct;
+      finalPatch.commission_amount = commission;
+      finalPatch.payout = net - commission - fixed;
+      // payout_date = end of month following sale
+      const soldStr = patch.date_sold || current.date_sold;
+      if (soldStr) {
+        const sd = new Date(soldStr + "T12:00:00");
+        const payoutMonth = new Date(sd.getFullYear(), sd.getMonth() + 2, 0); // last day of next month
+        finalPatch.payout_date = payoutMonth.toISOString().slice(0, 10);
+      }
+      if (patch.sale_price) finalPatch.status = "sold";
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${unitId}`, { method: "PATCH", headers: h, body: JSON.stringify(finalPatch) });
+    load();
+  };
+
+  const markReceived = async (unitId) => updateUnit(unitId, { received_by_dbh: true, date_received: new Date().toISOString().slice(0, 10) });
+  const markListed = async (unitId) => updateUnit(unitId, { status: "listed", date_listed: new Date().toISOString().slice(0, 10) });
+
+  const deleteUnit = async (unitId) => {
+    if (!confirm("Delete this unit row? This can't be undone.")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${unitId}`, { method: "DELETE", headers: h });
+    load();
+  };
+
+  const hideRemoval = async (removalId) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${removalId}`, { method: "PATCH", headers: h, body: JSON.stringify({ status: "hidden" }) });
+    showToast("Removal hidden");
+    load();
+  };
+
+  const unhideRemoval = async (removalId) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${removalId}`, { method: "PATCH", headers: h, body: JSON.stringify({ status: "active" }) });
+    load();
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading removals...</div>;
+
+  return <div>
+    {/* Top bar */}
+    <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+      <button onClick={() => setShowUpload(true)} style={{ padding: "8px 16px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13 }}>📥 Upload Removal CSV</button>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
+        <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Show hidden
+      </label>
+      <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" }}>
+        {visibleRemovals.length} removal{visibleRemovals.length === 1 ? "" : "s"} · {units.length} unit{units.length === 1 ? "" : "s"}
+      </div>
+    </div>
+
+    {visibleRemovals.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+      No removals yet. Upload an Amazon Removal CSV to get started.
+    </div>}
+
+    {/* Removals list */}
+    {visibleRemovals.map(rem => {
+      const stats = unitStatsFor(rem.id);
+      const expanded = expandedId === rem.id;
+      const allSold = stats.total > 0 && stats.sold === stats.total;
+      return <div key={rem.id} style={{ marginBottom: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+        {/* Summary row */}
+        <div onClick={() => setExpandedId(expanded ? null : rem.id)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", borderBottom: expanded ? "1px solid var(--border)" : "none" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "▼" : "▶"}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>📦 {rem.removal_order_id}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+              {rem.request_date ? new Date(rem.request_date).toLocaleDateString("en-GB") : "no date"}
+              {rem.removal_order_type ? ` · ${rem.removal_order_type}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 14, fontSize: 11 }}>
+            <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16 }}>{stats.total}</div><div style={{ color: "var(--text-muted)" }}>units</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: stats.received === stats.total && stats.total > 0 ? "var(--green)" : "var(--text-secondary)" }}>{stats.received}</div><div style={{ color: "var(--text-muted)" }}>delivered</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--cyan)" }}>{stats.listed}</div><div style={{ color: "var(--text-muted)" }}>listed</div></div>
+            <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--orange)" }}>{stats.sold}</div><div style={{ color: "var(--text-muted)" }}>sold</div></div>
+            {stats.soldRevenue > 0 && <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>£{stats.soldRevenue.toFixed(0)}</div><div style={{ color: "var(--text-muted)" }}>revenue</div></div>}
+          </div>
+          {allSold && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(0,230,118,0.15)", color: "var(--green)", borderRadius: 12, fontWeight: 700 }}>COMPLETE</div>}
+          {rem.status === "hidden" && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", borderRadius: 12 }}>HIDDEN</div>}
+          {isAdmin && allSold && rem.status !== "hidden" && <button onClick={e => { e.stopPropagation(); hideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer" }}>Hide</button>}
+          {isAdmin && rem.status === "hidden" && <button onClick={e => { e.stopPropagation(); unhideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--cyan)", cursor: "pointer" }}>Unhide</button>}
+        </div>
+
+        {/* Expanded — show all units */}
+        {expanded && <div style={{ padding: "0 0 10px 0", overflowX: "auto" }}>
+          {stats.units.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>No units in this removal.</div> :
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+            <thead><tr style={{ background: "rgba(0,0,0,0.2)" }}>
+              <th style={{ padding: 6, textAlign: "left" }}>LPN</th>
+              <th style={{ padding: 6, textAlign: "left" }}>Product / SKU</th>
+              <th style={{ padding: 6, textAlign: "left" }}>ASIN</th>
+              <th style={{ padding: 6, textAlign: "left" }}>Reason</th>
+              <th style={{ padding: 6, textAlign: "left" }}>Condition</th>
+              <th style={{ padding: 6, textAlign: "left" }}>Status</th>
+              <th style={{ padding: 6, textAlign: "right" }}>Sale</th>
+              <th style={{ padding: 6, textAlign: "right" }}>Payout</th>
+              {isAdmin && <th style={{ padding: 6 }}>Actions</th>}
+            </tr></thead>
+            <tbody>
+              {stats.units.map(u => <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn || "—"}</td>
+                <td style={{ padding: 6 }}>{u.product_name || u.sku || "—"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>{u.condition || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>
+                  <span style={{ padding: "2px 6px", borderRadius: 8, background: u.status === "sold" ? "rgba(0,230,118,0.15)" : u.status === "listed" ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.05)", color: u.status === "sold" ? "var(--green)" : u.status === "listed" ? "var(--cyan)" : "var(--text-secondary)" }}>{u.status}</span>
+                </td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.sale_price ? `£${parseFloat(u.sale_price).toFixed(2)}` : "—"}</td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.payout ? `£${parseFloat(u.payout).toFixed(2)}` : "—"}</td>
+                {isAdmin && <td style={{ padding: 6 }}>
+                  <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                    {!u.received_by_dbh && <button onClick={() => markReceived(u.id)} title="Mark Received" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--cyan)", cursor: "pointer", fontSize: 10 }}>📥</button>}
+                    {u.status === "received" && u.received_by_dbh && <button onClick={() => markListed(u.id)} title="Mark Listed" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--cyan)", cursor: "pointer", fontSize: 10 }}>📦</button>}
+                    <button onClick={() => { setEditUnit(u); setEditUnitForm({
+                      lpn: u.lpn || "", product_name: u.product_name || "", asin: u.asin || "", sku: u.sku || "",
+                      return_reason: u.return_reason || "", condition: u.condition || "",
+                      ebay_listing_url: u.ebay_listing_url || "", date_sold: u.date_sold || "",
+                      sale_price: u.sale_price || "", ebay_fees: u.ebay_fees || "", shipping_cost: u.shipping_cost || "",
+                      status: u.status || "received", notes: u.notes || ""
+                    }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>✏️</button>
+                    <button onClick={() => deleteUnit(u.id)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>✕</button>
+                  </div>
+                </td>}
+              </tr>)}
+            </tbody>
+          </table>}
+        </div>}
+      </div>;
+    })}
+
+    {/* Edit unit modal */}
+    {editUnit && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 600, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Edit Unit</div>
+          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 22, cursor: "pointer" }}>×</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {[["lpn","LPN"],["product_name","Product Name"],["asin","ASIN"],["sku","SKU"]].map(([k,l]) =>
+            <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
+          <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Return Reason</div>
+            <select value={editUnitForm.return_reason || ""} onChange={e => setEditUnitForm(f => ({ ...f, return_reason: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
+              <option value="">—</option>
+              {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Condition</div>
+            <select value={editUnitForm.condition || ""} onChange={e => setEditUnitForm(f => ({ ...f, condition: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
+              <option value="">—</option>
+              {CONDITIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Status</div>
+            <select value={editUnitForm.status || "received"} onChange={e => setEditUnitForm(f => ({ ...f, status: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
+              {UNIT_STATUSES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>eBay Listing URL</div><input value={editUnitForm.ebay_listing_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, ebay_listing_url: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          {[["date_sold","Date Sold (YYYY-MM-DD)"],["sale_price","Sale Price (£)"],["ebay_fees","eBay Fees (£)"],["shipping_cost","Shipping Cost (£)"]].map(([k,l]) =>
+            <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Notes</div><textarea value={editUnitForm.notes || ""} onChange={e => setEditUnitForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+          <button onClick={() => setEditUnit(null)} style={{ padding: "10px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+          <button onClick={async () => {
+            const patch = {};
+            for (const k of ["lpn","product_name","asin","sku","return_reason","condition","status","ebay_listing_url","date_sold","sale_price","ebay_fees","shipping_cost","notes"]) {
+              patch[k] = editUnitForm[k] === "" ? null : editUnitForm[k];
+            }
+            // Cast numerics
+            for (const k of ["sale_price","ebay_fees","shipping_cost"]) {
+              if (patch[k] != null) patch[k] = parseFloat(patch[k]) || null;
+            }
+            await updateUnit(editUnit.id, patch);
+            showToast("Unit updated");
+            setEditUnit(null);
+          }} style={{ padding: "10px 18px", background: "var(--green)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>Save</button>
+        </div>
+      </div>
+    </div>}
+
+    <RemovalUploadModal open={showUpload} onClose={() => setShowUpload(false)} userId={userId} token={token} onComplete={load} showToast={showToast} />
+  </div>;
+}
 
 function AdminLiquidationPage({ token, showToast }) {
   const [clients, setClients] = useState([]);
@@ -6113,7 +6598,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
-        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"]].map(([k,l]) =>
+        {[["transit","⏳ In Transit"],["listed","📦 Listed"],["sales","💰 Sales"],["removals","📋 Removals"]].map(([k,l]) =>
           <button key={k} onClick={() => setActiveTab(k)} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === k ? "var(--orange)" : "transparent", color: activeTab === k ? "#000" : "var(--text-secondary)", borderColor: activeTab === k ? "var(--orange)" : "var(--border)" }}>{l}</button>
         )}
         <button onClick={() => setShowAddStock(true)} style={{ marginLeft: "auto", padding: "8px 18px", borderRadius: 8, border: "1px solid var(--cyan)", fontSize: 13, fontWeight: 700, cursor: "pointer", background: "rgba(0,229,255,0.1)", color: "var(--cyan)" }}>+ Add Stock</button>
@@ -6302,6 +6787,11 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       </div>
         </>;
       })()}
+
+      {/* Removals Tab */}
+      {activeTab === "removals" && <div>
+        <RemovalsTab userId={client.id} token={token} isAdmin={true} showToast={showToast} />
+      </div>}
 
       {/* Add Stock Modal */}
       {showAddStock && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
