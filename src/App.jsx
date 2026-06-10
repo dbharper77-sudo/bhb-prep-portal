@@ -829,10 +829,60 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
   const [editingId, setEditingId] = useState(null);
   const [editQty, setEditQty] = useState("");
   const [saving, setSaving] = useState(false);
+  const [removalUnits, setRemovalUnits] = useState([]);
   const sales = liquidationSales || [];
-  const transitItems = liquidationStock.filter(i => !i.received);
-  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
-  const totalPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
+
+  // Load removal_units for this client to merge into legacy tabs
+  useEffect(() => {
+    if (!user?.id || !token) return;
+    fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${user.id}&order=created_at.desc`, {
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` }
+    }).then(r => r.json()).then(d => { if (Array.isArray(d)) setRemovalUnits(d); });
+  }, [user?.id, token]);
+
+  // Map removal_units into a stock-like shape for the transit/listed tabs
+  const removalAsTransit = removalUnits.filter(u => !u.received_by_dbh).map(u => ({
+    id: `r-${u.id}`,
+    _isRemoval: true,
+    dbh_sku: u.new_sku || u.sku || "—",
+    product_name: u.product_name || u.sku || "Removal unit",
+    asin: u.asin,
+    lpn_number: u.lpn,
+    quantity: 1,
+    qty_sold: 0,
+    cog: null
+  }));
+  const removalAsListed = removalUnits.filter(u => u.received_by_dbh && u.status !== "sold").map(u => ({
+    id: `r-${u.id}`,
+    _isRemoval: true,
+    dbh_sku: u.new_sku || u.sku || "—",
+    product_name: u.product_name || u.sku || "Removal unit",
+    asin: u.asin,
+    lpn_number: u.lpn,
+    quantity: 1,
+    qty_sold: 0,
+    cog: null
+  }));
+  const removalAsSales = removalUnits.filter(u => u.status === "sold").map(u => ({
+    id: `r-${u.id}`,
+    _isRemoval: true,
+    date_sold: u.date_sold,
+    product_name_snapshot: u.product_name || u.sku || "Removal unit",
+    qty_sold: 1,
+    sale_price: u.sale_price,
+    net_sale: u.net_sale,
+    dbh_pct: u.commission_pct,
+    dbh_fee: u.commission_amount,
+    fixed_fee: u.fixed_fee,
+    payout: u.payout,
+    payout_date: u.payout_date,
+    paid: u.paid
+  }));
+
+  const transitItems = [...liquidationStock.filter(i => !i.received), ...removalAsTransit];
+  const listedItems = [...liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0), ...removalAsListed];
+  const allSales = [...sales, ...removalAsSales];
+  const totalPayout = allSales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
 
   const saveQty = async (item) => {
     const newQty = parseInt(editQty);
@@ -872,7 +922,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
               <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
-              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+              <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono">
                 {isEdit
@@ -881,12 +931,12 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
               </td>
               <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
               <td>
-                {isEdit
+                {s._isRemoval ? <span style={{ fontSize: 10, color: "var(--text-muted)" }}>via Removals</span> : (isEdit
                   ? <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => saveQty(s)} disabled={saving} style={{ padding: "3px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
                       <button onClick={() => setEditingId(null)} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
                     </div>
-                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>}
+                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>)}
               </td>
             </tr>;
           })}</tbody>
@@ -903,7 +953,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
               <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
-              <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+              <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
               <td className="mono">
@@ -915,12 +965,12 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
               <td className="mono" style={{ fontWeight: 700, color: remaining <= 0 ? "var(--red)" : "var(--text-primary)" }}>{remaining}</td>
               <td className="mono">{s.cog ? `£${parseFloat(s.cog).toFixed(2)}` : "—"}</td>
               <td>
-                {isEdit
+                {s._isRemoval ? <span style={{ fontSize: 10, color: "var(--text-muted)" }}>via Removals</span> : (isEdit
                   ? <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => saveQty(s)} disabled={saving} style={{ padding: "3px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
                       <button onClick={() => setEditingId(null)} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
                     </div>
-                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>}
+                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>)}
               </td>
             </tr>;
           })}</tbody>
@@ -929,22 +979,22 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
 
       {/* Sales */}
       {activeTab === "sales" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        {sales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales yet.</p></div> :
+        {allSales.length === 0 ? <div className="empty-state"><Icons.Box /><p>No sales yet.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
           <thead><tr><th>Date Sold</th><th>Product</th><th>Qty</th><th>Sale £</th><th>Net Sale</th><th>DBH %</th><th>DBH £</th><th>Fixed</th><th>Payout</th><th>Payout Date</th><th>Paid</th></tr></thead>
-          <tbody>{sales.map(s => {
-            const stockItem = liquidationStock.find(l => l.id === s.stock_id);
+          <tbody>{allSales.map(s => {
+            const stockItem = !s._isRemoval ? liquidationStock.find(l => l.id === s.stock_id) : null;
             const pname = s.product_name_snapshot || stockItem?.product_name || "—";
             return <tr key={s.id}>
               <td style={{ fontSize: 12 }}>{s.date_sold ? formatShortDate(s.date_sold) : "—"}</td>
-              <td style={{ fontWeight: 600, fontSize: 12 }}>{pname}</td>
-              <td className="mono">{s.qty_sold}</td>
-              <td className="mono">£{parseFloat(s.sale_price).toFixed(2)}</td>
-              <td className="mono">£{parseFloat(s.net_sale).toFixed(2)}</td>
-              <td className="mono">{s.dbh_pct}%</td>
-              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.dbh_fee).toFixed(2)}</td>
-              <td className="mono" style={{ color: "var(--red)" }}>£{parseFloat(s.fixed_fee).toFixed(2)}</td>
-              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</td>
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{pname}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
+              <td className="mono">{s.qty_sold || 1}</td>
+              <td className="mono">{s.sale_price ? `£${parseFloat(s.sale_price).toFixed(2)}` : "—"}</td>
+              <td className="mono">{s.net_sale != null ? `£${parseFloat(s.net_sale).toFixed(2)}` : "—"}</td>
+              <td className="mono">{s.dbh_pct ? `${s.dbh_pct}%` : "—"}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>{s.dbh_fee != null ? `£${parseFloat(s.dbh_fee).toFixed(2)}` : "—"}</td>
+              <td className="mono" style={{ color: "var(--red)" }}>{s.fixed_fee != null ? `£${parseFloat(s.fixed_fee).toFixed(2)}` : "—"}</td>
+              <td className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>{s.payout != null ? `£${parseFloat(s.payout).toFixed(2)}` : "—"}</td>
               <td style={{ fontSize: 12 }}>{s.payout_date ? formatShortDate(s.payout_date) : "—"}</td>
               <td style={{ textAlign: "center" }}>{s.paid ? <span style={{ color: "var(--green)" }}>✓ Paid</span> : <span style={{ color: "var(--amber)", fontSize: 12 }}>Pending</span>}</td>
             </tr>;
@@ -963,8 +1013,98 @@ function LiquidationFeesPage() {
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Fees</div><div className="page-subtitle">Transparent pricing</div></div></div>
     <div className="page-body">
-      <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "15%", d: "10% if ≥£200", i: "💰", vat: false }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦", vat: true }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩", vat: true }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏", vat: true }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p} {f.vat && <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span>}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
+      <div className="fee-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28 }}>{[{ n: "Selling Fee", p: "20%", d: "15% if ≥£200", i: "💰", vat: false }, { n: "Prep Fee", p: "£0.40", d: "Per item", i: "📦", vat: true }, { n: "Bundling", p: "£0.30", d: "Per bundle", i: "🧩", vat: true }, { n: "Oversized", p: "£1.00", d: "Per item", i: "📏", vat: true }].map(f => <div className="fee-card" key={f.n} style={{ borderColor: "var(--orange)" }}><div style={{ fontSize: 28, marginBottom: 8 }}>{f.i}</div><div className="fee-price" style={{ color: "var(--orange)" }}>{f.p} {f.vat && <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>+VAT</span>}</div><div className="fee-name">{f.n}</div><div className="fee-desc">{f.d}</div></div>)}</div>
       <div className="card" style={{ background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>✅ Transparency</div><p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>Payouts at end of the following month to allow for returns.</p></div>
+    </div></>
+  );
+}
+
+function LiquidationGettingStartedPage() {
+  const step = { padding: 22, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 16 };
+  const stepNum = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: "var(--orange)", color: "#000", fontWeight: 800, fontSize: 14, marginRight: 12 };
+  const stepTitle = { fontSize: 17, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", marginBottom: 14 };
+  const body = { fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7 };
+  const code = { display: "inline-block", padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.2)", borderRadius: 4, fontFamily: "monospace", fontSize: 13, color: "var(--cyan)" };
+  return (
+    <><div className="page-header"><div><div className="page-title">Getting Started</div><div className="page-subtitle">How DBH Liquidation works</div></div></div>
+    <div className="page-body">
+
+      <div className="card" style={{ padding: 24, marginBottom: 20, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "var(--orange)", marginBottom: 6 }}>👋 Welcome to DBH Liquidation</div>
+        <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          We turn your Amazon returns and unsellable stock into cash via eBay.
+          You send us your removals, we photograph, list, and sell — you get paid at the end of the following month.
+        </div>
+      </div>
+
+      <div style={step}>
+        <div style={stepTitle}><span style={stepNum}>1</span>📦 Send your removals to DBH</div>
+        <div style={body}>
+          In Amazon Seller Central, set your removal address to:
+          <div style={{ padding: 14, background: "rgba(0,0,0,0.3)", border: "1px solid var(--border)", borderRadius: 8, fontFamily: "monospace", fontSize: 13, lineHeight: 1.8, marginTop: 10, color: "var(--text-primary)" }}>
+            DBH FBA Ltd<br/>
+            [Warehouse address — DM Dan for the latest]<br/>
+            United Kingdom
+          </div>
+          <div style={{ marginTop: 12 }}>
+            💡 <b>Tip:</b> Set up <i>Automated Unfulfillable Removal</i> in Seller Central so Amazon
+            automatically sends your returns and unsellable inventory to us, no manual work needed.
+          </div>
+        </div>
+      </div>
+
+      <div style={step}>
+        <div style={stepTitle}><span style={stepNum}>2</span>📊 Upload your removal report</div>
+        <div style={body}>
+          Once a week (or whenever you want to update us), go to:
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <span style={code}>Seller Central → Reports → Fulfillment → Customer Returns</span>
+          </div>
+          Set the date range, click <b>Request CSV</b>, then download when it's ready.
+          <div style={{ marginTop: 12 }}>
+            In this portal, head to <b>My Stock → 📋 Removals tab</b> and click <b>📥 Upload Removal CSV</b>.
+            Drop the file in, confirm the preview, done.
+          </div>
+          <div style={{ marginTop: 12, padding: 12, background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 8, fontSize: 13 }}>
+            <b style={{ color: "var(--cyan)" }}>Also supports two other Amazon reports:</b><br/>
+            • <b>Removal Order Detail</b> — high-level summary with fees<br/>
+            • <b>Removal Shipment Detail</b> — adds tracking + shipment dates<br/>
+            Upload them in any order — the portal merges everything by LPN.
+          </div>
+        </div>
+      </div>
+
+      <div style={step}>
+        <div style={stepTitle}><span style={stepNum}>3</span>👀 Track your items in real time</div>
+        <div style={body}>
+          Open the <b>📋 Removals</b> tab any time to see live status of every unit:
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+            <div style={{ padding: "8px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}>📥 <b>Received</b> — we have it</div>
+            <div style={{ padding: "8px 14px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 8, fontSize: 12, color: "var(--cyan)" }}>📦 <b>Listed</b> — live on eBay</div>
+            <div style={{ padding: "8px 14px", background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: 8, fontSize: 12, color: "var(--green)" }}>💰 <b>Sold</b> — payout pending</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={step}>
+        <div style={stepTitle}><span style={stepNum}>4</span>💵 Get paid</div>
+        <div style={body}>
+          Payouts go out at the <b>end of the month following the sale</b>.<br/>
+          For example: items sold in May are paid out at the end of June.<br/>
+          This buffer covers the eBay returns window and keeps everything clean.
+          <div style={{ marginTop: 12 }}>
+            See your full payout history under <b>Billing</b> in the sidebar.
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginTop: 24, background: "linear-gradient(135deg,rgba(0,229,255,0.06),transparent)", borderColor: "rgba(0,229,255,0.25)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--cyan)", marginBottom: 8 }}>💬 Questions?</div>
+        <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          DM Dan in Discord any time — happy to help you get set up, troubleshoot uploads, or talk through anything that doesn't make sense.
+        </div>
+      </div>
+
     </div></>
   );
 }
@@ -3092,6 +3232,7 @@ function ClientPortal() {
   ];
   const liqNav = [
     { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
+    { id: "getting-started", label: "Getting Started", icon: Icons.Zap },
     { id: "send-stock", label: "Send Stock", icon: Icons.Send },
     { id: "my-stock", label: "My Stock", icon: Icons.Box },
     { id: "fees", label: "Fees", icon: Icons.Calculator },
