@@ -732,18 +732,37 @@ function PrepBillingPage({ billingPeriods, invoices = [], shipments = [], token 
 }
 
 // ============ CLIENT LIQUIDATION PAGES ============
-function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationReturns }) {
+function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationReturns, removalUnits = [] }) {
   const sales = liquidationSales || [];
-  const transitItems = liquidationStock.filter(i => !i.received);
-  const listedItems = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
-  const pendingPayoutGross = sales.filter(s => !s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
-  const paidTotal = sales.filter(s => s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  // Treat sold removal_units as sales for payout/stat purposes
+  const removalSales = removalUnits.filter(u => u.status === "sold").map(u => ({
+    id: `r-${u.id}`,
+    _isRemoval: true,
+    date_sold: u.date_sold,
+    product_name_snapshot: u.product_name || u.sku || "Removal unit",
+    payout: u.payout,
+    payout_date: u.payout_date,
+    paid: u.paid,
+    stock_id: null
+  }));
+  const allSales = [...sales, ...removalSales];
+
+  const transitFromStock = liquidationStock.filter(i => !i.received);
+  const transitFromRemovals = removalUnits.filter(u => !u.received_by_dbh);
+  const listedFromStock = liquidationStock.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
+  const listedFromRemovals = removalUnits.filter(u => u.received_by_dbh && u.status !== "sold");
+
+  const transitItems = [...transitFromStock, ...transitFromRemovals];
+  const listedItems = [...listedFromStock, ...listedFromRemovals];
+
+  const pendingPayoutGross = allSales.filter(s => !s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const paidTotal = allSales.filter(s => s.paid).reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
   const totalReturns = (liquidationReturns || []).reduce((sum, r) => sum + (r.count || 0), 0);
   const returnsDeduction = totalReturns * RETURN_COST_PER_UNIT;
   const pendingPayout = Math.max(0, pendingPayoutGross - returnsDeduction);
-  const unpaidSales = sales.filter(s => !s.paid && s.payout_date).sort((a, b) => new Date(a.payout_date) - new Date(b.payout_date));
+  const unpaidSales = allSales.filter(s => !s.paid && s.payout_date).sort((a, b) => new Date(a.payout_date) - new Date(b.payout_date));
   const nextSale = unpaidSales[0];
-  const monthly = getMonthlyData(sales.filter(s => s.date_sold), "date_sold", 12);
+  const monthly = getMonthlyData(allSales.filter(s => s.date_sold), "date_sold", 12);
 
   return (
     <><div className="page-header"><div><div className="page-title">Liquidation Dashboard</div><div className="page-subtitle">Overview of your liquidation activity</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
@@ -757,7 +776,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
       {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — paid end of following month</div></div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = liquidationStock.find(l => l.id === s.stock_id); const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
+        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = !s._isRemoval ? liquidationStock.find(l => l.id === s.stock_id) : null; const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
       </div>
     </div></>
   );
@@ -1043,7 +1062,10 @@ function LiquidationGettingStartedPage() {
           In Amazon Seller Central, set your removal address to:
           <div style={{ padding: 14, background: "rgba(0,0,0,0.3)", border: "1px solid var(--border)", borderRadius: 8, fontFamily: "monospace", fontSize: 13, lineHeight: 1.8, marginTop: 10, color: "var(--text-primary)" }}>
             DBH FBA Ltd<br/>
-            [Warehouse address — DM Dan for the latest]<br/>
+            3 Fincham End Drive<br/>
+            Crowthorne<br/>
+            Berkshire<br/>
+            RG45 6DT<br/>
             United Kingdom
           </div>
           <div style={{ marginTop: 12 }}>
@@ -1109,11 +1131,20 @@ function LiquidationGettingStartedPage() {
   );
 }
 
-function LiquidationBillingPage({ liquidationStock, liquidationReturns }) {
+function LiquidationBillingPage({ liquidationStock, liquidationReturns, removalUnits = [] }) {
+  // Old model — items priced on the liquidation_stock row itself
   const pending = liquidationStock.filter(s => s.sale_price && !s.paid);
   const paid = liquidationStock.filter(s => s.paid);
-  const pendingTotal = pending.reduce((sum, s) => sum + calculatePayout(s).payout, 0);
-  const paidTotal = paid.reduce((sum, s) => sum + calculatePayout(s).payout, 0);
+  const pendingFromStock = pending.reduce((sum, s) => sum + calculatePayout(s).payout, 0);
+  const paidFromStock = paid.reduce((sum, s) => sum + calculatePayout(s).payout, 0);
+
+  // New model — sold removal_units
+  const removalSold = removalUnits.filter(u => u.status === "sold");
+  const pendingFromRemovals = removalSold.filter(u => !u.paid).reduce((sum, u) => sum + (parseFloat(u.payout) || 0), 0);
+  const paidFromRemovals = removalSold.filter(u => u.paid).reduce((sum, u) => sum + (parseFloat(u.payout) || 0), 0);
+
+  const pendingTotal = pendingFromStock + pendingFromRemovals;
+  const paidTotal = paidFromStock + paidFromRemovals;
   const pendingWithDate = pending.filter(s => s.date_sold).map(s => ({ ...s, payoutDate: getPayoutDate(s.date_sold) })).sort((a, b) => a.payoutDate - b.payoutDate);
   const returns = liquidationReturns || [];
   const totalReturns = returns.reduce((s, r) => s + (r.count || 0), 0);
@@ -2571,7 +2602,10 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
         <div onClick={() => setExpandedId(expanded ? null : rem.id)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", borderBottom: expanded ? "1px solid var(--border)" : "none" }}>
           <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "▼" : "▶"}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>📦 {rem.removal_order_id}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+              📦 {rem.removal_order_id}
+              {rem.google_drive_folder && <a href={rem.google_drive_folder} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open photos folder" style={{ fontSize: 11, padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", textDecoration: "none", fontWeight: 600 }}>📁 Photos</a>}
+            </div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
               {rem.request_date ? new Date(rem.request_date).toLocaleDateString("en-GB") : "no date"}
               {rem.removal_order_type ? ` · ${rem.removal_order_type}` : ""}
@@ -2592,6 +2626,21 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
 
         {/* Expanded — show all units */}
         {expanded && <div style={{ padding: "0 0 10px 0", overflowX: "auto" }}>
+          {isAdmin && <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.15)" }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>📁 Drive Folder:</span>
+            <input
+              placeholder="https://drive.google.com/drive/folders/..."
+              defaultValue={rem.google_drive_folder || ""}
+              onBlur={async e => {
+                const v = e.target.value.trim();
+                if (v === (rem.google_drive_folder || "")) return;
+                await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${rem.id}`, { method: "PATCH", headers: h, body: JSON.stringify({ google_drive_folder: v || null }) });
+                load();
+                showToast(v ? "Drive folder saved" : "Drive folder cleared");
+              }}
+              style={{ flex: 1, padding: "6px 10px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 11, fontFamily: "inherit" }}
+            />
+          </div>}
           {stats.units.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>No units in this removal.</div> :
           <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
             <thead><tr style={{ background: "rgba(0,0,0,0.2)" }}>
@@ -3177,11 +3226,12 @@ function ClientPortal() {
 
   const [liquidationSales, setLiquidationSales] = useState([]);
   const [liquidationReturns, setLiquidationReturns] = useState([]);
+  const [removalUnits, setRemovalUnits] = useState([]);
 
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const [p, i, b, l, s, prof, ls, lr] = await Promise.all([
+      const [p, i, b, l, s, prof, ls, lr, ru] = await Promise.all([
         supabase.from("parcels", token).select(),
         supabase.from("invoices", token).select(),
         supabase.from("billing_periods", token).select(),
@@ -3189,7 +3239,8 @@ function ClientPortal() {
         supabase.from("shipments", token).select(),
         fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`, { headers: supabase.headers(token) }).then(r => r.json()),
         fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${user.id}&order=date_sold.desc`, { headers: supabase.headers(token) }).then(r => r.json()),
-        fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?user_id=eq.${user.id}&order=month.desc`, { headers: supabase.headers(token) }).then(r => r.json()).catch(() => [])
+        fetch(`${SUPABASE_URL}/rest/v1/liquidation_returns?user_id=eq.${user.id}&order=month.desc`, { headers: supabase.headers(token) }).then(r => r.json()).catch(() => []),
+        fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${user.id}&order=created_at.desc`, { headers: supabase.headers(token) }).then(r => r.json()).catch(() => [])
       ]);
       if (Array.isArray(p)) setParcels(p);
       if (Array.isArray(i)) setInvoices(i);
@@ -3198,6 +3249,7 @@ function ClientPortal() {
       if (Array.isArray(s)) setShipments(s);
       if (Array.isArray(ls)) setLiquidationSales(ls);
       if (Array.isArray(lr)) setLiquidationReturns(lr);
+      if (Array.isArray(ru)) setRemovalUnits(ru);
       if (Array.isArray(prof) && prof[0]) {
         setDbProfile(prof[0]);
         // Auto-deactivate if payment is overdue (1 calendar month past last payment)
@@ -3266,12 +3318,13 @@ function ClientPortal() {
       return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
     }
     if (service === "liquidation") {
-      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} />;
+      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
+      if (page === "getting-started") return <LiquidationGettingStartedPage />;
       if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
       if (page === "fees") return <LiquidationFeesPage />;
-      if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} liquidationReturns={liquidationReturns} />;
-      return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} />;
+      if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
+      return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
     }
   };
 
