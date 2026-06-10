@@ -2247,20 +2247,23 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
     }
   };
 
-  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 800, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>📥 Upload Removal CSV</div>
-        <button onClick={onClose} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 24, cursor: "pointer" }}>×</button>
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ background: "#1a1a1a", border: "1px solid var(--border)", borderRadius: 12, padding: 28, maxWidth: 820, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>📥 Upload Removal CSV</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Import Amazon removal data — supports 3 report types</div>
+        </div>
+        <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
       </div>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.6 }}>
-        Upload any of these Amazon reports from Seller Central → Reports → Fulfillment:<br/>
-        • <b>Removal Order Detail</b> — creates removals + placeholder units<br/>
-        • <b>Removal Shipment Detail</b> — adds tracking + shipment dates<br/>
-        • <b>Customer Returns Report</b> — adds LPNs, ASINs, return reasons<br/>
-        Upload all three over time to fully populate. The portal will merge data as it arrives.
+      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.7, padding: 12, background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 8 }}>
+        <div style={{ fontWeight: 700, color: "var(--cyan)", marginBottom: 6 }}>Supported reports (Seller Central → Reports → Fulfillment):</div>
+        • <b style={{ color: "var(--text-secondary)" }}>Removal Order Detail</b> — creates removals + placeholder units<br/>
+        • <b style={{ color: "var(--text-secondary)" }}>Removal Shipment Detail</b> — adds tracking + shipment dates<br/>
+        • <b style={{ color: "var(--text-secondary)" }}>Customer Returns Report</b> — adds LPNs, ASINs, return reasons<br/>
+        <span style={{ display: "block", marginTop: 6, fontStyle: "italic" }}>Upload all three over time to fully populate. The portal merges as data arrives.</span>
       </div>
-      <input type="file" accept=".csv,.tsv,.txt" onChange={e => handleFile(e.target.files?.[0])} style={{ padding: 12, background: "var(--bg-secondary)", border: "1px dashed var(--border)", borderRadius: 8, width: "100%", color: "var(--text-secondary)", marginBottom: 12 }} />
+      <input type="file" accept=".csv,.tsv,.txt" onChange={e => handleFile(e.target.files?.[0])} style={{ padding: 14, background: "rgba(0,0,0,0.3)", border: "1px dashed var(--border)", borderRadius: 8, width: "100%", color: "var(--text-secondary)", marginBottom: 14, cursor: "pointer", fontFamily: "inherit", fontSize: 13 }} />
       {parsed && parsed.rows && <div>
         <div style={{ padding: 10, background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
           <div><b>Report type:</b> {parsed.reportType === "removal_order" ? "Removal Order Detail" : parsed.reportType === "removal_shipment" ? "Removal Shipment Detail" : parsed.reportType === "customer_returns" ? "Customer Returns Report" : "Unknown — best-effort import"}</div>
@@ -2396,22 +2399,26 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
     load();
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading removals...</div>;
+  if (loading) return <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading removals...</div>;
 
-  return <div>
+  return <div className="card" style={{ padding: 20 }}>
     {/* Top bar */}
-    <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-      <button onClick={() => setShowUpload(true)} style={{ padding: "8px 16px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13 }}>📥 Upload Removal CSV</button>
-      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+      <button onClick={() => setShowUpload(true)} style={{ padding: "10px 18px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>📥 Upload Removal CSV</button>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer", padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8 }}>
         <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Show hidden
       </label>
-      <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" }}>
-        {visibleRemovals.length} removal{visibleRemovals.length === 1 ? "" : "s"} · {units.length} unit{units.length === 1 ? "" : "s"}
+      <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 12 }}>
+        <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{visibleRemovals.length}</span> removal{visibleRemovals.length === 1 ? "" : "s"}</div>
+        <div style={{ color: "var(--border)" }}>·</div>
+        <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{units.length}</span> unit{units.length === 1 ? "" : "s"}</div>
       </div>
     </div>
 
-    {visibleRemovals.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-      No removals yet. Upload an Amazon Removal CSV to get started.
+    {visibleRemovals.length === 0 && <div style={{ padding: "50px 20px", textAlign: "center", color: "var(--text-muted)" }}>
+      <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.5 }}>📋</div>
+      <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>No removals yet</div>
+      <div style={{ fontSize: 13 }}>Click "Upload Removal CSV" above to import your first removal from Amazon.</div>
     </div>}
 
     {/* Removals list */}
@@ -2492,11 +2499,14 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
     })}
 
     {/* Edit unit modal */}
-    {editUnit && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 600, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Edit Unit</div>
-          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 22, cursor: "pointer" }}>×</button>
+    {editUnit && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#1a1a1a", border: "1px solid var(--border)", borderRadius: 12, padding: 28, maxWidth: 640, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>✏️ Edit Unit</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>{editUnit.lpn || editUnit.sku || editUnit.id?.slice(0, 8)}</div>
+          </div>
+          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {[["lpn","LPN"],["product_name","Product Name"],["asin","ASIN"],["sku","SKU"]].map(([k,l]) =>
