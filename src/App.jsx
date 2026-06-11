@@ -4006,13 +4006,15 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
 
   // Sale calculation (mirrors the per-client logic on line ~5590)
   // Tiers: net >= £200 → 10%, otherwise 15%. Flat £0.40 fixed fee unless overridden.
-  const calcSale = (form) => {
+  const calcSale = (form, client) => {
     const sale = parseFloat(form.sale_price) || 0;
     const ebay = parseFloat(form.ebay_fees) || 0;
     const ship = parseFloat(form.shipping) || 0;
     const fixed = parseFloat(form.fixed_fee) || 0.40;
     const net = sale - ebay - ship;
-    const pct = net >= 200 ? 0.10 : 0.15;
+    const standardRate = client?.liq_commission_standard != null ? parseFloat(client.liq_commission_standard) : 15;
+    const highRate = client?.liq_commission_high != null ? parseFloat(client.liq_commission_high) : 10;
+    const pct = (net >= 200 ? highRate : standardRate) / 100;
     const fee = net * pct;
     const payout = net - fee - fixed;
     return { net, pct, fee, fixed, payout };
@@ -4027,7 +4029,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
   const submitSale = async () => {
     if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
     setSaleSaving(true);
-    const c = calcSale(saleForm);
+    const c = calcSale(saleForm, logSaleItem.client);
     const payoutDate = getPayoutDate(saleForm.date_sold);
     const payload = {
       stock_id: logSaleItem.id, user_id: logSaleItem.user_id, date_sold: saleForm.date_sold,
@@ -4083,7 +4085,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
     setSaleSaving(false);
   };
 
-  const c = logSaleItem ? calcSale(saleForm) : null;
+  const c = logSaleItem ? calcSale(saleForm, logSaleItem.client) : null;
 
   return (
     <div>
@@ -5131,7 +5133,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     prep_standard: client.prep_standard || "0.45",
     prep_bundle: client.prep_bundle || "0.65",
     prep_oversize: client.prep_oversize || "1.50",
-    liq_commission: client.liq_commission || "30"
+    liq_commission_standard: client.liq_commission_standard ?? "",
+    liq_commission_high: client.liq_commission_high ?? ""
   });
   const [savingPricing, setSavingPricing] = useState(false);
   const [dealsAccess, setDealsAccess] = useState(client.deals_access || false);
@@ -5173,7 +5176,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
       prep_standard: client.prep_standard || "0.45",
       prep_bundle: client.prep_bundle || "0.65",
       prep_oversize: client.prep_oversize || "1.50",
-      liq_commission: client.liq_commission || "30"
+      liq_commission_standard: client.liq_commission_standard ?? "",
+      liq_commission_high: client.liq_commission_high ?? ""
     });
   }, [client]);
 
@@ -5209,7 +5213,8 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
         prep_standard: parseFloat(pricing.prep_standard) || 0.45,
         prep_bundle: parseFloat(pricing.prep_bundle) || 0.65,
         prep_oversize: parseFloat(pricing.prep_oversize) || 1.50,
-        liq_commission: parseFloat(pricing.liq_commission) || 30
+        liq_commission_standard: pricing.liq_commission_standard === "" ? null : (parseFloat(pricing.liq_commission_standard) || null),
+        liq_commission_high: pricing.liq_commission_high === "" ? null : (parseFloat(pricing.liq_commission_high) || null)
       }) 
     });
     showToast("Pricing saved!");
@@ -5429,7 +5434,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
 
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-title">Custom Pricing <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>+ VAT</span></div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}>
                 <label className="input-label">Standard Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
                 <input className="input" type="number" step="0.01" value={pricing.prep_standard} onChange={e => setPricing({ ...pricing, prep_standard: e.target.value })} />
@@ -5442,9 +5447,19 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
                 <label className="input-label">Oversize Prep (£) <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+VAT</span></label>
                 <input className="input" type="number" step="0.01" value={pricing.prep_oversize} onChange={e => setPricing({ ...pricing, prep_oversize: e.target.value })} />
               </div>
-              <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Liquidation (%)</label>
-                <input className="input" type="number" step="1" value={pricing.liq_commission} onChange={e => setPricing({ ...pricing, liq_commission: e.target.value })} />
+            </div>
+            <div style={{ marginBottom: 12, padding: "12px 14px", background: "rgba(255,145,0,0.05)", border: "1px solid rgba(255,145,0,0.2)", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--orange)", marginBottom: 6 }}>Liquidation Commission Override</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>Leave blank to use defaults (15% standard / 10% over £200)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label className="input-label">Standard % <span style={{ fontSize: 9, color: "var(--text-muted)" }}>default 15</span></label>
+                  <input className="input" type="number" step="0.5" placeholder="15" value={pricing.liq_commission_standard} onChange={e => setPricing({ ...pricing, liq_commission_standard: e.target.value })} />
+                </div>
+                <div className="input-group" style={{ margin: 0 }}>
+                  <label className="input-label">Over £200 % <span style={{ fontSize: 9, color: "var(--text-muted)" }}>default 10</span></label>
+                  <input className="input" type="number" step="0.5" placeholder="10" value={pricing.liq_commission_high} onChange={e => setPricing({ ...pricing, liq_commission_high: e.target.value })} />
+                </div>
               </div>
             </div>
             <button className="btn btn-primary admin" onClick={savePricing} disabled={savingPricing}>{savingPricing ? "Saving..." : "Save Pricing"}</button>
@@ -6576,13 +6591,15 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
     if (Array.isArray(data)) setSales(data);
   };
 
-  const calcSale = (form) => {
+  const calcSale = (form, client) => {
     const sale = parseFloat(form.sale_price) || 0;
     const ebay = parseFloat(form.ebay_fees) || 0;
     const ship = parseFloat(form.shipping) || 0;
     const fixed = parseFloat(form.fixed_fee) || 0.40;
     const net = sale - ebay - ship;
-    const pct = net >= 200 ? 0.10 : 0.15;
+    const standardRate = client?.liq_commission_standard != null ? parseFloat(client.liq_commission_standard) : 15;
+    const highRate = client?.liq_commission_high != null ? parseFloat(client.liq_commission_high) : 10;
+    const pct = (net >= 200 ? highRate : standardRate) / 100;
     const fee = net * pct;
     const payout = net - fee - fixed;
     return { net, pct, fee, fixed, payout };
@@ -6597,7 +6614,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const submitSale = async () => {
     if (!saleForm.date_sold || !saleForm.sale_price) { showToast("Enter date and sale price"); return; }
     setSaleSaving(true);
-    const c = calcSale(saleForm);
+    const c = calcSale(saleForm, client);
     const payoutDate = getPayoutDate(saleForm.date_sold);
     const payload = {
       stock_id: logSaleItem.id, user_id: client.id, date_sold: saleForm.date_sold,
@@ -6676,7 +6693,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
   const transitItems = liquidation.filter(i => !i.received);
   const listedItems = liquidation.filter(i => i.received && ((i.quantity || 1) - (i.qty_sold || 0)) > 0);
   const totalSalesPayout = sales.reduce((s, r) => s + (parseFloat(r.payout) || 0), 0);
-  const sf = saleForm, sc = calcSale(sf);
+  const sf = saleForm, sc = calcSale(sf, client);
 
   return (
     <>
