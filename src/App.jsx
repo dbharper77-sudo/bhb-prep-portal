@@ -3212,7 +3212,6 @@ function ClientShipmentsPage({ shipments }) {
 // ============ PORTALS ============
 function ClientPortal() {
   const { user, token, profile, signOut } = useAuth();
-  const [service, setService] = useState("prep");
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [parcels, setParcels] = useState([]);
@@ -3272,16 +3271,7 @@ function ClientPortal() {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { const interval = setInterval(() => { loadData(); }, 30000); return () => clearInterval(interval); }, [loadData]);
-  useEffect(() => { setPage(service === "deals" ? "deals" : "dashboard"); }, [service]);
 
-  const prepNav = [
-    { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
-    { id: "add-order", label: "Add Order", icon: Icons.Plus },
-    { id: "inventory", label: "My Inventory", icon: Icons.Package },
-    { id: "shipments", label: "Shipments", icon: Icons.Truck },
-    { id: "fees", label: "Prep Fees", icon: Icons.Calculator },
-    { id: "billing", label: "Billing", icon: Icons.Receipt }
-  ];
   const liqNav = [
     { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
     { id: "getting-started", label: "Getting Started", icon: Icons.Zap },
@@ -3297,35 +3287,25 @@ function ClientPortal() {
     { id: "invoice-details", label: "Invoice Details", icon: Icons.Receipt }
   ];
   const sharedNav = [{ id: "profile", label: "Profile", icon: Icons.User }];
-  const currentNav = service === "prep" ? prepNav : service === "liquidation" ? liqNav : dealsNav;
+  const hasDealsAccess = dbProfile?.deals_access || false;
   const initials = (profile?.full_name || user?.email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 
   const renderPage = () => {
     if (page === "profile") return <ProfilePage dbProfile={dbProfile} />;
-    if (service === "deals") {
+    // Deals pages (only if paying subscriber)
+    if (hasDealsAccess) {
       if (page === "invoice-details") return <DealsInvoiceDetailsPage token={token} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} />;
       if (page === "shortlist") return <DealsShortlistPage token={token} userId={user.id} showToast={showToast} />;
       if (page === "bought") return <DealsBoughtPage token={token} userId={user.id} showToast={showToast} />;
-      return <DBHDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} userId={user.id} />;
+      if (page === "deals") return <DBHDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} userId={user.id} />;
     }
-    if (service === "prep") {
-      if (page === "dashboard") return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
-      if (page === "add-order") return <PrepAddOrderPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "inventory") return <PrepInventoryPage parcels={parcels} token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "shipments") return <ClientShipmentsPage shipments={shipments} />;
-      if (page === "fees") return <PrepFeesPage />;
-      if (page === "billing") return <PrepBillingPage billingPeriods={billingPeriods} invoices={invoices} shipments={shipments} />;
-      return <PrepDashboard parcels={parcels} billingPeriods={billingPeriods} shipments={shipments} onNavigate={setPage} />;
-    }
-    if (service === "liquidation") {
-      if (page === "dashboard") return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
-      if (page === "getting-started") return <LiquidationGettingStartedPage />;
-      if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
-      if (page === "fees") return <LiquidationFeesPage />;
-      if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
-      return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
-    }
+    // Liquidation pages
+    if (page === "getting-started") return <LiquidationGettingStartedPage />;
+    if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
+    if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
+    if (page === "fees") return <LiquidationFeesPage />;
+    if (page === "billing") return <LiquidationBillingPage liquidationStock={liquidationStock} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
+    return <LiquidationDashboard liquidationStock={liquidationStock} liquidationSales={liquidationSales} liquidationReturns={liquidationReturns} removalUnits={removalUnits} />;
   };
 
   // T&Cs signing gate
@@ -3446,12 +3426,15 @@ function ClientPortal() {
       <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-logo"><div className="sidebar-logo-icon">DBH</div><div><div className="sidebar-logo-text">DBH PREP</div><div className="sidebar-logo-sub">Client Portal</div></div></div>
-        <div className="service-tabs"><div className={`service-tab ${service === "prep" ? "active prep" : ""}`} onClick={() => setService("prep")}>📦 Prep</div><div className={`service-tab ${service === "liquidation" ? "active liquidation" : ""}`} onClick={() => setService("liquidation")}>💰 Liquidation</div><div className={`service-tab deals ${service === "deals" ? "active deals" : ""}`} onClick={() => setService("deals")}>📋 Deals</div></div>
         <nav className="sidebar-nav">
-          <div className="sidebar-section-title">{service === "prep" ? "FBA Prep" : service === "liquidation" ? "Liquidation" : "DBH Deals"}</div>
-          {currentNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? `active ${service}` : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          <div className="sidebar-section-title">Liquidation</div>
+          {liqNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? "active liquidation" : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          {hasDealsAccess && <>
+            <div className="sidebar-section-title" style={{ marginTop: 16 }}>DBH Deals</div>
+            {dealsNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? "active deals" : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          </>}
           <div className="sidebar-section-title" style={{ marginTop: 16 }}>Account</div>
-          {sharedNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? `active ${service}` : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
+          {sharedNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? "active liquidation" : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
         </nav>
         <div className="sidebar-footer"><div className="sidebar-user"><div className="sidebar-avatar">{initials}</div><div><div className="sidebar-username">{profile?.full_name || "User"}</div><div className="sidebar-email">{user?.email}</div></div></div><button className="btn-signout" onClick={signOut}><Icons.LogOut /> Sign Out</button></div>
       </aside>
