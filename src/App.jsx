@@ -1038,7 +1038,7 @@ function LiquidationFeesPage() {
   );
 }
 
-function LiquidationGettingStartedPage() {
+function LiquidationGettingStartedPage({ dbProfile }) {
   const step = { padding: 22, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 16 };
   const stepNum = { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: "var(--orange)", color: "#000", fontWeight: 800, fontSize: 14, marginRight: 12 };
   const stepTitle = { fontSize: 17, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", marginBottom: 14 };
@@ -1061,7 +1061,8 @@ function LiquidationGettingStartedPage() {
         <div style={body}>
           In Amazon Seller Central, set your removal address to:
           <div style={{ padding: 14, background: "rgba(0,0,0,0.3)", border: "1px solid var(--border)", borderRadius: 8, fontFamily: "monospace", fontSize: 13, lineHeight: 1.8, marginTop: 10, color: "var(--text-primary)" }}>
-            DBH FBA Ltd<br/>
+            {dbProfile?.tcs_signed_business || dbProfile?.tcs_signed_name || dbProfile?.full_name || "Your Name"}<br/>
+            c/o DBH<br/>
             3 Fincham End Drive<br/>
             Crowthorne<br/>
             Berkshire<br/>
@@ -3296,7 +3297,7 @@ function ClientPortal() {
       if (page === "deals") return <DBHDealsPage token={token} hasAccess={dbProfile?.deals_access} startDate={dbProfile?.deals_start_date} dbProfile={dbProfile} onRefresh={loadData} showToast={showToast} userId={user.id} />;
     }
     // Liquidation pages
-    if (page === "getting-started") return <LiquidationGettingStartedPage />;
+    if (page === "getting-started") return <LiquidationGettingStartedPage dbProfile={dbProfile} />;
     if (page === "send-stock") return <LiquidationSendStockPage token={token} onRefresh={loadData} showToast={showToast} />;
     if (page === "my-stock") return <LiquidationMyStockPage liquidationStock={liquidationStock} liquidationSales={liquidationSales} token={token} onRefresh={loadData} showToast={showToast} />;
     if (page === "fees") return <LiquidationFeesPage />;
