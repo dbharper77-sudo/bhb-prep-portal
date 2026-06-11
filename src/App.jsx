@@ -401,7 +401,7 @@ function LoginPage() {
 
   if (showForgot) return (
     <div className="auth-wrapper"><div className="auth-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH LIQUIDATION</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
       <div className="auth-title">Reset Password</div>
       <div className="auth-sub">Enter your email and we'll send you a reset link</div>
       {forgotSent ? <div style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)", borderRadius: 10, padding: 16, marginTop: 16, color: "var(--green)", textAlign: "center" }}>Check your email for a reset link!</div>
@@ -415,7 +415,7 @@ function LoginPage() {
 
   return (
     <div className="auth-wrapper"><div className="auth-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH LIQUIDATION</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
       <div className="auth-title">Welcome back</div><div className="auth-sub">Sign in to manage your inventory</div>
       {error && <div className="auth-error">{error}</div>}
       <div className="input-group"><label className="input-label">Email</label><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
@@ -449,7 +449,7 @@ function SignupPage({ onBack }) {
   };
   return (
     <div className="auth-wrapper"><div className="auth-card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH PREP</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center", marginBottom: 32 }}><div className="sidebar-logo-icon">DBH</div><div><div style={{ fontWeight: 800, fontSize: 22 }}>DBH LIQUIDATION</div><div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: 2 }}>CLIENT PORTAL</div></div></div>
       <div className="auth-title">Create account</div><div className="auth-sub">Get started in seconds</div>
       {error && <div className="auth-error">{error}</div>}{success && <div className="auth-info">{success}</div>}
       <div className="input-group"><label className="input-label">Full Name *</label><input className="input" value={form.full_name} onChange={update("full_name")} /></div>
@@ -3126,41 +3126,37 @@ function ProfilePage({ dbProfile }) {
         </div>
         {showTcs && (
           <div style={{ marginTop: 16, padding: '24px 20px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, maxHeight: 400, overflowY: 'auto', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <h3 style={{ fontSize: 14, color: '#fff', marginBottom: 12 }}>DBH PREP — Service Agreement</h3>
+            <h3 style={{ fontSize: 14, color: '#fff', marginBottom: 12 }}>DBH LIQUIDATION — Service Agreement</h3>
             <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>1. Parties</h4>
-            <p>This Service Agreement is entered into between DBH Prep ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
+            <p>This Service Agreement is entered into between DBH Liquidation ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
             <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>2. Services Provided</h4>
-            <p><strong>a) FBA Preparation</strong> — Receiving, inspecting, labelling, poly-bagging, bundling, and preparing inventory for Amazon FBA.</p>
-            <p><strong>b) Liquidation</strong> — Receiving, listing and selling returned/unfulfillable inventory on behalf of the Client.</p>
-            <p><strong>c) DBH Deals</strong> — Access to daily curated deal sheet (where applicable, subject to separate subscription).</p>
+            <p>DBH Liquidation receives Amazon FBA removal orders on behalf of the Client, lists the inventory for resale on eBay and other marketplaces, and remits the net proceeds minus the agreed commission and fees.</p>
             <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>3. Client Responsibilities</h4>
-            <p>The Client agrees to provide accurate product information, ensure inventory complies with Amazon policies, provide tracking for inbound shipments, and respond to flagged issues within 48 hours. DBH Prep may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>4. Pricing & Fees</h4>
-            <p>Prep fees are charged per-unit at the agreed rate. Additional charges may apply for oversized items, bundling, box costs, and ancillary services. All prices are exclusive of VAT. DBH Prep may adjust pricing with 14 days written notice.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>5. Invoicing & Payment</h4>
-            <p><strong>a)</strong> Invoices are issued on the <strong>1st of each calendar month</strong> for work completed in the preceding month.</p>
-            <p><strong>b)</strong> Payment is due within <strong>5 working days</strong> of the invoice date.</p>
-            <p><strong>c)</strong> Late payment may result in: suspension of services and holding of inventory; a 5% late payment fee; 2% monthly interest on overdue amounts; and debt recovery via legal channels at the Client's cost.</p>
-            <p><strong>d)</strong> DBH Prep retains a <strong>lien over all inventory</strong> until all invoices are paid in full.</p>
-            <p><strong>e)</strong> The Client acknowledges that by signing this Agreement, they accept full responsibility for the payment of all invoices raised by DBH Prep for services rendered.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>6. Turnaround & Shipping</h4>
-            <p>DBH Prep aims for 24-48 hour turnaround. We are not responsible for carrier or Amazon receiving delays.</p>
+            <p>The Client agrees to provide accurate inventory information (ASINs, quantities, condition) in advance of shipment, ensure inventory is legally owned and free from third-party claims, notify DBH Liquidation of incoming removal orders, and respond to flagged issues within 48 hours. DBH Liquidation may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>4. Commission & Fees</h4>
+            <p><strong>a)</strong> Commission is charged at <strong>20% of the net sale value</strong>, reducing to <strong>15%</strong> on items where the net sale value exceeds £200.</p>
+            <p><strong>b)</strong> Net sale value is defined as the gross sale price minus marketplace fees and outbound shipping costs.</p>
+            <p><strong>c)</strong> A flat handling fee of <strong>£0.40 per unit</strong> applies.</p>
+            <p><strong>d)</strong> All prices are exclusive of VAT.</p>
+            <p><strong>e)</strong> DBH Liquidation may adjust pricing with 14 days written notice.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>5. Payouts & Returns</h4>
+            <p><strong>a)</strong> Payouts are issued at the <strong>end of the calendar month following the month of sale</strong> to allow for the standard returns window.</p>
+            <p><strong>b)</strong> Buyer returns and refunds are deducted from the Client's account at the actual cost incurred.</p>
+            <p><strong>c)</strong> Returned items are subject to inspection. Restocking and re-listing fees may apply.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>6. Inventory Custody & Lien</h4>
+            <p><strong>a)</strong> Inventory remains the property of the Client until sold.</p>
+            <p><strong>b)</strong> DBH Liquidation retains a <strong>lien over all inventory</strong> until all outstanding balances are settled in full.</p>
+            <p><strong>c)</strong> Items unsold after <strong>90 days</strong> may be disposed of unless the Client requests return at their own expense.</p>
+            <p><strong>d)</strong> The Client acknowledges full responsibility for payment of all invoices raised by DBH Liquidation.</p>
             <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>7. Liability & Damages</h4>
-            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. DBH Prep accepts no liability for transit damage or consequential losses.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>8. Liquidation Services</h4>
-            <p>Commission is deducted per sale at the agreed rate. No guarantees on sale price or timeframe. Items unsold after 90 days may be disposed of unless the Client requests return at their expense.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>9. Confidentiality & Deal Sheet Non-Disclosure</h4>
-            <p><strong>General:</strong> Both parties agree to keep commercially sensitive information confidential.</p>
-            <p><strong>DBH Deals — Strict Confidentiality:</strong> The deal sheet is exclusive and limited to 15 members. The Client agrees:</p>
-            <p><strong>a)</strong> Deal sheet content is <strong>strictly confidential</strong> — no sharing, forwarding, or screenshots.</p>
-            <p><strong>b)</strong> Login credentials must not be shared.</p>
-            <p><strong>c)</strong> DBH Prep monitors seller counts to detect unauthorised sharing. Suspicion of sharing results in <strong>immediate termination</strong> without refund.</p>
-            <p><strong>d)</strong> Confirmed breaches may result in termination of all services and pursuit of damages.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>10. Client Portal & Data</h4>
+            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. DBH Liquidation accepts no liability for carrier transit damage or consequential losses. No guarantees are made on sale price or timeframe.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>8. Confidentiality</h4>
+            <p>Both parties agree to keep commercially sensitive information confidential, including product sourcing, pricing, supplier details, and business strategies.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>9. Client Portal & Data</h4>
             <p>The Client is responsible for login security. Data is processed in accordance with UK GDPR solely for service delivery.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>11. Termination</h4>
-            <p>Either party may terminate with 14 days written notice. Outstanding invoices must be settled within 5 working days. Inventory is released once all payments are received. DBH Prep may terminate immediately for non-payment exceeding 14 days.</p>
-            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>12. Governing Law</h4>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>10. Termination</h4>
+            <p>Either party may terminate this Agreement with 14 days written notice. Outstanding balances must be settled within 5 working days. Any remaining inventory will be returned (at the Client's expense) or disposed of as agreed. DBH Liquidation may terminate immediately for non-payment exceeding 14 days.</p>
+            <h4 style={{ fontSize: 12, color: 'var(--cyan)', marginTop: 16, marginBottom: 6 }}>11. Governing Law</h4>
             <p>This Agreement is governed by the laws of England and Wales.</p>
           </div>
         )}
@@ -3344,47 +3340,43 @@ function ClientPortal() {
           </div>
           <div onScroll={e => { if (e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 50) setTcsScrolled(true); }}
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '32px 28px', maxHeight: 500, overflowY: 'auto', marginBottom: 24, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <h2 style={{ fontSize: 18, color: '#fff', marginBottom: 16 }}>DBH PREP — Service Agreement</h2>
+            <h2 style={{ fontSize: 18, color: '#fff', marginBottom: 16 }}>DBH LIQUIDATION — Service Agreement</h2>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>1. Parties</h3>
-            <p>This Service Agreement is entered into between DBH Prep ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
+            <p>This Service Agreement is entered into between DBH Liquidation ("the Service Provider") and the undersigned client ("the Client"). By signing this Agreement, both parties agree to be bound by the terms below.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>2. Services Provided</h3>
-            <p><strong>a) FBA Preparation</strong> — Receiving, inspecting, labelling, poly-bagging, bundling, and preparing inventory for Amazon FBA.</p>
-            <p><strong>b) Liquidation</strong> — Receiving, listing and selling returned/unfulfillable inventory on behalf of the Client.</p>
-            <p><strong>c) DBH Deals</strong> — Access to daily curated deal sheet (where applicable, subject to separate subscription).</p>
+            <p>DBH Liquidation receives Amazon FBA removal orders on behalf of the Client, lists the inventory for resale on eBay and other marketplaces, and remits the net proceeds minus the agreed commission and fees.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>3. Client Responsibilities</h3>
-            <p>The Client agrees to provide accurate product information, ensure inventory complies with Amazon policies, provide tracking for inbound shipments, and respond to flagged issues within 48 hours. DBH Prep may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>4. Pricing & Fees</h3>
-            <p>Prep fees are charged per-unit at the agreed rate. Additional charges may apply for oversized items, bundling, box costs, and ancillary services. All prices are exclusive of VAT. DBH Prep may adjust pricing with 14 days written notice.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>5. Invoicing & Payment</h3>
-            <p><strong>a)</strong> Invoices are issued on the <strong>1st of each calendar month</strong> for work completed in the preceding month.</p>
-            <p><strong>b)</strong> Payment is due within <strong>5 working days</strong> of the invoice date.</p>
-            <p><strong>c)</strong> Late payment may result in: suspension of services and holding of inventory; a 5% late payment fee; 2% monthly interest on overdue amounts; and debt recovery via legal channels at the Client's cost.</p>
-            <p><strong>d)</strong> DBH Prep retains a <strong>lien over all inventory</strong> until all invoices are paid in full.</p>
-            <p><strong>e)</strong> The Client acknowledges that by signing this Agreement, they accept full responsibility for the payment of all invoices raised by DBH Prep for services rendered.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>6. Turnaround & Shipping</h3>
-            <p>DBH Prep aims for 24-48 hour turnaround. We are not responsible for carrier or Amazon receiving delays.</p>
+            <p>The Client agrees to provide accurate inventory information (ASINs, quantities, condition) in advance of shipment, ensure inventory is legally owned and free from third-party claims, notify DBH Liquidation of incoming removal orders, and respond to flagged issues within 48 hours. DBH Liquidation may hold, return, or dispose of inventory where the Client fails to respond within 14 days.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>4. Commission & Fees</h3>
+            <p><strong>a)</strong> Commission is charged at <strong>20% of the net sale value</strong>, reducing to <strong>15%</strong> on items where the net sale value exceeds £200.</p>
+            <p><strong>b)</strong> Net sale value is defined as the gross sale price minus marketplace fees and outbound shipping costs.</p>
+            <p><strong>c)</strong> A flat handling fee of <strong>£0.40 per unit</strong> applies.</p>
+            <p><strong>d)</strong> All prices are exclusive of VAT.</p>
+            <p><strong>e)</strong> DBH Liquidation may adjust pricing with 14 days written notice.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>5. Payouts & Returns</h3>
+            <p><strong>a)</strong> Payouts are issued at the <strong>end of the calendar month following the month of sale</strong> to allow for the standard returns window.</p>
+            <p><strong>b)</strong> Buyer returns and refunds are deducted from the Client's account at the actual cost incurred.</p>
+            <p><strong>c)</strong> Returned items are subject to inspection. Restocking and re-listing fees may apply.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>6. Inventory Custody & Lien</h3>
+            <p><strong>a)</strong> Inventory remains the property of the Client until sold.</p>
+            <p><strong>b)</strong> DBH Liquidation retains a <strong>lien over all inventory</strong> until all outstanding balances are settled in full.</p>
+            <p><strong>c)</strong> Items unsold after <strong>90 days</strong> may be disposed of unless the Client requests return at their own expense.</p>
+            <p><strong>d)</strong> The Client acknowledges full responsibility for payment of all invoices raised by DBH Liquidation.</p>
             <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>7. Liability & Damages</h3>
-            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. DBH Prep accepts no liability for transit damage or consequential losses.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>8. Liquidation Services</h3>
-            <p>Commission is deducted per sale at the agreed rate. No guarantees on sale price or timeframe. Items unsold after 90 days may be disposed of unless the Client requests return at their expense.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>9. Confidentiality & Deal Sheet Non-Disclosure</h3>
-            <p><strong>General:</strong> Both parties agree to keep commercially sensitive information confidential, including but not limited to product sourcing information, pricing, supplier details, and business strategies.</p>
-            <p><strong>DBH Deals — Strict Confidentiality:</strong> The DBH Deals daily deal sheet is an exclusive, members-only service strictly limited to 15 active subscribers. The Client agrees to the following:</p>
-            <p><strong>a)</strong> The content of the deal sheet (including product leads, ASINs, pricing data, source links, discount codes, and any associated analysis) is <strong>strictly confidential</strong> and must not be shared, forwarded, screenshot, or disclosed to any third party under any circumstances.</p>
-            <p><strong>b)</strong> The Client must not share their portal login credentials or allow any other person to access the deal sheet through their account.</p>
-            <p><strong>c)</strong> DBH Prep actively monitors seller counts and marketplace activity on featured products to detect patterns of unauthorised sharing. Any evidence or reasonable suspicion of sharing will result in <strong>immediate termination</strong> of deal sheet access without refund.</p>
-            <p><strong>d)</strong> In the event of a confirmed breach of this confidentiality clause, DBH Prep reserves the right to terminate all services (including prep and liquidation) and pursue damages for any commercial loss suffered.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>10. Client Portal & Data</h3>
+            <p>Liability for damaged inventory is limited to the cost price as declared by the Client. Claims must be made within 7 days with supporting evidence. DBH Liquidation accepts no liability for carrier transit damage or consequential losses. No guarantees are made on sale price or timeframe.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>8. Confidentiality</h3>
+            <p>Both parties agree to keep commercially sensitive information confidential, including product sourcing, pricing, supplier details, and business strategies.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>9. Client Portal & Data</h3>
             <p>The Client is responsible for login security. Data is processed in accordance with UK GDPR solely for service delivery.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>11. Termination</h3>
-            <p>Either party may terminate with 14 days written notice. Outstanding invoices must be settled within 5 working days. Inventory is released once all payments are received. DBH Prep may terminate immediately for non-payment exceeding 14 days.</p>
-            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>12. Governing Law</h3>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>10. Termination</h3>
+            <p>Either party may terminate this Agreement with 14 days written notice. Outstanding balances must be settled within 5 working days. Any remaining inventory will be returned (at the Client's expense) or disposed of as agreed. DBH Liquidation may terminate immediately for non-payment exceeding 14 days.</p>
+            <h3 style={{ fontSize: 14, color: 'var(--cyan)', marginTop: 20, marginBottom: 8 }}>11. Governing Law</h3>
             <p>This Agreement is governed by the laws of England and Wales.</p>
             {!tcsScrolled && <div style={{ textAlign: 'center', padding: '20px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>↓ Scroll to read all terms ↓</div>}
           </div>
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '28px' }}>
             <h3 style={{ fontSize: 16, color: '#fff', marginBottom: 16 }}>Declaration & Signature</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>By completing the form below, I confirm that I have read, understood, and agree to be bound by the terms and conditions set out above. I accept full responsibility for the payment of all invoices raised by DBH Prep.</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>By completing the form below, I confirm that I have read, understood, and agree to be bound by the terms and conditions set out above. I accept full responsibility for the payment of all invoices raised by DBH Liquidation.</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div className="input-group" style={{ margin: 0 }}>
                 <label className="input-label">Full Name *</label>
@@ -3422,10 +3414,10 @@ function ClientPortal() {
 
   return (
     <div className="app-wrapper">
-      <div className="mobile-header"><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="sidebar-logo-icon" style={{ width: 32, height: 32, fontSize: 11 }}>DBH</div><span style={{ fontWeight: 700 }}>DBH PREP</span></div><button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><Icons.Menu /></button></div>
+      <div className="mobile-header"><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="sidebar-logo-icon" style={{ width: 32, height: 32, fontSize: 11 }}>DBH</div><span style={{ fontWeight: 700 }}>DBH LIQUIDATION</span></div><button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><Icons.Menu /></button></div>
       <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="sidebar-logo"><div className="sidebar-logo-icon">DBH</div><div><div className="sidebar-logo-text">DBH PREP</div><div className="sidebar-logo-sub">Client Portal</div></div></div>
+        <div className="sidebar-logo"><div className="sidebar-logo-icon">DBH</div><div><div className="sidebar-logo-text">DBH LIQUIDATION</div><div className="sidebar-logo-sub">Client Portal</div></div></div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-title">Liquidation</div>
           {liqNav.map(item => <div key={item.id} className={`nav-item ${page === item.id ? "active liquidation" : ""}`} onClick={() => { setPage(item.id); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
@@ -4827,7 +4819,7 @@ function AdminPortal() {
       <div className="mobile-header"><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className="sidebar-logo-icon admin" style={{ width: 32, height: 32, fontSize: 11 }}>DBH</div><span style={{ fontWeight: 700 }}>DBH ADMIN</span></div><button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><Icons.Menu /></button></div>
       <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="sidebar-logo"><div className="sidebar-logo-icon admin">DBH</div><div><div className="sidebar-logo-text">DBH PREP</div><div className="sidebar-logo-sub">Admin Panel</div></div></div>
+        <div className="sidebar-logo"><div className="sidebar-logo-icon admin">DBH</div><div><div className="sidebar-logo-text">DBH LIQUIDATION</div><div className="sidebar-logo-sub">Admin Panel</div></div></div>
         <nav className="sidebar-nav" style={{ marginTop: 12 }}>
           <div className="sidebar-section-title">Admin</div>
           {adminNav.map(item => <div key={item.id} className={`nav-item ${page === item.id || (page === "clients" && item.id === "clients") ? "active admin" : ""}`} onClick={() => { setPage(item.id); setSelectedClient(null); setSidebarOpen(false); }}><item.icon />{item.label}</div>)}
@@ -5030,7 +5022,7 @@ function AdminClientsPage({ clients, parcels, shipments, liquidation, liquidatio
             return false;
           })();
           const renewalSubject = encodeURIComponent("DBH Deals — Subscription Renewal Due");
-          const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour DBH Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nDBH Prep`);
+          const renewalBody = encodeURIComponent(`Hi ${c.full_name || "there"},\n\nYour DBH Deals subscription renewal is now due.\n\nPlease arrange payment to continue your access to the daily deal sheet.\n\nThanks,\nDBH Liquidation`);
           const renewalMailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(c.email)}&su=${renewalSubject}&body=${renewalBody}`;
           return (
             <div key={c.id} className="client-card" draggable onClick={() => onSelectClient(c)} onDragStart={e => handleDragStart(e, c.id)} onDragOver={e => handleDragOver(e, c.id)} onDrop={e => handleDrop(e, c.id)} onDragEnd={handleDragEnd} style={{ ...(paymentDue ? { borderColor: 'rgba(255,82,82,0.5)', boxShadow: '0 0 0 2px rgba(255,82,82,0.1)' } : {}), ...(dragOverId === c.id && dragId !== c.id ? { borderColor: 'var(--orange)', boxShadow: '0 0 0 2px rgba(255,152,0,0.3)' } : {}), opacity: dragId === c.id ? 0.5 : 1, cursor: 'grab', transition: 'opacity 0.15s, box-shadow 0.15s' }}>
