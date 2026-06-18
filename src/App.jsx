@@ -784,20 +784,29 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
 
 function LiquidationSendStockPage({ token, onRefresh, showToast }) {
   const { user, profile } = useAuth();
+  const [tab, setTab] = useState("single");
   const [form, setForm] = useState({ removal_order_id: "", product_name: "", asin: "", sku: "", condition: "", purchase_price: "", quantity: "1" });
   const [saving, setSaving] = useState(false);
   const update = f => e => setForm({ ...form, [f]: e.target.value });
 
-  // Generate DBH SKU: YYMMDD-CLIENTNAME-NNN (seq resets per client, never resets over time)
-  const generateDbhSku = async () => {
+  // CSV upload state
+  const [csvRows, setCsvRows] = useState([]);
+  const [csvSkipped, setCsvSkipped] = useState(0);
+  const [csvErrors, setCsvErrors] = useState([]);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const dbhSkuPrefix = () => {
     const clientName = (profile?.full_name || user?.email || "CLIENT").split(" ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "");
     const today = new Date();
     const yy = String(today.getFullYear()).slice(-2);
     const mm = String(today.getMonth() + 1).padStart(2, "0");
     const dd = String(today.getDate()).padStart(2, "0");
-    const datePart = `${dd}${mm}${yy}`;
+    return { datePart: `${dd}${mm}${yy}`, clientName };
+  };
 
-    // Find highest existing seq for this client across all time
+  const getMaxClientSeq = async () => {
+    const { clientName } = dbhSkuPrefix();
     const res = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${user.id}&dbh_sku=like.*-${clientName}-*&select=dbh_sku`, {
       headers: supabase.headers(token)
     });
@@ -810,8 +819,13 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
         if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
       });
     }
-    const nextSeq = String(maxSeq + 1).padStart(3, "0");
-    return `${datePart}-${clientName}-${nextSeq}`;
+    return maxSeq;
+  };
+
+  const generateDbhSku = async () => {
+    const { datePart, clientName } = dbhSkuPrefix();
+    const maxSeq = await getMaxClientSeq();
+    return `${datePart}-${clientName}-${String(maxSeq + 1).padStart(3, "0")}`;
   };
 
   const handleSubmit = async () => {
@@ -825,20 +839,225 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
     }
     setSaving(false);
   };
+
+  // ---------- CSV upload ----------
+  const parseCsv = (text) => {
+    const rows = [];
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const cells = [];
+      let cur = ""; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (inQ) {
+          if (c === '"' && line[i+1] === '"') { cur += '"'; i++; }
+          else if (c === '"') inQ = false;
+          else cur += c;
+        } else {
+          if (c === '"') inQ = true;
+          else if (c === ',') { cells.push(cur); cur = ""; }
+          else cur += c;
+        }
+      }
+      cells.push(cur);
+      rows.push(cells);
+    }
+    return rows;
+  };
+
+  const parseUkDate = (s) => {
+    if (!s || !s.trim()) return null;
+    const m = s.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (!m) return null;
+    const [, d, mo, y] = m;
+    return `${y.length === 2 ? "20" + y : y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  };
+
+  const handleCsvFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvFileName(file.name);
+    setCsvErrors([]);
+    setCsvRows([]);
+    setCsvSkipped(0);
+
+    const text = await file.text();
+    const rows = parseCsv(text);
+    if (rows.length < 2) { setCsvErrors(["File is empty or has no data rows."]); return; }
+
+    const headers = rows[0].map(h => h.trim().toLowerCase());
+    const idx = (name) => headers.findIndex(h => h === name.toLowerCase());
+    const required = ["Removal Order ID", "Product Name", "ASIN", "LPN Number"];
+    const errs = required.filter(r => idx(r) === -1).map(r => `Missing required column: ${r}`);
+    if (errs.length) { setCsvErrors(errs); return; }
+
+    const col = {
+      date: idx("Date"),
+      removal: idx("Removal Order ID"),
+      product: idx("Product Name"),
+      asin: idx("ASIN"),
+      sku: idx("SKU"),
+      lpn: idx("LPN Number"),
+      status: idx("Status"),
+      dateShipped: idx("Date Shipped"),
+      tracking: idx("Tracking"),
+      delivered: idx("Delivered"),
+      dateDelivered: idx("Date Delivered"),
+      driveLink: idx("Google Drive Link"),
+      comments: idx("Customer Comments"),
+      condition: idx("Condition"),
+    };
+
+    const valid = [];
+    let skipped = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r.some(c => c.trim())) { continue; } // empty row
+      const product = (r[col.product] || "").trim();
+      const lpn = (r[col.lpn] || "").trim();
+      const removal = (r[col.removal] || "").trim();
+      // Skip rows that are clearly placeholder/cancelled with no useful data
+      if (!product || !lpn) { skipped++; continue; }
+      valid.push({
+        date_added: parseUkDate(r[col.date]) || new Date().toISOString().split("T")[0],
+        removal_order_id: removal,
+        product_name: product,
+        asin: (r[col.asin] || "").trim(),
+        sku: col.sku >= 0 ? (r[col.sku] || "").trim() : "",
+        lpn_number: lpn,
+        shipment_status: col.status >= 0 ? (r[col.status] || "").trim() : null,
+        date_shipped: col.dateShipped >= 0 ? parseUkDate(r[col.dateShipped]) : null,
+        tracking_number: col.tracking >= 0 ? (r[col.tracking] || "").trim() : null,
+        received: col.delivered >= 0 ? /^yes$/i.test((r[col.delivered] || "").trim()) : false,
+        date_delivered: col.dateDelivered >= 0 ? parseUkDate(r[col.dateDelivered]) : null,
+        google_drive_link: col.driveLink >= 0 ? (r[col.driveLink] || "").trim() : null,
+        customer_comments: col.comments >= 0 ? (r[col.comments] || "").trim() : null,
+        condition: col.condition >= 0 ? (r[col.condition] || "").trim() : "",
+        quantity: 1,
+      });
+    }
+    setCsvRows(valid);
+    setCsvSkipped(skipped);
+  };
+
+  const handleCsvImport = async () => {
+    if (csvRows.length === 0) return;
+    setImporting(true);
+    try {
+      const { datePart, clientName } = dbhSkuPrefix();
+      const maxSeq = await getMaxClientSeq();
+      const payload = csvRows.map((r, i) => ({
+        ...r,
+        dbh_sku: `${datePart}-${clientName}-${String(maxSeq + 1 + i).padStart(3, "0")}`,
+        user_id: user.id,
+      }));
+      const batchSize = 50;
+      for (let i = 0; i < payload.length; i += batchSize) {
+        const batch = payload.slice(i, i + batchSize);
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, {
+          method: "POST",
+          headers: { ...supabase.headers(token), "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify(batch),
+        });
+        if (!r.ok) throw new Error(`Batch ${Math.floor(i/batchSize)+1} failed (${r.status})`);
+      }
+      showToast(`Imported ${csvRows.length} items!`);
+      setCsvRows([]); setCsvSkipped(0); setCsvErrors([]); setCsvFileName("");
+      onRefresh();
+    } catch (e) {
+      showToast("Error: " + e.message);
+    }
+    setImporting(false);
+  };
+
+  const templateCsv = "Date,Removal Order ID,Product Name,ASIN,SKU,LPN Number,Status,Date Shipped,Tracking,Delivered,Date Delivered,Google Drive Link,Customer Comments,Condition\n";
+
+  const tabBtn = (id, label) => ({
+    flex: 1, padding: "10px 14px", borderRadius: 8,
+    border: "1px solid " + (tab === id ? "var(--orange)" : "var(--border)"),
+    background: tab === id ? "var(--orange)" : "transparent",
+    color: tab === id ? "#000" : "var(--text-primary)",
+    fontWeight: 600, cursor: "pointer", fontSize: 13
+  });
+
   return (
     <><div className="page-header"><div><div className="page-title">Send Stock</div><div className="page-subtitle">Submit returns for liquidation</div></div></div>
-    <div className="page-body"><div className="card" style={{ maxWidth: 600 }}>
-      <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
-      <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">Your SKU (optional)</label><input className="input" placeholder="Your own SKU if you have one" value={form.sku} onChange={update("sku")} /></div></div>
-      <div className="input-group"><label className="input-label">Condition</label><select className="input" value={form.condition} onChange={update("condition")}><option value="">— Select condition —</option><option value="New">New</option><option value="Open Box">Open Box</option><option value="Used">Used</option><option value="Like New">Like New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option></select></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
-        <div className="input-group"><label className="input-label">Quantity</label><input className="input" type="number" min="1" placeholder="1" value={form.quantity} onChange={update("quantity")} /></div>
+    <div className="page-body">
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, maxWidth: 600 }}>
+        <button onClick={() => setTab("single")} style={tabBtn("single", "Single Item")}>Single Item</button>
+        <button onClick={() => setTab("csv")} style={tabBtn("csv", "Upload Sheet")}>Upload Sheet</button>
       </div>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, fontStyle: "italic" }}>A DBH tracking code will be auto-generated when you submit.</div>
-      <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
-    </div></div></>
+
+      {tab === "single" && (
+        <div className="card" style={{ maxWidth: 600 }}>
+          <div className="input-group"><label className="input-label">Removal Order ID (if applicable)</label><input className="input" placeholder="e.g. 2601071LW5" value={form.removal_order_id} onChange={update("removal_order_id")} /></div>
+          <div className="input-group"><label className="input-label">Product Name *</label><input className="input" placeholder="Product description" value={form.product_name} onChange={update("product_name")} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><div className="input-group"><label className="input-label">ASIN</label><input className="input" value={form.asin} onChange={update("asin")} /></div><div className="input-group"><label className="input-label">Your SKU (optional)</label><input className="input" placeholder="Your own SKU if you have one" value={form.sku} onChange={update("sku")} /></div></div>
+          <div className="input-group"><label className="input-label">Condition</label><select className="input" value={form.condition} onChange={update("condition")}><option value="">— Select condition —</option><option value="New">New</option><option value="Open Box">Open Box</option><option value="Used">Used</option><option value="Like New">Like New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option></select></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="input-group"><label className="input-label">What You Paid (£)</label><input className="input" type="number" step="0.01" placeholder="Your cost price" value={form.purchase_price} onChange={update("purchase_price")} /></div>
+            <div className="input-group"><label className="input-label">Quantity</label><input className="input" type="number" min="1" placeholder="1" value={form.quantity} onChange={update("quantity")} /></div>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, fontStyle: "italic" }}>A DBH tracking code will be auto-generated when you submit.</div>
+          <button className="btn btn-primary liquidation" onClick={handleSubmit} disabled={saving || !form.product_name}>{saving ? "Submitting..." : "Submit Stock"}</button>
+        </div>
+      )}
+
+      {tab === "csv" && (
+        <div className="card" style={{ maxWidth: 720 }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14 }}>
+            Upload a CSV of your removal stock. Required columns: <strong>Removal Order ID, Product Name, ASIN, LPN Number</strong>. Optional: Date, SKU, Status, Date Shipped, Tracking, Delivered, Date Delivered, Google Drive Link, Customer Comments, Condition.
+          </div>
+          <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv)}`} download="dbh-liquidation-template.csv" style={{ display: "inline-block", padding: "8px 14px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", fontSize: 13, textDecoration: "none", marginBottom: 16 }}>Download template</a>
+          <div className="input-group">
+            <label className="input-label">CSV file</label>
+            <input type="file" accept=".csv" onChange={handleCsvFile} style={{ padding: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", width: "100%", fontSize: 13 }} />
+            {csvFileName && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>Loaded: {csvFileName}</div>}
+          </div>
+          {csvErrors.length > 0 && (
+            <div style={{ padding: 12, background: "rgba(255,82,82,0.1)", border: "1px solid rgba(255,82,82,0.3)", borderRadius: 8, marginBottom: 12, color: "var(--red)" }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Issues found:</div>
+              {csvErrors.map((e, i) => <div key={i} style={{ fontSize: 13 }}>• {e}</div>)}
+            </div>
+          )}
+          {csvRows.length > 0 && (
+            <>
+              <div style={{ padding: 12, background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: 8, marginBottom: 12, color: "var(--green)", fontSize: 13 }}>
+                Parsed <strong>{csvRows.length}</strong> valid row{csvRows.length === 1 ? "" : "s"} ready to import.
+                {csvSkipped > 0 && <span style={{ color: "var(--text-muted)" }}> ({csvSkipped} skipped — missing product name or LPN)</span>}
+              </div>
+              <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12 }}>
+                <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                  <thead style={{ position: "sticky", top: 0, background: "var(--bg-secondary)" }}>
+                    <tr>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Removal</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Product</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>ASIN</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>LPN</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Cond.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvRows.slice(0, 50).map((r, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.removal_order_id}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.asin}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.lpn_number}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.condition}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {csvRows.length > 50 && <div style={{ padding: 8, fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>Showing first 50 of {csvRows.length} rows</div>}
+              </div>
+              <button className="btn btn-primary liquidation" onClick={handleCsvImport} disabled={importing}>{importing ? `Importing ${csvRows.length} items...` : `Import ${csvRows.length} items`}</button>
+            </>
+          )}
+        </div>
+      )}
+    </div></>
   );
 }
 
