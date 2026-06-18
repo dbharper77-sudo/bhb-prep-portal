@@ -929,7 +929,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
         shipment_status: col.status >= 0 ? (r[col.status] || "").trim() : null,
         date_shipped: col.dateShipped >= 0 ? parseUkDate(r[col.dateShipped]) : null,
         tracking_number: col.tracking >= 0 ? (r[col.tracking] || "").trim() : null,
-        received: col.delivered >= 0 ? /^yes$/i.test((r[col.delivered] || "").trim()) : false,
+        received: false,
         date_delivered: col.dateDelivered >= 0 ? parseUkDate(r[col.dateDelivered]) : null,
         google_drive_link: col.driveLink >= 0 ? (r[col.driveLink] || "").trim() : null,
         customer_comments: col.comments >= 0 ? (r[col.comments] || "").trim() : null,
