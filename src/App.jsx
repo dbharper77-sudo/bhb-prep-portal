@@ -907,6 +907,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       driveLink: idx("Google Drive Link"),
       comments: idx("Customer Comments"),
       condition: idx("Condition"),
+      uid: idx("UID"),
     };
 
     const valid = [];
@@ -934,6 +935,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
         google_drive_link: col.driveLink >= 0 ? (r[col.driveLink] || "").trim() : null,
         customer_comments: col.comments >= 0 ? (r[col.comments] || "").trim() : null,
         condition: col.condition >= 0 ? (r[col.condition] || "").trim() : "",
+        sheet_uid: col.uid >= 0 ? ((r[col.uid] || "").trim() || null) : null,
         quantity: 1,
       });
     }
@@ -945,9 +947,25 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
     if (csvRows.length === 0) return;
     setImporting(true);
     try {
+      // Dedup against existing sheet_uids for this user
+      const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${user.id}&sheet_uid=not.is.null&select=sheet_uid&limit=20000`, {
+        headers: supabase.headers(token)
+      });
+      const existingList = await existingRes.json();
+      const existingUids = new Set((Array.isArray(existingList) ? existingList : []).map(r => r.sheet_uid).filter(Boolean));
+      const newRows = csvRows.filter(r => !r.sheet_uid || !existingUids.has(r.sheet_uid));
+      const dupeCount = csvRows.length - newRows.length;
+
+      if (newRows.length === 0) {
+        showToast(`Nothing new — all ${dupeCount} rows already imported.`);
+        setCsvRows([]); setCsvSkipped(0); setCsvErrors([]); setCsvFileName("");
+        setImporting(false);
+        return;
+      }
+
       const { datePart, clientName } = dbhSkuPrefix();
       const maxSeq = await getMaxClientSeq();
-      const payload = csvRows.map((r, i) => ({
+      const payload = newRows.map((r, i) => ({
         ...r,
         dbh_sku: `${datePart}-${clientName}-${String(maxSeq + 1 + i).padStart(3, "0")}`,
         user_id: user.id,
@@ -962,7 +980,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
         });
         if (!r.ok) throw new Error(`Batch ${Math.floor(i/batchSize)+1} failed (${r.status})`);
       }
-      showToast(`Imported ${csvRows.length} items!`);
+      showToast(`Imported ${newRows.length} items!${dupeCount > 0 ? ` (${dupeCount} skipped — already in your stock)` : ""}`);
       setCsvRows([]); setCsvSkipped(0); setCsvErrors([]); setCsvFileName("");
       onRefresh();
     } catch (e) {
@@ -1031,21 +1049,23 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
                 <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
                   <thead style={{ position: "sticky", top: 0, background: "var(--bg-secondary)" }}>
                     <tr>
-                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Removal</th>
                       <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Product</th>
-                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>ASIN</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Your SKU</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>UID</th>
                       <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>LPN</th>
-                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Cond.</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>Condition</th>
+                      <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--border)" }}>ASIN</th>
                     </tr>
                   </thead>
                   <tbody>
                     {csvRows.slice(0, 50).map((r, i) => (
                       <tr key={i}>
-                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.removal_order_id}</td>
-                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.asin}</td>
-                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.lpn_number}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-muted)" }}>{r.sheet_uid || "—"}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.lpn_number || "—"}</td>
                         <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.condition}</td>
+                        <td style={{ padding: 6, borderBottom: "1px solid var(--border)" }}>{r.asin}</td>
                       </tr>
                     ))}
                   </tbody>
