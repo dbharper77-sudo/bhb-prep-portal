@@ -888,7 +888,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
 
     const headers = rows[0].map(h => h.trim().toLowerCase());
     const idx = (name) => headers.findIndex(h => h === name.toLowerCase());
-    const required = ["Removal Order ID", "Product Name", "ASIN", "LPN Number"];
+    const required = ["Product Name"];
     const errs = required.filter(r => idx(r) === -1).map(r => `Missing required column: ${r}`);
     if (errs.length) { setCsvErrors(errs); return; }
 
@@ -915,10 +915,10 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       const r = rows[i];
       if (!r.some(c => c.trim())) { continue; } // empty row
       const product = (r[col.product] || "").trim();
-      const lpn = (r[col.lpn] || "").trim();
-      const removal = (r[col.removal] || "").trim();
-      // Skip rows that are clearly placeholder/cancelled with no useful data
-      if (!product || !lpn) { skipped++; continue; }
+      const lpn = col.lpn >= 0 ? (r[col.lpn] || "").trim() : "";
+      const removal = col.removal >= 0 ? (r[col.removal] || "").trim() : "";
+      // Skip rows with no product name (placeholder/empty rows)
+      if (!product) { skipped++; continue; }
       valid.push({
         date_added: parseUkDate(r[col.date]) || new Date().toISOString().split("T")[0],
         removal_order_id: removal,
@@ -1007,7 +1007,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
       {tab === "csv" && (
         <div className="card" style={{ maxWidth: 720 }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14 }}>
-            Upload a CSV of your removal stock. Required columns: <strong>Removal Order ID, Product Name, ASIN, LPN Number</strong>. Optional: Date, SKU, Status, Date Shipped, Tracking, Delivered, Date Delivered, Google Drive Link, Customer Comments, Condition.
+            Upload a CSV of your removal stock. Only <strong>Product Name</strong> is required. Optional: Date, Removal Order ID, ASIN, SKU, LPN Number, Status, Date Shipped, Tracking, Delivered, Date Delivered, Google Drive Link, Customer Comments, Condition. LPNs can be added later in My Stock if you don't have them yet.
           </div>
           <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv)}`} download="dbh-liquidation-template.csv" style={{ display: "inline-block", padding: "8px 14px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", fontSize: 13, textDecoration: "none", marginBottom: 16 }}>Download template</a>
           <div className="input-group">
@@ -1025,7 +1025,7 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
             <>
               <div style={{ padding: 12, background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: 8, marginBottom: 12, color: "var(--green)", fontSize: 13 }}>
                 Parsed <strong>{csvRows.length}</strong> valid row{csvRows.length === 1 ? "" : "s"} ready to import.
-                {csvSkipped > 0 && <span style={{ color: "var(--text-muted)" }}> ({csvSkipped} skipped — missing product name or LPN)</span>}
+                {csvSkipped > 0 && <span style={{ color: "var(--text-muted)" }}> ({csvSkipped} skipped — missing product name)</span>}
               </div>
               <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12 }}>
                 <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
