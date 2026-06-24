@@ -1171,6 +1171,24 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
     showToast("Item deleted"); onRefresh(); setSaving(false);
   };
 
+  const [selectedIds, setSelectedIds] = useState([]);
+  const selectableTransit = transitItems.filter(s => !s._isRemoval);
+  const allTransitSelected = selectableTransit.length > 0 && selectedIds.length === selectableTransit.length;
+  const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleSelectAll = () => setSelectedIds(allTransitSelected ? [] : selectableTransit.map(s => s.id));
+  const deleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Delete ${selectedIds.length} selected item(s) from In Transit? This can't be undone.`)) return;
+    setSaving(true);
+    for (const id of selectedIds) {
+      await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` }
+      });
+    }
+    showToast(`Deleted ${selectedIds.length} item(s)`); setSelectedIds([]); onRefresh(); setSaving(false);
+  };
+
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
     <div className="page-body">
@@ -1190,12 +1208,18 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
 
       {/* In Transit */}
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {selectedIds.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,82,82,0.08)", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedIds.length} selected</span>
+          <button onClick={deleteSelected} disabled={saving} style={{ padding: "5px 14px", background: "var(--red)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Delete selected ({selectedIds.length})</button>
+          <button onClick={() => setSelectedIds([])} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>Clear</button>
+        </div>}
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 36, textAlign: "center" }}><input type="checkbox" checked={allTransitSelected} onChange={toggleSelectAll} /></th><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{transitItems.map(s => {
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
+              <td style={{ textAlign: "center" }}>{!s._isRemoval && <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} />}</td>
               <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
