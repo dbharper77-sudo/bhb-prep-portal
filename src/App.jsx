@@ -842,27 +842,33 @@ function LiquidationSendStockPage({ token, onRefresh, showToast }) {
 
   // ---------- CSV upload ----------
   const parseCsv = (text) => {
+    // Stream-parse the whole file so newlines INSIDE quoted fields don't break rows.
     const rows = [];
-    const lines = text.split(/\r?\n/);
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const cells = [];
-      let cur = ""; let inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (inQ) {
-          if (c === '"' && line[i+1] === '"') { cur += '"'; i++; }
-          else if (c === '"') inQ = false;
-          else cur += c;
-        } else {
-          if (c === '"') inQ = true;
-          else if (c === ',') { cells.push(cur); cur = ""; }
-          else cur += c;
-        }
+    let cells = [];
+    let cur = "";
+    let inQ = false;
+    const pushCell = () => { cells.push(cur); cur = ""; };
+    const pushRow = () => {
+      pushCell();
+      if (cells.some(c => c.trim() !== "")) rows.push(cells);
+      cells = [];
+    };
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"' && text[i+1] === '"') { cur += '"'; i++; }
+        else if (c === '"') inQ = false;
+        else cur += c;
+      } else {
+        if (c === '"') inQ = true;
+        else if (c === ',') pushCell();
+        else if (c === '\r') { /* ignore, handled by \n */ }
+        else if (c === '\n') pushRow();
+        else cur += c;
       }
-      cells.push(cur);
-      rows.push(cells);
     }
+    // flush trailing cell/row (file may not end in newline)
+    if (cur !== "" || cells.length > 0) pushRow();
     return rows;
   };
 
