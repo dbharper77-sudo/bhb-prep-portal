@@ -774,7 +774,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
     <div className="page-body">
 
       {/* Stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))", gap: 14, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))", gap: 14, marginBottom: 28 }}>
         <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--amber)" }} />
           <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,176,32,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--amber)", flex: "none" }}>🚚</span>In transit</div>
@@ -798,27 +798,6 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
           <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(0,200,120,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--green)", flex: "none" }}>💰</span>Total paid</div>
           <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>lifetime</div>
-        </div>
-      </div>
-
-      {/* Stock pipeline */}
-      <div className="card" style={{ marginBottom: 24, padding: "16px 18px" }}>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>Stock pipeline</div>
-        <div style={{ display: "flex", alignItems: "stretch", gap: 6, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(255,176,32,0.08)", borderRadius: 12 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--amber)" }}>🚚</span>
-            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>In transit</div></div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flex: "none", padding: "0 2px" }}>→</div>
-          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(0,229,255,0.07)", borderRadius: 12 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--cyan)" }}>📦</span>
-            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--cyan)" }}>{listedItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>Listed</div></div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flex: "none", padding: "0 2px" }}>→</div>
-          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(0,200,120,0.08)", borderRadius: 12 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--green)" }}>✓</span>
-            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--green)" }}>{soldCount}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>Sold</div></div>
-          </div>
         </div>
       </div>
 
