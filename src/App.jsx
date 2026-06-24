@@ -764,10 +764,48 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
   const nextSale = unpaidSales[0];
   const monthly = getMonthlyData(allSales.filter(s => s.date_sold), "date_sold", 12);
 
-  const soldCount = allSales.filter(s => s.payout != null).length;
-  const netRevenue = allSales.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const [period, setPeriod] = useState("30d");
+
+  const periodWindow = (() => {
+    const now = new Date();
+    const end = now;
+    let start;
+    if (period === "7d") { start = new Date(now); start.setDate(now.getDate() - 7); }
+    else if (period === "30d") { start = new Date(now); start.setDate(now.getDate() - 30); }
+    else if (period === "mtd") { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else { start = new Date(now.getFullYear(), 0, 1); } // ytd
+    return { start, end };
+  })();
+
+  const periodSales = allSales.filter(s => {
+    if (!s.date_sold) return false;
+    const d = new Date(s.date_sold);
+    return d >= periodWindow.start && d <= periodWindow.end;
+  });
+
+  // Refunds: liquidation_returns rows keyed by `month` (YYYY-MM). Include any
+  // month the window touches.
+  const periodReturns = (liquidationReturns || []).filter(r => {
+    if (!r.month) return false;
+    const m = new Date(r.month + "-01");
+    const startMonth = new Date(periodWindow.start.getFullYear(), periodWindow.start.getMonth(), 1);
+    const endMonth = new Date(periodWindow.end.getFullYear(), periodWindow.end.getMonth(), 1);
+    return m >= startMonth && m <= endMonth;
+  });
+
+  const soldCount = periodSales.filter(s => s.payout != null).length;
+  const netRevenue = periodSales.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
   const avgNet = soldCount > 0 ? netRevenue / soldCount : 0;
-  const periodTotal = monthly.reduce((sum, m) => sum + (m.totalPayout || 0), 0);
+  const periodReturnsCount = periodReturns.reduce((sum, r) => sum + (r.count || 0), 0);
+  const periodRefunds = periodReturnsCount * RETURN_COST_PER_UNIT;
+
+  // Chart: monthly for mtd/ytd; trailing-days window still shows monthly buckets
+  // covering the period so the existing chart component renders unchanged.
+  const chartMonths = period === "ytd" ? (new Date().getMonth() + 1) : period === "mtd" ? 1 : period === "30d" ? 2 : 1;
+  const periodChart = getMonthlyData(periodSales, "date_sold", Math.max(1, chartMonths));
+  const periodTotal = netRevenue;
+
+  const PERIOD_LABELS = { "7d": "last 7 days", "mtd": "this month", "30d": "last 30 days", "ytd": "this year" };
 
   return (
     <><div className="page-header"><div><div className="page-title">Dashboard</div><div className="page-subtitle">Your liquidation activity at a glance</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
@@ -802,14 +840,21 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
       </div>
 
       {/* Reports */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Reports</div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>net figures, lifetime</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Reports</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>net figures, {PERIOD_LABELS[period]}</div>
+        </div>
+        <div style={{ display: "inline-flex", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 9, padding: 3, gap: 2 }}>
+          {[["7d","7D"],["mtd","MTD"],["30d","30D"],["ytd","YTD"]].map(([k, lbl]) =>
+            <button key={k} onClick={() => setPeriod(k)} style={{ fontSize: 12, fontWeight: period === k ? 700 : 600, padding: "5px 13px", border: "none", borderRadius: 7, cursor: "pointer", background: period === k ? "var(--orange)" : "transparent", color: period === k ? "#000" : "var(--text-secondary)", transition: "all 0.15s" }}>{lbl}</button>
+          )}
+        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 14, marginBottom: 24 }}>
         <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Net revenue</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1, color: "var(--green)" }}>£{netRevenue.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>your payout</div></div>
         <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Units sold</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1 }}>{soldCount}</div></div>
-        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Refunds</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>{totalReturns} item{totalReturns === 1 ? "" : "s"}</div></div>
+        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Refunds</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1, color: "var(--red)" }}>−£{periodRefunds.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>{periodReturnsCount} item{periodReturnsCount === 1 ? "" : "s"}</div></div>
         <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Avg net / sale</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1 }}>£{avgNet.toFixed(2)}</div></div>
       </div>
 
@@ -820,8 +865,8 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
             <div style={{ fontSize: 15, fontWeight: 700 }}>Net sales</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>£{periodTotal.toFixed(2)}</div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>last 12 months, payout after fees</div>
-          <div style={{ maxHeight: 220, overflow: "hidden" }}><LiquidationMonthlyChart data={monthly} /></div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>{PERIOD_LABELS[period]}, payout after fees</div>
+          <div style={{ maxHeight: 220, overflow: "hidden" }}><LiquidationMonthlyChart data={periodChart} /></div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
