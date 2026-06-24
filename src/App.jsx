@@ -1160,6 +1160,17 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
     showToast("Quantity updated!"); setEditingId(null); onRefresh(); setSaving(false);
   };
 
+  const deleteItem = async (item) => {
+    if (item._isRemoval) return;
+    if (!confirm("Delete this item from In Transit? This can't be undone.")) return;
+    setSaving(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${item.id}`, {
+      method: "DELETE",
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` }
+    });
+    showToast("Item deleted"); onRefresh(); setSaving(false);
+  };
+
   return (
     <><div className="page-header"><div><div className="page-title">My Stock</div><div className="page-subtitle">Your liquidation items</div></div></div>
     <div className="page-body">
@@ -1200,7 +1211,10 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
                       <button onClick={() => saveQty(s)} disabled={saving} style={{ padding: "3px 10px", background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
                       <button onClick={() => setEditingId(null)} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>✕</button>
                     </div>
-                  : <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>)}
+                  : <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => { setEditingId(s.id); setEditQty(String(s.quantity || 1)); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Edit Qty</button>
+                      <button onClick={() => deleteItem(s)} disabled={saving} style={{ padding: "3px 10px", background: "transparent", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>Delete</button>
+                    </div>)}
               </td>
             </tr>;
           })}</tbody>
