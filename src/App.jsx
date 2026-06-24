@@ -767,7 +767,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
   const soldCount = allSales.filter(s => s.payout != null).length;
   const netRevenue = allSales.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
   const avgNet = soldCount > 0 ? netRevenue / soldCount : 0;
-  const periodTotal = monthly.reduce((sum, m) => sum + (m.value || 0), 0);
+  const periodTotal = monthly.reduce((sum, m) => sum + (m.totalPayout || 0), 0);
 
   return (
     <><div className="page-header"><div><div className="page-title">Dashboard</div><div className="page-subtitle">Your liquidation activity at a glance</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
@@ -777,7 +777,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))", gap: 14, marginBottom: 24 }}>
         <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--amber)" }} />
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,176,32,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--amber)", flex: "none" }}>🚚</span>On the way</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,176,32,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--amber)", flex: "none" }}>🚚</span>In transit</div>
           <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>items inbound</div>
         </div>
@@ -807,7 +807,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
         <div style={{ display: "flex", alignItems: "stretch", gap: 6, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(255,176,32,0.08)", borderRadius: 12 }}>
             <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--amber)" }}>🚚</span>
-            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>On the way</div></div>
+            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>In transit</div></div>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flex: "none", padding: "0 2px" }}>→</div>
           <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(0,229,255,0.07)", borderRadius: 12 }}>
@@ -836,13 +836,13 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
 
       {/* Chart + payouts */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 14, marginBottom: 8 }}>
-        <div className="card" style={{ padding: "18px 20px 14px" }}>
+        <div className="card" style={{ padding: "16px 18px 10px" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Net sales</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>£{periodTotal.toFixed(2)}</div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>last 12 months, payout after fees</div>
-          <LiquidationMonthlyChart data={monthly} />
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>last 12 months, payout after fees</div>
+          <div style={{ maxHeight: 220, overflow: "hidden" }}><LiquidationMonthlyChart data={monthly} /></div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -853,7 +853,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
           <div className="card" style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <div style={{ fontSize: 14, fontWeight: 700 }}>Upcoming payouts</div>
-              {unpaidSales.length > 0 && <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg-card)", padding: "2px 9px", borderRadius: 20 }}>{unpaidSales.length}</span>}
+              {unpaidSales.length > 0 && <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg-card)", padding: "2px 10px", borderRadius: 20 }}>{unpaidSales.length} item{unpaidSales.length === 1 ? "" : "s"}</span>}
             </div>
             {unpaidSales.length === 0
               ? <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No pending payouts.</div>
@@ -866,7 +866,7 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
                         <span style={{ fontSize: 13, lineHeight: 1.3, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pname}</span>
                         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</span>
                       </div>
-                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap", flex: "none" }}>£{parseFloat(s.payout).toFixed(2)}</span>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap", flex: "none", minWidth: 72, textAlign: "right" }}>£{parseFloat(s.payout).toFixed(2)}</span>
                     </div>;
                   })}
                 </div>}
