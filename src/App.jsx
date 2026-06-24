@@ -1215,7 +1215,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
         </div>}
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th style={{ width: 36, textAlign: "center" }}><input type="checkbox" checked={allTransitSelected} onChange={toggleSelectAll} /></th><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 36, textAlign: "center" }}><input type="checkbox" checked={allTransitSelected} onChange={toggleSelectAll} /></th><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>UID</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{transitItems.map(s => {
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
@@ -1223,6 +1223,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
               <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+              <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.sheet_uid || "—"}</td>
               <td className="mono">
                 {isEdit
                   ? <input type="number" min="1" className="inline-input" style={{ width: 60 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
@@ -1249,7 +1250,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>UID</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{listedItems.map(s => {
             const remaining = (s.quantity || 1) - (s.qty_sold || 0);
             const isEdit = editingId === s.id;
@@ -1257,6 +1258,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
               <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
+              <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.sheet_uid || "—"}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.lpn_number || "—"}</td>
               <td className="mono">
                 {isEdit
