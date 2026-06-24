@@ -226,6 +226,43 @@ function getMonthlyData(items, field, months = 12) {
   return result;
 }
 
+function getDailyData(items, field, days, fromDate) {
+  const result = [];
+  const base = fromDate ? new Date(fromDate) : (() => { const n = new Date(); n.setDate(n.getDate() - (days - 1)); return n; })();
+  base.setHours(0, 0, 0, 0);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+    const dayItems = items.filter(x => {
+      if (!x[field]) return false;
+      const fd = new Date(x[field]);
+      return fd.getFullYear() === d.getFullYear() && fd.getMonth() === d.getMonth() && fd.getDate() === d.getDate();
+    });
+    const totalSales = dayItems.reduce((sum, x) => sum + (parseFloat(x.sale_price) || 0), 0);
+    const totalPayout = dayItems.reduce((sum, x) => sum + (parseFloat(x.payout) || 0), 0);
+    result.push({ label: d.toLocaleDateString("en-GB", { weekday: "short" }), fullLabel: d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }), count: dayItems.length, totalSales, totalPayout });
+  }
+  return result;
+}
+
+function getWeeklyData(items, field, weeks) {
+  const result = [];
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  for (let i = weeks - 1; i >= 0; i--) {
+    const end = new Date(now); end.setDate(now.getDate() - i * 7);
+    const start = new Date(end); start.setDate(end.getDate() - 6);
+    const weekItems = items.filter(x => {
+      if (!x[field]) return false;
+      const fd = new Date(x[field]); fd.setHours(0, 0, 0, 0);
+      return fd >= start && fd <= end;
+    });
+    const totalSales = weekItems.reduce((sum, x) => sum + (parseFloat(x.sale_price) || 0), 0);
+    const totalPayout = weekItems.reduce((sum, x) => sum + (parseFloat(x.payout) || 0), 0);
+    const wl = `${start.getDate()}/${start.getMonth() + 1}`;
+    result.push({ label: wl, fullLabel: `Week of ${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`, count: weekItems.length, totalSales, totalPayout });
+  }
+  return result;
+}
+
 function sortByStatus(items, completed = ["collected", "prepped"]) {
   return [...items].sort((a, b) => {
     const ac = completed.includes(a.status), bc = completed.includes(b.status);
@@ -799,10 +836,18 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
   const periodReturnsCount = periodReturns.reduce((sum, r) => sum + (r.count || 0), 0);
   const periodRefunds = periodReturnsCount * RETURN_COST_PER_UNIT;
 
-  // Chart: monthly for mtd/ytd; trailing-days window still shows monthly buckets
-  // covering the period so the existing chart component renders unchanged.
-  const chartMonths = period === "ytd" ? (new Date().getMonth() + 1) : period === "mtd" ? 1 : period === "30d" ? 2 : 1;
-  const periodChart = getMonthlyData(periodSales, "date_sold", Math.max(1, chartMonths));
+  // Chart buckets per period: 7D=7 days, MTD=days this month, 30D=weeks, YTD=months.
+  const periodChart = (() => {
+    if (period === "7d") return getDailyData(periodSales, "date_sold", 7);
+    if (period === "mtd") {
+      const now = new Date();
+      const dayOfMonth = now.getDate();
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      return getDailyData(periodSales, "date_sold", dayOfMonth, first);
+    }
+    if (period === "30d") return getWeeklyData(periodSales, "date_sold", 5);
+    return getMonthlyData(periodSales, "date_sold", new Date().getMonth() + 1); // ytd
+  })();
   const periodTotal = netRevenue;
 
   const PERIOD_LABELS = { "7d": "last 7 days", "mtd": "this month", "30d": "last 30 days", "ytd": "this year" };
