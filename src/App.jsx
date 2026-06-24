@@ -764,19 +764,114 @@ function LiquidationDashboard({ liquidationStock, liquidationSales, liquidationR
   const nextSale = unpaidSales[0];
   const monthly = getMonthlyData(allSales.filter(s => s.date_sold), "date_sold", 12);
 
+  const soldCount = allSales.filter(s => s.payout != null).length;
+  const netRevenue = allSales.reduce((sum, s) => sum + (parseFloat(s.payout) || 0), 0);
+  const avgNet = soldCount > 0 ? netRevenue / soldCount : 0;
+  const periodTotal = monthly.reduce((sum, m) => sum + (m.value || 0), 0);
+
   return (
-    <><div className="page-header"><div><div className="page-title">Liquidation Dashboard</div><div className="page-subtitle">Overview of your liquidation activity</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
+    <><div className="page-header"><div><div className="page-title">Dashboard</div><div className="page-subtitle">Your liquidation activity at a glance</div></div><div className="speed-badge liquidation"><Icons.TrendingUp /> Track Returns</div></div>
     <div className="page-body">
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-        <div className="card stat-card liquidation"><div className="card-title">In Transit</div><div className="stat-value" style={{ color: "var(--amber)" }}>{transitItems.length}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Listed</div><div className="stat-value" style={{ color: "var(--cyan)" }}>{listedItems.length}</div></div>
-        <div className="card stat-card liquidation"><div className="card-title">Pending Payout</div><div className="stat-value" style={{ color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div>{returnsDeduction > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>after −£{returnsDeduction.toFixed(2)} returns</div>}</div>
-        <div className="card stat-card liquidation"><div className="card-title">Total Paid</div><div className="stat-value" style={{ color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div></div>
+
+      {/* Stat cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))", gap: 14, marginBottom: 24 }}>
+        <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--amber)" }} />
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,176,32,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--amber)", flex: "none" }}>🚚</span>On the way</div>
+          <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>items inbound</div>
+        </div>
+        <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--cyan)" }} />
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(0,229,255,0.12)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--cyan)", flex: "none" }}>📦</span>Listed</div>
+          <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--cyan)" }}>{listedItems.length}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>live on eBay</div>
+        </div>
+        <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--orange)" }} />
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,145,0,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--orange)", flex: "none" }}>⏳</span>Pending payout</div>
+          <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>{returnsDeduction > 0 ? `after −£${returnsDeduction.toFixed(2)} refunds` : "before payout"}</div>
+        </div>
+        <div className="card" style={{ position: "relative", overflow: "hidden", padding: 16 }}>
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--green)" }} />
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(0,200,120,0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--green)", flex: "none" }}>💰</span>Total paid</div>
+          <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1, color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 7 }}>lifetime</div>
+        </div>
       </div>
-      {nextSale && <div className="card" style={{ marginBottom: 24, background: "linear-gradient(135deg,rgba(255,145,0,0.08),transparent)", borderColor: "rgba(255,145,0,0.2)" }}><div className="card-title" style={{ color: "var(--orange)" }}>Next Payout</div><div style={{ marginTop: 8, fontSize: 18, fontWeight: 700 }}>{formatDate(new Date(nextSale.payout_date))}</div><div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>£{parseFloat(nextSale.payout).toFixed(2)} — paid end of following month</div></div>}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card"><div className="card-title">Sales (12 Months)</div><LiquidationMonthlyChart data={monthly} /></div>
-        <div className="card"><div className="card-title">Upcoming Payouts</div>{unpaidSales.length === 0 ? <div style={{ color: "var(--text-muted)", marginTop: 12 }}>No pending payouts.</div> : <div style={{ marginTop: 12 }}>{unpaidSales.map(s => { const stockItem = !s._isRemoval ? liquidationStock.find(l => l.id === s.stock_id) : null; const pname = s.product_name_snapshot || stockItem?.product_name || "—"; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}><div><div style={{ fontWeight: 600 }}>{pname}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</div></div><div className="mono" style={{ fontWeight: 700, color: "var(--green)" }}>£{parseFloat(s.payout).toFixed(2)}</div></div>; })}</div>}</div>
+
+      {/* Stock pipeline */}
+      <div className="card" style={{ marginBottom: 24, padding: "16px 18px" }}>
+        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>Stock pipeline</div>
+        <div style={{ display: "flex", alignItems: "stretch", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(255,176,32,0.08)", borderRadius: 12 }}>
+            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--amber)" }}>🚚</span>
+            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--amber)" }}>{transitItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>On the way</div></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flex: "none", padding: "0 2px" }}>→</div>
+          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(0,229,255,0.07)", borderRadius: 12 }}>
+            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--cyan)" }}>📦</span>
+            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--cyan)" }}>{listedItems.length}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>Listed</div></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flex: "none", padding: "0 2px" }}>→</div>
+          <div style={{ flex: "1 1 130px", display: "flex", alignItems: "center", gap: 11, padding: 14, background: "rgba(0,200,120,0.08)", borderRadius: 12 }}>
+            <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--bg-card)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--green)" }}>✓</span>
+            <div><div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1, color: "var(--green)" }}>{soldCount}</div><div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3 }}>Sold</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reports */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Reports</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>net figures, lifetime</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 14, marginBottom: 24 }}>
+        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Net revenue</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1, color: "var(--green)" }}>£{netRevenue.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>your payout</div></div>
+        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Units sold</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1 }}>{soldCount}</div></div>
+        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Refunds</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1, color: "var(--red)" }}>−£{returnsDeduction.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>{totalReturns} item{totalReturns === 1 ? "" : "s"}</div></div>
+        <div className="card" style={{ padding: "14px 15px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Avg net / sale</div><div style={{ fontSize: 23, fontWeight: 700, marginTop: 5, lineHeight: 1 }}>£{avgNet.toFixed(2)}</div></div>
+      </div>
+
+      {/* Chart + payouts */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 14, marginBottom: 8 }}>
+        <div className="card" style={{ padding: "18px 20px 14px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Net sales</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>£{periodTotal.toFixed(2)}</div>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>last 12 months, payout after fees</div>
+          <LiquidationMonthlyChart data={monthly} />
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div className="card" style={{ padding: "14px 16px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Payouts due</div><div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: "var(--orange)" }}>£{pendingPayout.toFixed(2)}</div>{nextSale && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>next {formatDate(new Date(nextSale.payout_date))}</div>}</div>
+            <div className="card" style={{ padding: "14px 16px" }}><div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Payouts paid</div><div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: "var(--green)" }}>£{paidTotal.toFixed(2)}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>lifetime</div></div>
+          </div>
+          <div className="card" style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>Upcoming payouts</div>
+              {unpaidSales.length > 0 && <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg-card)", padding: "2px 9px", borderRadius: 20 }}>{unpaidSales.length}</span>}
+            </div>
+            {unpaidSales.length === 0
+              ? <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No pending payouts.</div>
+              : <div style={{ maxHeight: 210, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4, marginRight: -6, paddingRight: 6 }}>
+                  {unpaidSales.map(s => {
+                    const stockItem = !s._isRemoval ? liquidationStock.find(l => l.id === s.stock_id) : null;
+                    const pname = s.product_name_snapshot || stockItem?.product_name || "—";
+                    return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "11px 8px", borderRadius: 9, borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontSize: 13, lineHeight: 1.3, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pname}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{formatDate(new Date(s.payout_date))}</span>
+                      </div>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap", flex: "none" }}>£{parseFloat(s.payout).toFixed(2)}</span>
+                    </div>;
+                  })}
+                </div>}
+          </div>
+        </div>
       </div>
     </div></>
   );
