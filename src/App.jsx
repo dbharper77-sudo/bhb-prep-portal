@@ -3037,6 +3037,23 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
     load();
   };
 
+  const deleteRemoval = async (rem) => {
+    const ru = units.filter(u => u.removal_id === rem.id);
+    const soldCount = ru.filter(u => u.status === "sold").length;
+    let msg = `Delete removal ${rem.removal_order_id} and its ${ru.length} unit${ru.length === 1 ? "" : "s"}? This cannot be undone.`;
+    if (soldCount > 0) {
+      msg = `WARNING: this removal has ${soldCount} SOLD unit${soldCount === 1 ? "" : "s"}. Deleting it will also remove those sales and their payouts. This cannot be undone.\n\nType OK only if you are sure. Continue?`;
+    }
+    if (!confirm(msg)) return;
+    // delete child units first, then the removal row
+    if (ru.length > 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/removal_units?removal_id=eq.${rem.id}`, { method: "DELETE", headers: h });
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${rem.id}`, { method: "DELETE", headers: h });
+    showToast("Removal deleted");
+    load();
+  };
+
   const unhideRemoval = async (removalId) => {
     await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${removalId}`, { method: "PATCH", headers: h, body: JSON.stringify({ status: "active" }) });
     load();
@@ -3094,6 +3111,7 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
           {rem.status === "hidden" && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", borderRadius: 12 }}>HIDDEN</div>}
           {isAdmin && allSold && rem.status !== "hidden" && <button onClick={e => { e.stopPropagation(); hideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer" }}>Hide</button>}
           {isAdmin && rem.status === "hidden" && <button onClick={e => { e.stopPropagation(); unhideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--cyan)", cursor: "pointer" }}>Unhide</button>}
+          {isAdmin && <button onClick={e => { e.stopPropagation(); deleteRemoval(rem); }} title="Delete entire removal" style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--red)", borderRadius: 6, color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>🗑 Delete</button>}
         </div>
 
         {/* Expanded — show all units */}
