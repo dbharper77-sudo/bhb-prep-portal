@@ -1294,6 +1294,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
   const removalAsTransit = removalUnits.filter(u => !u.received_by_dbh).map(u => ({
     id: `r-${u.id}`,
     _isRemoval: true,
+    sheet_uid: u.sheet_uid || null,
     dbh_sku: u.new_sku || u.sku || "—",
     product_name: u.product_name || u.sku || "Removal unit",
     asin: u.asin,
@@ -1305,6 +1306,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
   const removalAsListed = removalUnits.filter(u => u.received_by_dbh && u.status !== "sold").map(u => ({
     id: `r-${u.id}`,
     _isRemoval: true,
+    sheet_uid: u.sheet_uid || null,
     dbh_sku: u.new_sku || u.sku || "—",
     product_name: u.product_name || u.sku || "Removal unit",
     asin: u.asin,
@@ -1316,6 +1318,7 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
   const removalAsSales = removalUnits.filter(u => u.status === "sold").map(u => ({
     id: `r-${u.id}`,
     _isRemoval: true,
+    sheet_uid: u.sheet_uid || null,
     date_sold: u.date_sold,
     product_name_snapshot: u.product_name || u.sku || "Removal unit",
     qty_sold: 1,
@@ -2732,8 +2735,8 @@ const UNIT_STATUSES = ["received", "listed", "sold", "returned", "written_off"];
 //   - Customer Returns Report (per-unit, has LPN + reason)
 function parseAmazonRemovalCSV(text) {
   // Simple CSV parser (handles quoted fields with commas)
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return { error: "CSV has no data rows" };
+  const rawLines = text.split(/\r?\n/).filter(l => l.trim());
+  if (rawLines.length < 2) return { error: "CSV has no data rows" };
   const parseLine = (line) => {
     const out = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
@@ -2745,36 +2748,57 @@ function parseAmazonRemovalCSV(text) {
     out.push(cur);
     return out;
   };
-  const headers = parseLine(lines[0]).map(h => h.trim().toLowerCase());
-  const rows = lines.slice(1).map(parseLine).filter(r => r.some(c => c.trim()));
-  // Detect report type
-  const hasLPN = headers.includes("lpn");
-  const hasTracking = headers.includes("tracking-number");
+  // Skip junk leading rows (e.g. a "CSV,,,,," row). Header is first row with a known key column.
+  const isHeaderRow = (cells) => {
+    const low = cells.map(c => (c || "").trim().toLowerCase());
+    return low.includes("uid") || low.includes("removal order id") ||
+           low.includes("order-id") || low.includes("order id") ||
+           low.includes("lpn number") || low.includes("lpn");
+  };
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(rawLines.length, 10); i++) {
+    if (isHeaderRow(parseLine(rawLines[i]))) { headerIdx = i; break; }
+  }
+  const headers = parseLine(rawLines[headerIdx]).map(h => h.trim().toLowerCase());
+  const rows = rawLines.slice(headerIdx + 1).map(parseLine).filter(r => r.some(c => c.trim()));
+
+  const colIdxOf = (name) => headers.indexOf(name);
+  const getAny = (row, names) => {
+    for (const n of names) {
+      const i = colIdxOf(n);
+      if (i >= 0 && (row[i] || "").trim()) return (row[i] || "").trim();
+    }
+    return "";
+  };
+
+  const hasLPN = headers.includes("lpn") || headers.includes("lpn number") || headers.includes("lpn-number");
+  const hasTracking = headers.includes("tracking-number") || headers.includes("tracking");
   const hasReturnReason = headers.some(h => h.includes("reason"));
+  const hasUID = headers.includes("uid");
   let reportType = "unknown";
-  if (hasLPN && hasReturnReason) reportType = "customer_returns";
+  if (hasUID) reportType = "template";
+  else if (hasLPN && hasReturnReason) reportType = "customer_returns";
   else if (hasTracking) reportType = "removal_shipment";
   else if (headers.includes("requested-quantity")) reportType = "removal_order";
-  // Map each row to a normalised object
-  const colIdx = (name) => headers.indexOf(name);
-  const get = (row, name) => { const i = colIdx(name); return i >= 0 ? (row[i] || "").trim() : ""; };
+
   const parsed = rows.map(r => ({
-    request_date: (get(r, "request-date") || "").slice(0, 10),
-    order_id: get(r, "order-id"),
-    sku: get(r, "sku"),
-    fnsku: get(r, "fnsku"),
-    asin: get(r, "asin"),
-    lpn: get(r, "lpn") || get(r, "lpn-number"),
-    disposition: get(r, "disposition"),
-    return_reason: get(r, "reason") || get(r, "return-reason"),
-    customer_comments: get(r, "customer-comments"),
-    shipped_quantity: parseInt(get(r, "shipped-quantity") || "0", 10) || 0,
-    shipment_date: (get(r, "shipment-date") || "").slice(0, 10),
-    carrier: get(r, "carrier"),
-    tracking_number: get(r, "tracking-number"),
-    removal_order_type: get(r, "removal-order-type") || get(r, "order-type"),
-    product_name: get(r, "product-name") || get(r, "title")
-  })).filter(r => r.order_id);
+    sheet_uid: getAny(r, ["uid"]),
+    request_date: (getAny(r, ["request-date", "date"]) || "").slice(0, 10),
+    order_id: getAny(r, ["order-id", "removal order id", "order id"]),
+    sku: getAny(r, ["sku"]),
+    fnsku: getAny(r, ["fnsku"]),
+    asin: getAny(r, ["asin"]),
+    lpn: getAny(r, ["lpn", "lpn number", "lpn-number"]),
+    disposition: getAny(r, ["disposition", "status"]),
+    return_reason: getAny(r, ["reason", "return-reason", "return reason"]),
+    customer_comments: getAny(r, ["customer-comments", "comments", "condition"]),
+    shipped_quantity: parseInt(getAny(r, ["shipped-quantity", "qty", "quantity"]) || "0", 10) || 0,
+    shipment_date: (getAny(r, ["shipment-date", "date shipped"]) || "").slice(0, 10),
+    carrier: getAny(r, ["carrier"]),
+    tracking_number: getAny(r, ["tracking-number", "tracking"]),
+    removal_order_type: getAny(r, ["removal-order-type", "order-type", "type"]),
+    product_name: getAny(r, ["product-name", "product name", "title"])
+  })).filter(r => r.sheet_uid || r.order_id);
   return { reportType, headers, rows: parsed };
 }
 
@@ -2798,87 +2822,77 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
     if (!parsed || !parsed.rows || parsed.rows.length === 0) return;
     setUploading(true);
     try {
-      // Group rows by removal order_id
+      // Dedup on UID (per client). Fetch this user's existing removal-unit UIDs first.
+      const existUidRes = await fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${userId}&sheet_uid=not.is.null&select=sheet_uid&limit=20000`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const existUidList = await existUidRes.json();
+      const existingUids = new Set((Array.isArray(existUidList) ? existUidList : []).map(x => x.sheet_uid).filter(Boolean));
+
+      // Only rows with a UID we don't already have. Rows without a UID fall back to old behaviour.
+      const skipped = parsed.rows.filter(r => r.sheet_uid && existingUids.has(r.sheet_uid)).length;
+      const toAdd = parsed.rows.filter(r => !r.sheet_uid || !existingUids.has(r.sheet_uid));
+
+      // Group the new rows by removal order_id (blank order id -> one shared bucket).
       const groups = {};
-      for (const r of parsed.rows) {
-        if (!groups[r.order_id]) groups[r.order_id] = [];
-        groups[r.order_id].push(r);
+      for (const r of toAdd) {
+        const key = r.order_id || "__no_order__";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
       }
-      let removalsCreated = 0, unitsCreated = 0, updated = 0;
-      for (const orderId of Object.keys(groups)) {
-        const grpRows = groups[orderId];
+      let removalsCreated = 0, unitsCreated = 0;
+      const seenUids = new Set();
+      for (const key of Object.keys(groups)) {
+        const grpRows = groups[key];
         const first = grpRows[0];
-        // Check if removal already exists for this user+order_id
-        const existRes = await fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&removal_order_id=eq.${encodeURIComponent(orderId)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
-        const existRows = await existRes.json();
-        let removalId;
-        if (Array.isArray(existRows) && existRows.length > 0) {
-          removalId = existRows[0].id;
-        } else {
-          // Create new removal
-          const newRem = {
-            user_id: userId,
-            removal_order_id: orderId,
-            request_date: first.request_date || null,
-            removal_order_type: first.removal_order_type || null,
-            status: "active"
-          };
-          const cRes = await fetch(`${SUPABASE_URL}/rest/v1/removals`, { method: "POST", headers: h, body: JSON.stringify(newRem) });
-          const created = await cRes.json();
-          removalId = Array.isArray(created) ? created[0].id : created.id;
-          removalsCreated++;
-        }
-        // For each row, create N units (one per shipped_quantity), OR if LPN provided, one unit per LPN row
-        for (const r of grpRows) {
-          if (parsed.reportType === "customer_returns" || r.lpn) {
-            // Per-unit row already (one LPN = one unit)
-            // Check if a unit with this LPN already exists for this removal
-            if (r.lpn) {
-              const existU = await fetch(`${SUPABASE_URL}/rest/v1/removal_units?removal_id=eq.${removalId}&lpn=eq.${encodeURIComponent(r.lpn)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
-              const existURows = await existU.json();
-              if (Array.isArray(existURows) && existURows.length > 0) {
-                // Update with any new data
-                const patch = {};
-                if (r.asin) patch.asin = r.asin;
-                if (r.product_name) patch.product_name = r.product_name;
-                if (r.return_reason) patch.return_reason = r.return_reason;
-                if (r.customer_comments) patch.customer_comments = r.customer_comments;
-                if (r.tracking_number) patch.tracking_number = r.tracking_number;
-                if (r.carrier) patch.carrier = r.carrier;
-                if (r.shipment_date) patch.shipment_date = r.shipment_date;
-                if (Object.keys(patch).length > 0) {
-                  await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${existURows[0].id}`, { method: "PATCH", headers: h, body: JSON.stringify(patch) });
-                  updated++;
-                }
-                continue;
-              }
-            }
-            await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
-              removal_id: removalId, user_id: userId,
-              lpn: r.lpn || null, asin: r.asin || null, fnsku: r.fnsku || null, sku: r.sku || null,
-              product_name: r.product_name || null, return_reason: r.return_reason || null,
-              customer_comments: r.customer_comments || null, disposition: r.disposition || null,
-              tracking_number: r.tracking_number || null, carrier: r.carrier || null,
-              shipment_date: r.shipment_date || null, status: "received"
-            }) });
-            unitsCreated++;
+        const orderId = key === "__no_order__" ? null : key;
+        let removalId = null;
+        if (orderId) {
+          const existRes = await fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&removal_order_id=eq.${encodeURIComponent(orderId)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+          const existRows = await existRes.json();
+          if (Array.isArray(existRows) && existRows.length > 0) {
+            removalId = existRows[0].id;
           } else {
-            // Removal Order/Shipment Detail: create N units from shipped_quantity
-            const qty = r.shipped_quantity || 1;
-            for (let i = 0; i < qty; i++) {
-              await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
-                removal_id: removalId, user_id: userId,
-                sku: r.sku || null, fnsku: r.fnsku || null, asin: r.asin || null,
-                disposition: r.disposition || null, tracking_number: r.tracking_number || null,
-                carrier: r.carrier || null, shipment_date: r.shipment_date || null,
-                status: "received"
-              }) });
-              unitsCreated++;
-            }
+            const cRes = await fetch(`${SUPABASE_URL}/rest/v1/removals`, { method: "POST", headers: h, body: JSON.stringify({
+              user_id: userId, removal_order_id: orderId,
+              request_date: first.request_date || null,
+              removal_order_type: first.removal_order_type || null, status: "active"
+            }) });
+            const created = await cRes.json();
+            removalId = Array.isArray(created) ? created[0].id : created.id;
+            removalsCreated++;
+          }
+        } else {
+          // No order id on the sheet — use/create a catch-all removal so units have a parent.
+          const catchId = "TEMPLATE-UPLOAD";
+          const existRes = await fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&removal_order_id=eq.${encodeURIComponent(catchId)}&select=id`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+          const existRows = await existRes.json();
+          if (Array.isArray(existRows) && existRows.length > 0) {
+            removalId = existRows[0].id;
+          } else {
+            const cRes = await fetch(`${SUPABASE_URL}/rest/v1/removals`, { method: "POST", headers: h, body: JSON.stringify({
+              user_id: userId, removal_order_id: catchId, status: "active"
+            }) });
+            const created = await cRes.json();
+            removalId = Array.isArray(created) ? created[0].id : created.id;
+            removalsCreated++;
           }
         }
+        for (const r of grpRows) {
+          // Guard against duplicate UIDs within the same file.
+          if (r.sheet_uid && seenUids.has(r.sheet_uid)) continue;
+          if (r.sheet_uid) seenUids.add(r.sheet_uid);
+          await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
+            removal_id: removalId, user_id: userId,
+            sheet_uid: r.sheet_uid || null,
+            lpn: r.lpn || null, asin: r.asin || null, fnsku: r.fnsku || null, sku: r.sku || null,
+            product_name: r.product_name || null, return_reason: r.return_reason || null,
+            customer_comments: r.customer_comments || null, disposition: r.disposition || null,
+            tracking_number: r.tracking_number || null, carrier: r.carrier || null,
+            shipment_date: r.shipment_date || null, status: "received"
+          }) });
+          unitsCreated++;
+        }
       }
-      showToast(`✓ ${removalsCreated} removal(s) created · ${unitsCreated} units added · ${updated} updated`);
+      showToast(`✓ ${unitsCreated} new unit(s) added · ${skipped} already existed (skipped)`);
       onComplete && onComplete();
       setFile(null); setParsed(null);
       onClose();
