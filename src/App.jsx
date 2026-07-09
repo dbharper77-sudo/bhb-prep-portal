@@ -7196,21 +7196,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
 
   return (
     <>
-      {/* Google Sheet sync banner for Panayiotis */}
-      {isPanayiotis && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: "10px 16px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 10 }}>
-          <span style={{ fontSize: 18 }}>🔄</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--green)" }}>Google Sheet Sync Active</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Auto-syncs every 60 seconds. Stock and sales pulled directly from your Google Sheet.</div>
-          </div>
-          <button
-            onClick={async () => { setSyncing(true); await syncSheetToSupabase(token, showToast, onRefresh); setSyncing(false); }}
-            disabled={syncing}
-            style={{ padding: "6px 14px", background: "var(--green)", color: "#000", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: syncing ? "not-allowed" : "pointer", opacity: syncing ? 0.6 : 1 }}
-          >{syncing ? "Syncing..." : "↻ Sync Now"}</button>
-        </div>
-      )}
+      {/* Google Sheet sync removed — stock now comes via removal CSV upload */}
 
       {/* Stats */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 20 }}>
