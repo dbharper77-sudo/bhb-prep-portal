@@ -2823,7 +2823,7 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
     setUploading(true);
     try {
       // Dedup on UID (per client). Fetch this user's existing removal-unit UIDs first.
-      const existUidRes = await fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${userId}&sheet_uid=not.is.null&select=sheet_uid&limit=20000`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const existUidRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${userId}&sheet_uid=not.is.null&select=sheet_uid&limit=20000`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
       const existUidList = await existUidRes.json();
       const existingUids = new Set((Array.isArray(existUidList) ? existUidList : []).map(x => x.sheet_uid).filter(Boolean));
 
@@ -2840,6 +2840,14 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
       }
       let removalsCreated = 0, unitsCreated = 0;
       const seenUids = new Set();
+      // Seed sequential dbh_sku for this client (removal units become normal stock rows).
+      const profRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=full_name,email`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const prof = (await profRes.json())?.[0] || {};
+      const clientName = ((prof.full_name || prof.email || "REM").split(" ")[0]).toUpperCase().slice(0, 6);
+      const lastSkuRes = await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${userId}&select=dbh_sku&order=created_at.desc&limit=1`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } });
+      const lastSku = (await lastSkuRes.json())?.[0]?.dbh_sku;
+      let skuNum = lastSku ? (parseInt(lastSku.split("-").pop()) || 0) : 0;
+      const skuDate = new Date().toISOString().split("T")[0].replace(/-/g, "").slice(2);
       for (const key of Object.keys(groups)) {
         const grpRows = groups[key];
         const first = grpRows[0];
@@ -2880,14 +2888,18 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
           // Guard against duplicate UIDs within the same file.
           if (r.sheet_uid && seenUids.has(r.sheet_uid)) continue;
           if (r.sheet_uid) seenUids.add(r.sheet_uid);
-          await fetch(`${SUPABASE_URL}/rest/v1/removal_units`, { method: "POST", headers: h, body: JSON.stringify({
-            removal_id: removalId, user_id: userId,
+          skuNum++;
+          const dbh_sku = `${skuDate}-${clientName}-${String(skuNum).padStart(3, "0")}`;
+          await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock`, { method: "POST", headers: h, body: JSON.stringify({
+            user_id: userId, dbh_sku,
+            removal_order_id: orderId || "TEMPLATE-UPLOAD",
             sheet_uid: r.sheet_uid || null,
-            lpn: r.lpn || null, asin: r.asin || null, fnsku: r.fnsku || null, sku: r.sku || null,
-            product_name: r.product_name || null, return_reason: r.return_reason || null,
-            customer_comments: r.customer_comments || null, disposition: r.disposition || null,
-            tracking_number: r.tracking_number || null, carrier: r.carrier || null,
-            shipment_date: r.shipment_date || null, status: "received"
+            lpn_number: r.lpn || null, asin: r.asin || null, sku: r.sku || null,
+            product_name: r.product_name || r.sku || null,
+            return_reason: r.return_reason || null,
+            condition: r.customer_comments || null,
+            quantity: 1, received: false, listed: false,
+            date_added: r.request_date || new Date().toISOString().slice(0, 10)
           }) });
           unitsCreated++;
         }
@@ -2971,6 +2983,7 @@ function RemovalUploadModal({ open, onClose, userId, token, onComplete, showToas
 function RemovalsTab({ userId, token, isAdmin, showToast }) {
   const [removals, setRemovals] = useState([]);
   const [units, setUnits] = useState([]);
+  const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
@@ -2981,26 +2994,32 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
 
   const load = async () => {
     setLoading(true);
-    const [rRes, uRes] = await Promise.all([
+    const [rRes, uRes, sRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/removals?user_id=eq.${userId}&order=request_date.desc.nullslast,created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/removal_units?user_id=eq.${userId}&order=created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${userId}&removal_order_id=not.is.null&order=created_at.desc`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/liquidation_sales?user_id=eq.${userId}&select=stock_id,sale_price,payout`, { headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` } }).then(r => r.json())
     ]);
     if (Array.isArray(rRes)) setRemovals(rRes);
     if (Array.isArray(uRes)) setUnits(uRes);
+    if (Array.isArray(sRes)) setSales(sRes);
     setLoading(false);
   };
 
   useEffect(() => { if (userId && token) load(); }, [userId, token]);
 
-  // Aggregate unit counts per removal
-  const unitStatsFor = (removalId) => {
-    const ru = units.filter(u => u.removal_id === removalId);
+  // Units are liquidation_stock rows tagged with removal_order_id. Status is derived live.
+  const saleFor = (u) => sales.find(s => s.stock_id === u.id) || null;
+  const isSold = (u) => (u.qty_sold || 0) > 0 || !!saleFor(u);
+  const statusOf = (u) => isSold(u) ? "sold" : (u.received ? "listed" : "in transit");
+
+  const unitStatsFor = (rem) => {
+    const ru = units.filter(u => u.removal_order_id === rem.removal_order_id);
     return {
       total: ru.length,
-      received: ru.filter(u => u.received_by_dbh).length,
-      listed: ru.filter(u => u.status === "listed").length,
-      sold: ru.filter(u => u.status === "sold").length,
-      soldRevenue: ru.filter(u => u.status === "sold").reduce((s, u) => s + (parseFloat(u.sale_price) || 0), 0),
+      received: ru.filter(u => u.received).length,
+      listed: ru.filter(u => u.received && !isSold(u)).length,
+      sold: ru.filter(isSold).length,
+      soldRevenue: ru.filter(isSold).reduce((s, u) => s + (parseFloat((saleFor(u)?.sale_price) ?? u.sale_price) || 0), 0),
       units: ru
     };
   };
@@ -3008,40 +3027,14 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
   const visibleRemovals = removals.filter(r => showHidden ? true : r.status !== "hidden");
 
   const updateUnit = async (unitId, patch) => {
-    // Compute derived fields if sale-related fields change
-    const finalPatch = { ...patch };
-    if (patch.sale_price !== undefined || patch.ebay_fees !== undefined || patch.shipping_cost !== undefined) {
-      const current = units.find(u => u.id === unitId) || {};
-      const sale = parseFloat(patch.sale_price !== undefined ? patch.sale_price : current.sale_price) || 0;
-      const fees = parseFloat(patch.ebay_fees !== undefined ? patch.ebay_fees : current.ebay_fees) || 0;
-      const ship = parseFloat(patch.shipping_cost !== undefined ? patch.shipping_cost : current.shipping_cost) || 0;
-      const net = sale - fees - ship;
-      const pct = net >= 200 ? 15 : 20;
-      const commission = net * pct / 100;
-      const fixed = parseFloat(current.fixed_fee) || 0.40;
-      finalPatch.net_sale = net;
-      finalPatch.commission_pct = pct;
-      finalPatch.commission_amount = commission;
-      finalPatch.payout = net - commission - fixed;
-      // payout_date = end of month following sale
-      const soldStr = patch.date_sold || current.date_sold;
-      if (soldStr) {
-        const sd = new Date(soldStr + "T12:00:00");
-        const payoutMonth = new Date(sd.getFullYear(), sd.getMonth() + 2, 0); // last day of next month
-        finalPatch.payout_date = payoutMonth.toISOString().slice(0, 10);
-      }
-      if (patch.sale_price) finalPatch.status = "sold";
-    }
-    await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${unitId}`, { method: "PATCH", headers: h, body: JSON.stringify(finalPatch) });
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${unitId}`, { method: "PATCH", headers: h, body: JSON.stringify(patch) });
     load();
   };
 
-  const markReceived = async (unitId) => updateUnit(unitId, { received_by_dbh: true, date_received: new Date().toISOString().slice(0, 10) });
-  const markListed = async (unitId) => updateUnit(unitId, { status: "listed", date_listed: new Date().toISOString().slice(0, 10) });
-
-  const deleteUnit = async (unitId) => {
-    if (!confirm("Delete this unit row? This can't be undone.")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/removal_units?id=eq.${unitId}`, { method: "DELETE", headers: h });
+  const deleteUnit = async (u) => {
+    const warn = isSold(u) ? "This unit is SOLD - deleting it will unlink its sale record. " : "";
+    if (!confirm(`${warn}Delete this unit? This can't be undone.`)) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?id=eq.${u.id}`, { method: "DELETE", headers: h });
     load();
   };
 
@@ -3051,67 +3044,70 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
     load();
   };
 
+  const unhideRemoval = async (removalId) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${removalId}`, { method: "PATCH", headers: h, body: JSON.stringify({ status: "active" }) });
+    load();
+  };
+
   const deleteRemoval = async (rem) => {
-    const ru = units.filter(u => u.removal_id === rem.id);
-    const soldCount = ru.filter(u => u.status === "sold").length;
-    let msg = `Delete removal ${rem.removal_order_id} and its ${ru.length} unit${ru.length === 1 ? "" : "s"}? This cannot be undone.`;
+    const ru = units.filter(u => u.removal_order_id === rem.removal_order_id);
+    const soldCount = ru.filter(isSold).length;
+    let msg = `Delete removal ${rem.removal_order_id} and its ${ru.length} unit${ru.length === 1 ? "" : "s"}? This deletes the stock rows too and cannot be undone.`;
     if (soldCount > 0) {
-      msg = `WARNING: this removal has ${soldCount} SOLD unit${soldCount === 1 ? "" : "s"}. Deleting it will also remove those sales and their payouts. This cannot be undone.\n\nType OK only if you are sure. Continue?`;
+      msg = `WARNING: this removal has ${soldCount} SOLD unit${soldCount === 1 ? "" : "s"}. Deleting the stock will unlink those sales. This cannot be undone. Continue?`;
     }
     if (!confirm(msg)) return;
-    // delete child units first, then the removal row
     if (ru.length > 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/removal_units?removal_id=eq.${rem.id}`, { method: "DELETE", headers: h });
+      await fetch(`${SUPABASE_URL}/rest/v1/liquidation_stock?user_id=eq.${userId}&removal_order_id=eq.${encodeURIComponent(rem.removal_order_id)}`, { method: "DELETE", headers: h });
     }
     await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${rem.id}`, { method: "DELETE", headers: h });
     showToast("Removal deleted");
     load();
   };
 
-  const unhideRemoval = async (removalId) => {
-    await fetch(`${SUPABASE_URL}/rest/v1/removals?id=eq.${removalId}`, { method: "PATCH", headers: h, body: JSON.stringify({ status: "active" }) });
-    load();
+  const statusPill = (u) => {
+    const st = statusOf(u);
+    const bg = st === "sold" ? "rgba(0,230,118,0.15)" : st === "listed" ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.05)";
+    const col = st === "sold" ? "var(--green)" : st === "listed" ? "var(--cyan)" : "var(--text-secondary)";
+    return <span style={{ padding: "2px 6px", borderRadius: 8, background: bg, color: col }}>{st}</span>;
   };
 
   if (loading) return <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading removals...</div>;
 
   return <div className="card" style={{ padding: 20 }}>
-    {/* Top bar */}
     <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
-      <button onClick={() => setShowUpload(true)} style={{ padding: "10px 18px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>📥 Upload Removal CSV</button>
+      <button onClick={() => setShowUpload(true)} style={{ padding: "10px 18px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>\U0001F4E5 Upload Removal CSV</button>
       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer", padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8 }}>
         <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Show hidden
       </label>
       <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 12 }}>
         <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{visibleRemovals.length}</span> removal{visibleRemovals.length === 1 ? "" : "s"}</div>
-        <div style={{ color: "var(--border)" }}>·</div>
+        <div style={{ color: "var(--border)" }}>\u00b7</div>
         <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{units.length}</span> unit{units.length === 1 ? "" : "s"}</div>
       </div>
     </div>
 
     {visibleRemovals.length === 0 && <div style={{ padding: "50px 20px", textAlign: "center", color: "var(--text-muted)" }}>
-      <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.5 }}>📋</div>
+      <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.5 }}>\U0001F4CB</div>
       <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>No removals yet</div>
-      <div style={{ fontSize: 13 }}>Click "Upload Removal CSV" above to import your first removal from Amazon.</div>
+      <div style={{ fontSize: 13 }}>Click "Upload Removal CSV" above. Units land in In Transit and update here live.</div>
     </div>}
 
-    {/* Removals list */}
     {visibleRemovals.map(rem => {
-      const stats = unitStatsFor(rem.id);
+      const stats = unitStatsFor(rem);
       const expanded = expandedId === rem.id;
       const allSold = stats.total > 0 && stats.sold === stats.total;
       return <div key={rem.id} style={{ marginBottom: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
-        {/* Summary row */}
         <div onClick={() => setExpandedId(expanded ? null : rem.id)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", borderBottom: expanded ? "1px solid var(--border)" : "none" }}>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "▼" : "▶"}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "\u25bc" : "\u25b6"}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              📦 {rem.removal_order_id}
-              {rem.google_drive_folder && <a href={rem.google_drive_folder} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open photos folder" style={{ fontSize: 11, padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", textDecoration: "none", fontWeight: 600 }}>📁 Photos</a>}
+              \U0001F4E6 {rem.removal_order_id}
+              {rem.google_drive_folder && <a href={rem.google_drive_folder} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open photos folder" style={{ fontSize: 11, padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", textDecoration: "none", fontWeight: 600 }}>\U0001F4C1 Photos</a>}
             </div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
               {rem.request_date ? new Date(rem.request_date).toLocaleDateString("en-GB") : "no date"}
-              {rem.removal_order_type ? ` · ${rem.removal_order_type}` : ""}
+              {rem.removal_order_type ? ` \u00b7 ${rem.removal_order_type}` : ""}
             </div>
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 11 }}>
@@ -3119,19 +3115,18 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: stats.received === stats.total && stats.total > 0 ? "var(--green)" : "var(--text-secondary)" }}>{stats.received}</div><div style={{ color: "var(--text-muted)" }}>delivered</div></div>
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--cyan)" }}>{stats.listed}</div><div style={{ color: "var(--text-muted)" }}>listed</div></div>
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--orange)" }}>{stats.sold}</div><div style={{ color: "var(--text-muted)" }}>sold</div></div>
-            {stats.soldRevenue > 0 && <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>£{stats.soldRevenue.toFixed(0)}</div><div style={{ color: "var(--text-muted)" }}>revenue</div></div>}
+            {stats.soldRevenue > 0 && <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>\u00a3{stats.soldRevenue.toFixed(0)}</div><div style={{ color: "var(--text-muted)" }}>revenue</div></div>}
           </div>
           {allSold && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(0,230,118,0.15)", color: "var(--green)", borderRadius: 12, fontWeight: 700 }}>COMPLETE</div>}
           {rem.status === "hidden" && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", borderRadius: 12 }}>HIDDEN</div>}
           {isAdmin && allSold && rem.status !== "hidden" && <button onClick={e => { e.stopPropagation(); hideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer" }}>Hide</button>}
           {isAdmin && rem.status === "hidden" && <button onClick={e => { e.stopPropagation(); unhideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--cyan)", cursor: "pointer" }}>Unhide</button>}
-          {isAdmin && <button onClick={e => { e.stopPropagation(); deleteRemoval(rem); }} title="Delete entire removal" style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--red)", borderRadius: 6, color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>🗑 Delete</button>}
+          {isAdmin && <button onClick={e => { e.stopPropagation(); deleteRemoval(rem); }} title="Delete entire removal" style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--red)", borderRadius: 6, color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>\U0001F5D1 Delete</button>}
         </div>
 
-        {/* Expanded — show all units */}
         {expanded && <div style={{ padding: "0 0 10px 0", overflowX: "auto" }}>
           {isAdmin && <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.15)" }}>
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>📁 Drive Folder:</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>\U0001F4C1 Drive Folder:</span>
             <input
               placeholder="https://drive.google.com/drive/folders/..."
               defaultValue={rem.google_drive_folder || ""}
@@ -3161,95 +3156,68 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
               {isAdmin && <th style={{ padding: 6 }}>Actions</th>}
             </tr></thead>
             <tbody>
-              {stats.units.map(u => <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10, color: "var(--cyan)" }}>{u.sheet_uid || "—"}</td>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn || "—"}</td>
-                <td style={{ padding: 6 }}>{u.product_name || u.sku || "—"}</td>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "—"}</td>
-                <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "—"}</td>
-                <td style={{ padding: 6, fontSize: 10 }}>
-                  <div>{u.condition || "—"}</div>
-                  {u.customer_comments && <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 2, maxWidth: 200, whiteSpace: "normal" }}>{u.customer_comments}</div>}
-                </td>
-                <td style={{ padding: 6, fontSize: 10 }}>
-                  <span style={{ padding: "2px 6px", borderRadius: 8, background: u.status === "sold" ? "rgba(0,230,118,0.15)" : u.status === "listed" ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.05)", color: u.status === "sold" ? "var(--green)" : u.status === "listed" ? "var(--cyan)" : "var(--text-secondary)" }}>{u.status}</span>
-                </td>
-                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.sale_price ? `£${parseFloat(u.sale_price).toFixed(2)}` : "—"}</td>
-                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.payout ? `£${parseFloat(u.payout).toFixed(2)}` : "—"}</td>
+              {stats.units.map(u => { const sale = saleFor(u); const amt = sale?.sale_price ?? u.sale_price; return <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10, color: "var(--cyan)" }}>{u.sheet_uid || "\u2014"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn_number || "\u2014"}</td>
+                <td style={{ padding: 6 }}>{u.product_name || u.sku || "\u2014"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "\u2014"}</td>
+                <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "\u2014"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>{u.condition || "\u2014"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>{statusPill(u)}</td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{amt ? `\u00a3${parseFloat(amt).toFixed(2)}` : "\u2014"}</td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{sale?.payout ? `\u00a3${parseFloat(sale.payout).toFixed(2)}` : "\u2014"}</td>
                 <td style={{ padding: 6, textAlign: "center", fontSize: 12, whiteSpace: "nowrap" }}>
-                  {u.item_photos_url && <a href={u.item_photos_url} target="_blank" rel="noreferrer" title="Item photos" onClick={e => e.stopPropagation()} style={{ textDecoration: "none", marginRight: 6 }}>📷</a>}
-                  {u.slip_photo_url && <a href={u.slip_photo_url} target="_blank" rel="noreferrer" title="Slip photo" onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>📄</a>}
-                  {!u.item_photos_url && !u.slip_photo_url && <span style={{ color: "var(--text-muted)" }}>—</span>}
+                  {u.item_photos_url && <a href={u.item_photos_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Item photos" style={{ textDecoration: "none", marginRight: 6 }}>\U0001F4F7</a>}
+                  {u.slip_photo_url && <a href={u.slip_photo_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Slip photo" style={{ textDecoration: "none" }}>\U0001F4C4</a>}
+                  {!u.item_photos_url && !u.slip_photo_url && <span style={{ color: "var(--text-muted)" }}>\u2014</span>}
                 </td>
                 {isAdmin && <td style={{ padding: 6 }}>
                   <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                    {!u.received_by_dbh && <button onClick={() => markReceived(u.id)} title="Mark Received" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--cyan)", cursor: "pointer", fontSize: 10 }}>📥</button>}
-                    {u.status === "received" && u.received_by_dbh && <button onClick={() => markListed(u.id)} title="Mark Listed" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--cyan)", cursor: "pointer", fontSize: 10 }}>📦</button>}
                     <button onClick={() => { setEditUnit(u); setEditUnitForm({
-                      lpn: u.lpn || "", product_name: u.product_name || "", asin: u.asin || "", sku: u.sku || "",
+                      lpn_number: u.lpn_number || "", product_name: u.product_name || "", asin: u.asin || "", sku: u.sku || "",
                       return_reason: u.return_reason || "", condition: u.condition || "",
-                      ebay_listing_url: u.ebay_listing_url || "", date_sold: u.date_sold || "",
-                      sale_price: u.sale_price || "", ebay_fees: u.ebay_fees || "", shipping_cost: u.shipping_cost || "",
-                      status: u.status || "received", notes: u.notes || "",
                       item_photos_url: u.item_photos_url || "", slip_photo_url: u.slip_photo_url || ""
-                    }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>✏️</button>
-                    <button onClick={() => deleteUnit(u.id)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>✕</button>
+                    }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>\u270f\ufe0f</button>
+                    <button onClick={() => deleteUnit(u)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>\u2715</button>
                   </div>
                 </td>}
-              </tr>)}
+              </tr>; })}
             </tbody>
           </table>}
         </div>}
       </div>;
     })}
 
-    {/* Edit unit modal */}
     {editUnit && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: "#1a1a1a", border: "1px solid var(--border)", borderRadius: 12, padding: 28, maxWidth: 640, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>✏️ Edit Unit</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>{editUnit.lpn || editUnit.sku || editUnit.id?.slice(0, 8)}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>\u270f\ufe0f Edit Unit</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>{editUnit.sheet_uid || editUnit.lpn_number || editUnit.dbh_sku || editUnit.id?.slice(0, 8)}</div>
           </div>
-          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>\u00d7</button>
         </div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>Listing & sale status is managed in the In Transit / Listed / Sales tabs and shows here live. This edits item details and photos.</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[["lpn","LPN"],["product_name","Product Name"],["asin","ASIN"],["sku","SKU"]].map(([k,l]) =>
+          {[["lpn_number","LPN"],["product_name","Product Name"],["asin","ASIN"],["sku","SKU"]].map(([k,l]) =>
             <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
           <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Return Reason</div>
             <select value={editUnitForm.return_reason || ""} onChange={e => setEditUnitForm(f => ({ ...f, return_reason: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
-              <option value="">—</option>
+              <option value="">\u2014</option>
               {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Condition</div>
-            <select value={editUnitForm.condition || ""} onChange={e => setEditUnitForm(f => ({ ...f, condition: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
-              <option value="">—</option>
-              {CONDITIONS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Status</div>
-            <select value={editUnitForm.status || "received"} onChange={e => setEditUnitForm(f => ({ ...f, status: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
-              {UNIT_STATUSES.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>eBay Listing URL</div><input value={editUnitForm.ebay_listing_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, ebay_listing_url: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
-          {[["date_sold","Date Sold (YYYY-MM-DD)"],["sale_price","Sale Price (£)"],["ebay_fees","eBay Fees (£)"],["shipping_cost","Shipping Cost (£)"]].map(([k,l]) =>
-            <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📷 Item Photos URL</div><input value={editUnitForm.item_photos_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, item_photos_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📄 Slip Photo URL</div><input value={editUnitForm.slip_photo_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, slip_photo_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Notes</div><textarea value={editUnitForm.notes || ""} onChange={e => setEditUnitForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+            <input value={editUnitForm.condition || ""} onChange={e => setEditUnitForm(f => ({ ...f, condition: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>\U0001F4F7 Item Photos URL</div><input value={editUnitForm.item_photos_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, item_photos_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>\U0001F4C4 Slip Photo URL</div><input value={editUnitForm.slip_photo_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, slip_photo_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
           <button onClick={() => setEditUnit(null)} style={{ padding: "10px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
           <button onClick={async () => {
             const patch = {};
-            for (const k of ["lpn","product_name","asin","sku","return_reason","condition","status","ebay_listing_url","date_sold","sale_price","ebay_fees","shipping_cost","notes","item_photos_url","slip_photo_url"]) {
+            for (const k of ["lpn_number","product_name","asin","sku","return_reason","condition","item_photos_url","slip_photo_url"]) {
               patch[k] = editUnitForm[k] === "" ? null : editUnitForm[k];
-            }
-            // Cast numerics
-            for (const k of ["sale_price","ebay_fees","shipping_cost"]) {
-              if (patch[k] != null) patch[k] = parseFloat(patch[k]) || null;
             }
             await updateUnit(editUnit.id, patch);
             showToast("Unit updated");
