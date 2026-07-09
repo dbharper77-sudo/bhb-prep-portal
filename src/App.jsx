@@ -3007,7 +3007,6 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
 
   useEffect(() => { if (userId && token) load(); }, [userId, token]);
 
-  // Units are liquidation_stock rows tagged with removal_order_id. Status is derived live.
   const saleFor = (u) => sales.find(s => s.stock_id === u.id) || null;
   const isSold = (u) => (u.qty_sold || 0) > 0 || !!saleFor(u);
   const statusOf = (u) => isSold(u) ? "sold" : (u.received ? "listed" : "in transit");
@@ -3076,19 +3075,19 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
 
   return <div className="card" style={{ padding: 20 }}>
     <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
-      <button onClick={() => setShowUpload(true)} style={{ padding: "10px 18px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>\U0001F4E5 Upload Removal CSV</button>
+      <button onClick={() => setShowUpload(true)} style={{ padding: "10px 18px", background: "var(--cyan)", color: "#000", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>📥 Upload Removal CSV</button>
       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)", cursor: "pointer", padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8 }}>
         <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Show hidden
       </label>
       <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 12 }}>
         <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{visibleRemovals.length}</span> removal{visibleRemovals.length === 1 ? "" : "s"}</div>
-        <div style={{ color: "var(--border)" }}>\u00b7</div>
+        <div style={{ color: "var(--border)" }}>·</div>
         <div><span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{units.length}</span> unit{units.length === 1 ? "" : "s"}</div>
       </div>
     </div>
 
     {visibleRemovals.length === 0 && <div style={{ padding: "50px 20px", textAlign: "center", color: "var(--text-muted)" }}>
-      <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.5 }}>\U0001F4CB</div>
+      <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.5 }}>📋</div>
       <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--text-secondary)" }}>No removals yet</div>
       <div style={{ fontSize: 13 }}>Click "Upload Removal CSV" above. Units land in In Transit and update here live.</div>
     </div>}
@@ -3099,15 +3098,15 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
       const allSold = stats.total > 0 && stats.sold === stats.total;
       return <div key={rem.id} style={{ marginBottom: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
         <div onClick={() => setExpandedId(expanded ? null : rem.id)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", borderBottom: expanded ? "1px solid var(--border)" : "none" }}>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "\u25bc" : "\u25b6"}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{expanded ? "▼" : "▶"}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              \U0001F4E6 {rem.removal_order_id}
-              {rem.google_drive_folder && <a href={rem.google_drive_folder} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open photos folder" style={{ fontSize: 11, padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", textDecoration: "none", fontWeight: 600 }}>\U0001F4C1 Photos</a>}
+              📦 {rem.removal_order_id}
+              {rem.google_drive_folder && <a href={rem.google_drive_folder} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open photos folder" style={{ fontSize: 11, padding: "2px 8px", background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: 6, color: "var(--cyan)", textDecoration: "none", fontWeight: 600 }}>📁 Photos</a>}
             </div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
               {rem.request_date ? new Date(rem.request_date).toLocaleDateString("en-GB") : "no date"}
-              {rem.removal_order_type ? ` \u00b7 ${rem.removal_order_type}` : ""}
+              {rem.removal_order_type ? ` · ${rem.removal_order_type}` : ""}
             </div>
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 11 }}>
@@ -3115,18 +3114,18 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: stats.received === stats.total && stats.total > 0 ? "var(--green)" : "var(--text-secondary)" }}>{stats.received}</div><div style={{ color: "var(--text-muted)" }}>delivered</div></div>
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--cyan)" }}>{stats.listed}</div><div style={{ color: "var(--text-muted)" }}>listed</div></div>
             <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--orange)" }}>{stats.sold}</div><div style={{ color: "var(--text-muted)" }}>sold</div></div>
-            {stats.soldRevenue > 0 && <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>\u00a3{stats.soldRevenue.toFixed(0)}</div><div style={{ color: "var(--text-muted)" }}>revenue</div></div>}
+            {stats.soldRevenue > 0 && <div style={{ textAlign: "center" }}><div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>£{stats.soldRevenue.toFixed(0)}</div><div style={{ color: "var(--text-muted)" }}>revenue</div></div>}
           </div>
           {allSold && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(0,230,118,0.15)", color: "var(--green)", borderRadius: 12, fontWeight: 700 }}>COMPLETE</div>}
           {rem.status === "hidden" && <div style={{ fontSize: 10, padding: "2px 8px", background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", borderRadius: 12 }}>HIDDEN</div>}
           {isAdmin && allSold && rem.status !== "hidden" && <button onClick={e => { e.stopPropagation(); hideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer" }}>Hide</button>}
           {isAdmin && rem.status === "hidden" && <button onClick={e => { e.stopPropagation(); unhideRemoval(rem.id); }} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--cyan)", cursor: "pointer" }}>Unhide</button>}
-          {isAdmin && <button onClick={e => { e.stopPropagation(); deleteRemoval(rem); }} title="Delete entire removal" style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--red)", borderRadius: 6, color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>\U0001F5D1 Delete</button>}
+          {isAdmin && <button onClick={e => { e.stopPropagation(); deleteRemoval(rem); }} title="Delete entire removal" style={{ fontSize: 10, padding: "4px 10px", background: "transparent", border: "1px solid var(--red)", borderRadius: 6, color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>🗑 Delete</button>}
         </div>
 
         {expanded && <div style={{ padding: "0 0 10px 0", overflowX: "auto" }}>
           {isAdmin && <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.15)" }}>
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>\U0001F4C1 Drive Folder:</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>📁 Drive Folder:</span>
             <input
               placeholder="https://drive.google.com/drive/folders/..."
               defaultValue={rem.google_drive_folder || ""}
@@ -3157,19 +3156,19 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
             </tr></thead>
             <tbody>
               {stats.units.map(u => { const sale = saleFor(u); const amt = sale?.sale_price ?? u.sale_price; return <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10, color: "var(--cyan)" }}>{u.sheet_uid || "\u2014"}</td>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn_number || "\u2014"}</td>
-                <td style={{ padding: 6 }}>{u.product_name || u.sku || "\u2014"}</td>
-                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "\u2014"}</td>
-                <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "\u2014"}</td>
-                <td style={{ padding: 6, fontSize: 10 }}>{u.condition || "\u2014"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10, color: "var(--cyan)" }}>{u.sheet_uid || "—"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn_number || "—"}</td>
+                <td style={{ padding: 6 }}>{u.product_name || u.sku || "—"}</td>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>{u.condition || "—"}</td>
                 <td style={{ padding: 6, fontSize: 10 }}>{statusPill(u)}</td>
-                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{amt ? `\u00a3${parseFloat(amt).toFixed(2)}` : "\u2014"}</td>
-                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{sale?.payout ? `\u00a3${parseFloat(sale.payout).toFixed(2)}` : "\u2014"}</td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{amt ? `£${parseFloat(amt).toFixed(2)}` : "—"}</td>
+                <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{sale?.payout ? `£${parseFloat(sale.payout).toFixed(2)}` : "—"}</td>
                 <td style={{ padding: 6, textAlign: "center", fontSize: 12, whiteSpace: "nowrap" }}>
-                  {u.item_photos_url && <a href={u.item_photos_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Item photos" style={{ textDecoration: "none", marginRight: 6 }}>\U0001F4F7</a>}
-                  {u.slip_photo_url && <a href={u.slip_photo_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Slip photo" style={{ textDecoration: "none" }}>\U0001F4C4</a>}
-                  {!u.item_photos_url && !u.slip_photo_url && <span style={{ color: "var(--text-muted)" }}>\u2014</span>}
+                  {u.item_photos_url && <a href={u.item_photos_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Item photos" style={{ textDecoration: "none", marginRight: 6 }}>📷</a>}
+                  {u.slip_photo_url && <a href={u.slip_photo_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Slip photo" style={{ textDecoration: "none" }}>📄</a>}
+                  {!u.item_photos_url && !u.slip_photo_url && <span style={{ color: "var(--text-muted)" }}>—</span>}
                 </td>
                 {isAdmin && <td style={{ padding: 6 }}>
                   <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
@@ -3177,8 +3176,8 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
                       lpn_number: u.lpn_number || "", product_name: u.product_name || "", asin: u.asin || "", sku: u.sku || "",
                       return_reason: u.return_reason || "", condition: u.condition || "",
                       item_photos_url: u.item_photos_url || "", slip_photo_url: u.slip_photo_url || ""
-                    }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>\u270f\ufe0f</button>
-                    <button onClick={() => deleteUnit(u)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>\u2715</button>
+                    }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>✏️</button>
+                    <button onClick={() => deleteUnit(u)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>✕</button>
                   </div>
                 </td>}
               </tr>; })}
@@ -3192,10 +3191,10 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
       <div style={{ background: "#1a1a1a", border: "1px solid var(--border)", borderRadius: 12, padding: 28, maxWidth: 640, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>\u270f\ufe0f Edit Unit</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>✏️ Edit Unit</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>{editUnit.sheet_uid || editUnit.lpn_number || editUnit.dbh_sku || editUnit.id?.slice(0, 8)}</div>
           </div>
-          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>\u00d7</button>
+          <button onClick={() => setEditUnit(null)} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 18, width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>Listing & sale status is managed in the In Transit / Listed / Sales tabs and shows here live. This edits item details and photos.</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -3203,14 +3202,14 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
             <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
           <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Return Reason</div>
             <select value={editUnitForm.return_reason || ""} onChange={e => setEditUnitForm(f => ({ ...f, return_reason: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }}>
-              <option value="">\u2014</option>
+              <option value="">—</option>
               {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Condition</div>
             <input value={editUnitForm.condition || ""} onChange={e => setEditUnitForm(f => ({ ...f, condition: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>\U0001F4F7 Item Photos URL</div><input value={editUnitForm.item_photos_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, item_photos_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>\U0001F4C4 Slip Photo URL</div><input value={editUnitForm.slip_photo_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, slip_photo_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📷 Item Photos URL</div><input value={editUnitForm.item_photos_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, item_photos_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📄 Slip Photo URL</div><input value={editUnitForm.slip_photo_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, slip_photo_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
           <button onClick={() => setEditUnit(null)} style={{ padding: "10px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
