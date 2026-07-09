@@ -1404,12 +1404,12 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
         </div>}
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th style={{ width: 36, textAlign: "center" }}><input type="checkbox" checked={allTransitSelected} onChange={toggleSelectAll} /></th><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>UID</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 36, textAlign: "center" }}><input type="checkbox" checked={allTransitSelected} onChange={toggleSelectAll} /></th><th>DBH SKU</th><th>UID</th><th>Product</th><th>ASIN</th><th>UID</th><th>Qty</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{transitItems.map(s => {
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
               <td style={{ textAlign: "center" }}>{!s._isRemoval && <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} />}</td>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td><td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.sheet_uid || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.sheet_uid || "—"}</td>
@@ -1439,12 +1439,12 @@ function LiquidationMyStockPage({ liquidationStock, liquidationSales, token, onR
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%" }}>
-          <thead><tr><th>DBH SKU</th><th>Product</th><th>ASIN</th><th>UID</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
+          <thead><tr><th>DBH SKU</th><th>UID</th><th>Product</th><th>ASIN</th><th>UID</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>What You Paid</th><th></th></tr></thead>
           <tbody>{listedItems.map(s => {
             const remaining = (s.quantity || 1) - (s.qty_sold || 0);
             const isEdit = editingId === s.id;
             return <tr key={s.id}>
-              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td>
+              <td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.dbh_sku || "—"}</td><td className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--orange)" }}>{s.sheet_uid || "—"}</td>
               <td style={{ fontWeight: 600 }}>{s.product_name}{s._isRemoval && <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 6px", background: "rgba(255,145,0,0.15)", color: "var(--orange)", borderRadius: 4 }}>REMOVAL</span>}</td>
               <td className="mono" style={{ fontSize: 12 }}>{s.asin || "—"}</td>
               <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.sheet_uid || "—"}</td>
@@ -3148,6 +3148,7 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
           {stats.units.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>No units in this removal.</div> :
           <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
             <thead><tr style={{ background: "rgba(0,0,0,0.2)" }}>
+              <th style={{ padding: 6, textAlign: "left" }}>UID</th>
               <th style={{ padding: 6, textAlign: "left" }}>LPN</th>
               <th style={{ padding: 6, textAlign: "left" }}>Product / SKU</th>
               <th style={{ padding: 6, textAlign: "left" }}>ASIN</th>
@@ -3156,20 +3157,30 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
               <th style={{ padding: 6, textAlign: "left" }}>Status</th>
               <th style={{ padding: 6, textAlign: "right" }}>Sale</th>
               <th style={{ padding: 6, textAlign: "right" }}>Payout</th>
+              <th style={{ padding: 6, textAlign: "center" }}>Photos</th>
               {isAdmin && <th style={{ padding: 6 }}>Actions</th>}
             </tr></thead>
             <tbody>
               {stats.units.map(u => <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10, color: "var(--cyan)" }}>{u.sheet_uid || "—"}</td>
                 <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.lpn || "—"}</td>
                 <td style={{ padding: 6 }}>{u.product_name || u.sku || "—"}</td>
                 <td style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>{u.asin || "—"}</td>
                 <td style={{ padding: 6, fontSize: 10, color: "var(--amber)" }}>{u.return_reason || "—"}</td>
-                <td style={{ padding: 6, fontSize: 10 }}>{u.condition || "—"}</td>
+                <td style={{ padding: 6, fontSize: 10 }}>
+                  <div>{u.condition || "—"}</div>
+                  {u.customer_comments && <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 2, maxWidth: 200, whiteSpace: "normal" }}>{u.customer_comments}</div>}
+                </td>
                 <td style={{ padding: 6, fontSize: 10 }}>
                   <span style={{ padding: "2px 6px", borderRadius: 8, background: u.status === "sold" ? "rgba(0,230,118,0.15)" : u.status === "listed" ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.05)", color: u.status === "sold" ? "var(--green)" : u.status === "listed" ? "var(--cyan)" : "var(--text-secondary)" }}>{u.status}</span>
                 </td>
                 <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.sale_price ? `£${parseFloat(u.sale_price).toFixed(2)}` : "—"}</td>
                 <td style={{ padding: 6, textAlign: "right", fontSize: 11 }}>{u.payout ? `£${parseFloat(u.payout).toFixed(2)}` : "—"}</td>
+                <td style={{ padding: 6, textAlign: "center", fontSize: 12, whiteSpace: "nowrap" }}>
+                  {u.item_photos_url && <a href={u.item_photos_url} target="_blank" rel="noreferrer" title="Item photos" onClick={e => e.stopPropagation()} style={{ textDecoration: "none", marginRight: 6 }}>📷</a>}
+                  {u.slip_photo_url && <a href={u.slip_photo_url} target="_blank" rel="noreferrer" title="Slip photo" onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>📄</a>}
+                  {!u.item_photos_url && !u.slip_photo_url && <span style={{ color: "var(--text-muted)" }}>—</span>}
+                </td>
                 {isAdmin && <td style={{ padding: 6 }}>
                   <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                     {!u.received_by_dbh && <button onClick={() => markReceived(u.id)} title="Mark Received" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--cyan)", cursor: "pointer", fontSize: 10 }}>📥</button>}
@@ -3179,7 +3190,8 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
                       return_reason: u.return_reason || "", condition: u.condition || "",
                       ebay_listing_url: u.ebay_listing_url || "", date_sold: u.date_sold || "",
                       sale_price: u.sale_price || "", ebay_fees: u.ebay_fees || "", shipping_cost: u.shipping_cost || "",
-                      status: u.status || "received", notes: u.notes || ""
+                      status: u.status || "received", notes: u.notes || "",
+                      item_photos_url: u.item_photos_url || "", slip_photo_url: u.slip_photo_url || ""
                     }); }} title="Edit" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)", cursor: "pointer", fontSize: 10 }}>✏️</button>
                     <button onClick={() => deleteUnit(u.id)} title="Delete" style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--red)", cursor: "pointer", fontSize: 10 }}>✕</button>
                   </div>
@@ -3224,13 +3236,15 @@ function RemovalsTab({ userId, token, isAdmin, showToast }) {
           <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>eBay Listing URL</div><input value={editUnitForm.ebay_listing_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, ebay_listing_url: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
           {[["date_sold","Date Sold (YYYY-MM-DD)"],["sale_price","Sale Price (£)"],["ebay_fees","eBay Fees (£)"],["shipping_cost","Shipping Cost (£)"]].map(([k,l]) =>
             <div key={k}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{l}</div><input value={editUnitForm[k] || ""} onChange={e => setEditUnitForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>)}
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📷 Item Photos URL</div><input value={editUnitForm.item_photos_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, item_photos_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>📄 Slip Photo URL</div><input value={editUnitForm.slip_photo_url || ""} onChange={e => setEditUnitForm(f => ({ ...f, slip_photo_url: e.target.value }))} placeholder="https://drive.google.com/..." style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
           <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Notes</div><textarea value={editUnitForm.notes || ""} onChange={e => setEditUnitForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ width: "100%", padding: 8, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "inherit" }} /></div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
           <button onClick={() => setEditUnit(null)} style={{ padding: "10px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
           <button onClick={async () => {
             const patch = {};
-            for (const k of ["lpn","product_name","asin","sku","return_reason","condition","status","ebay_listing_url","date_sold","sale_price","ebay_fees","shipping_cost","notes"]) {
+            for (const k of ["lpn","product_name","asin","sku","return_reason","condition","status","ebay_listing_url","date_sold","sale_price","ebay_fees","shipping_cost","notes","item_photos_url","slip_photo_url"]) {
               patch[k] = editUnitForm[k] === "" ? null : editUnitForm[k];
             }
             // Cast numerics
@@ -4643,7 +4657,7 @@ function AdminMasterStockPage({ clients, liquidation, liquidationSales, token, s
                   <tr>
                     <th>Client</th>
                     <th>Product</th>
-                    <th>DBH SKU</th>
+                    <th>DBH SKU</th><th>UID</th>
                     <th>ASIN</th>
                     <th>Condition</th>
                     <th>Qty</th>
@@ -7317,7 +7331,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "transit" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {transitItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No items in transit.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th style={{ width: 120 }}>UID</th><th>Product</th><th>LPN</th><th>Qty</th><th>COG</th><th>Condition</th><th></th></tr></thead>
           <tbody>{transitItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             return <tr key={item.id} className={isEdit ? "edit-row" : ""}>
@@ -7345,7 +7359,7 @@ function AdminClientLiquidation({ client, liquidation, token, showToast, onRefre
       {activeTab === "listed" && <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {listedItems.length === 0 ? <div className="empty-state"><Icons.Box /><p>No listed items.</p></div> :
         <div className="table-wrap"><table style={{ width: "100%", tableLayout: "fixed" }}>
-          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th></th></tr></thead>
+          <thead><tr><th style={{ width: 120 }}>DBH SKU</th><th style={{ width: 120 }}>UID</th><th>Product</th><th>LPN</th><th>Qty Total</th><th>Qty Sold</th><th>Remaining</th><th>COG</th><th>Condition</th><th></th></tr></thead>
           <tbody>{listedItems.map(item => {
             const isEdit = editingId === item.id, data = isEdit ? editData : item;
             const remaining = (item.quantity || 1) - (item.qty_sold || 0);
