@@ -5295,13 +5295,12 @@ function AdminPortal() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const selectClient = (client) => { setSelectedClient(client); setPage("client"); setClientTab("prep"); };
+  const selectClient = (client) => { setSelectedClient(client); setPage("client"); setClientTab("liquidation"); };
   const backToClients = () => { setSelectedClient(null); setPage("clients"); };
 
   const adminNav = [
     { id: "clients", label: "All Clients", icon: Icons.Users },
     { id: "masterstock", label: "Master Stock", icon: Icons.Package },
-    { id: "deals", label: "DBH Deals", icon: Icons.List },
     { id: "tracker", label: "Income Tracker", icon: Icons.BarChart },
     { id: "subscriptions", label: "Subscriptions", icon: Icons.CreditCard },
     { id: "ebay", label: "eBay Listings", icon: Icons.ShoppingBag },
@@ -5799,9 +5798,7 @@ function AdminClientPage({ client, tab, setTab, parcels, shipments, liquidation,
     </div>
     <div className="page-body">
       <div className="service-tabs" style={{ maxWidth: 600, marginBottom: 24, padding: 6 }}>
-        <div className={`service-tab ${tab === "prep" ? "active prep" : ""}`} onClick={() => setTab("prep")}>📦 Prep</div>
         <div className={`service-tab ${tab === "liquidation" ? "active liquidation" : ""}`} onClick={() => setTab("liquidation")}>💰 Liquidation</div>
-        <div className={`service-tab deals ${tab === "deals" ? "active deals" : ""}`} onClick={() => setTab("deals")}>📋 Deals</div>
         <div className={`service-tab ${tab === "settings" ? "active admin" : ""}`} onClick={() => setTab("settings")}>⚙️ Settings</div>
       </div>
       {tab === "prep" ? 
